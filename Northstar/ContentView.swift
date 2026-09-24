@@ -6,22 +6,22 @@ struct ContentView: View {
     @State private var isThinking = false
     @State private var spinDegree = 0.0
     
-    // New variables to control the glass response window
     @State private var showResponse = false
     @State private var aiResponse = ""
     
+    // NEW: We are officially attaching the Brain to the Interface
+    let brain = NorthstarBrain()
+    
     var body: some View {
         ZStack {
-            // Atmosphere
             Color(red: 0.08, green: 0.12, blue: 0.25)
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
                 Spacer()
                 
-                // Focal Point: Glowing North Star
                 Image(systemName: "sparkle")
-                    .font(.system(size: showResponse ? 50 : 70, weight: .ultraLight)) // Shrinks slightly when reading
+                    .font(.system(size: showResponse ? 50 : 70, weight: .ultraLight))
                     .foregroundColor(isThinking ? .cyan : .white)
                     .shadow(color: isThinking ? .cyan.opacity(0.8) : .white.opacity(0.8), radius: isThinking ? 25 : 15, x: 0, y: 0)
                     .shadow(color: isThinking ? .cyan.opacity(0.4) : .white.opacity(0.4), radius: isThinking ? 50 : 30, x: 0, y: 0)
@@ -29,7 +29,6 @@ struct ContentView: View {
                     .rotationEffect(.degrees(spinDegree))
                     .padding(.bottom, showResponse ? 15 : 30)
                 
-                // Swaps between the Title/Manifesto and the Glass Response Window
                 if !showResponse {
                     Text(isThinking ? "Thinking..." : "Northstar")
                         .font(.system(size: 34, weight: .light))
@@ -46,7 +45,6 @@ struct ContentView: View {
                     .tracking(2)
                     .opacity(isThinking ? 0 : 1)
                 } else {
-                    // The Glass Response Window
                     ScrollView {
                         Text(aiResponse)
                             .font(.system(size: 16, weight: .regular))
@@ -68,7 +66,6 @@ struct ContentView: View {
                 
                 Spacer()
                 
-                // Entry Point: Text Field
                 HStack {
                     Image(systemName: "mic")
                         .foregroundColor(.white.opacity(0.7))
@@ -127,14 +124,21 @@ struct ContentView: View {
     func startThinking() {
         guard !promptText.isEmpty else { return }
         
+        // 1. Capture what you typed before clearing the box
+        let question = promptText
+        
         isThinking = true
-        showResponse = false // Hides any previous response
+        showResponse = false
         promptText = ""
         
-        // Fakes the delay, then shows the glass window
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+        // 2. Send the question to the Brain and get the specific answer
+        let answer = brain.getResponse(for: question)
+        
+        // Shortened the delay a bit so it feels more responsive
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
             isThinking = false
-            aiResponse = "I am Northstar. I am ready to help you navigate your path forward. This window will display my actual insights once we connect the AI brain."
+            // 3. Display the Brain's actual answer in the glass window
+            aiResponse = answer
             showResponse = true
         }
     }
