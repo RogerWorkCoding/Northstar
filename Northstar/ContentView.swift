@@ -3,51 +3,72 @@ import SwiftUI
 struct ContentView: View {
     @State private var promptText: String = ""
     @State private var isPulsing = false
-    @State private var isThinking = false // Tracks if AI is processing
-    @State private var spinDegree = 0.0   // Controls the spinning animation
+    @State private var isThinking = false
+    @State private var spinDegree = 0.0
+    
+    // New variables to control the glass response window
+    @State private var showResponse = false
+    @State private var aiResponse = ""
     
     var body: some View {
         ZStack {
-            // 1. Atmosphere: Slate Blue Background
+            // Atmosphere
             Color(red: 0.08, green: 0.12, blue: 0.25)
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
                 Spacer()
                 
-                // 2. Focal Point: Glowing North Star
+                // Focal Point: Glowing North Star
                 Image(systemName: "sparkle")
-                    .font(.system(size: 70, weight: .ultraLight))
-                    // Turns blue when thinking, white when resting
+                    .font(.system(size: showResponse ? 50 : 70, weight: .ultraLight)) // Shrinks slightly when reading
                     .foregroundColor(isThinking ? .cyan : .white)
                     .shadow(color: isThinking ? .cyan.opacity(0.8) : .white.opacity(0.8), radius: isThinking ? 25 : 15, x: 0, y: 0)
                     .shadow(color: isThinking ? .cyan.opacity(0.4) : .white.opacity(0.4), radius: isThinking ? 50 : 30, x: 0, y: 0)
-                    // Grows slightly larger when thinking
                     .scaleEffect(isThinking ? 1.25 : (isPulsing ? 1.15 : 0.85))
-                    // Spins when the spinDegree variable increases
                     .rotationEffect(.degrees(spinDegree))
-                    .padding(.bottom, 30)
+                    .padding(.bottom, showResponse ? 15 : 30)
                 
-                // 3. Identity Text
-                Text(isThinking ? "Thinking..." : "Northstar")
-                    .font(.system(size: 34, weight: .light))
-                    .foregroundColor(.white)
-                    .tracking(3)
-                    .padding(.bottom, 10)
-                
-                // Manifesto (Fades out when thinking)
-                VStack(spacing: 4) {
-                    Text("ONE BLANK DESTINATION.")
-                    Text("AN INTELLIGENT PATH FORWARD.")
+                // Swaps between the Title/Manifesto and the Glass Response Window
+                if !showResponse {
+                    Text(isThinking ? "Thinking..." : "Northstar")
+                        .font(.system(size: 34, weight: .light))
+                        .foregroundColor(.white)
+                        .tracking(3)
+                        .padding(.bottom, 10)
+                    
+                    VStack(spacing: 4) {
+                        Text("ONE BLANK DESTINATION.")
+                        Text("AN INTELLIGENT PATH FORWARD.")
+                    }
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+                    .tracking(2)
+                    .opacity(isThinking ? 0 : 1)
+                } else {
+                    // The Glass Response Window
+                    ScrollView {
+                        Text(aiResponse)
+                            .font(.system(size: 16, weight: .regular))
+                            .foregroundColor(.white)
+                            .lineSpacing(8)
+                            .padding(20)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: 250)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(20)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 30)
+                    .padding(.bottom, 20)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(.white.opacity(0.6))
-                .tracking(2)
-                .opacity(isThinking ? 0 : 1)
                 
                 Spacer()
                 
-                // 4. Entry Point: Glass-morphic Text Field
+                // Entry Point: Text Field
                 HStack {
                     Image(systemName: "mic")
                         .foregroundColor(.white.opacity(0.7))
@@ -55,12 +76,11 @@ struct ContentView: View {
                     TextField("Where to?", text: $promptText)
                         .foregroundColor(.white)
                         .accentColor(.white)
-                        .disabled(isThinking) // Locks keyboard while thinking
+                        .disabled(isThinking)
                         .onSubmit {
-                            startThinking() // Triggers the animation when you hit Return
+                            startThinking()
                         }
                     
-                    // Shows a loading spinner instead of arrow while thinking
                     if isThinking {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
@@ -68,7 +88,7 @@ struct ContentView: View {
                         Image(systemName: "location.fill")
                             .foregroundColor(promptText.isEmpty ? .white.opacity(0.5) : .white)
                             .onTapGesture {
-                                startThinking() // Also triggers if you tap the arrow
+                                startThinking()
                             }
                     }
                 }
@@ -84,15 +104,13 @@ struct ContentView: View {
                 .opacity(isThinking ? 0.6 : 1.0)
             }
         }
-        // Smoothly animates all color/opacity changes taking 0.8 seconds
         .animation(.easeInOut(duration: 0.8), value: isThinking)
-        // Starts the gentle breathing pulse when the app opens
+        .animation(.easeInOut(duration: 0.8), value: showResponse)
         .onAppear {
             withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
                 isPulsing = true
             }
         }
-        // Listens for the thinking state to change, and spins the star
         .onChange(of: isThinking) { thinking in
             if thinking {
                 withAnimation(.linear(duration: 2.0).repeatForever(autoreverses: false)) {
@@ -106,16 +124,18 @@ struct ContentView: View {
         }
     }
     
-    // The logic that runs when you submit a question
     func startThinking() {
-        guard !promptText.isEmpty else { return } // Stops if text box is empty
+        guard !promptText.isEmpty else { return }
         
         isThinking = true
+        showResponse = false // Hides any previous response
         promptText = ""
         
-        // Fakes a 4-second delay to prove the animation works
+        // Fakes the delay, then shows the glass window
         DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
             isThinking = false
+            aiResponse = "I am Northstar. I am ready to help you navigate your path forward. This window will display my actual insights once we connect the AI brain."
+            showResponse = true
         }
     }
 }
