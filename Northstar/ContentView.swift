@@ -9,7 +9,6 @@ struct ContentView: View {
     @State private var showResponse = false
     @State private var aiResponse = ""
     
-    // NEW: We are officially attaching the Brain to the Interface
     let brain = NorthstarBrain()
     
     var body: some View {
@@ -45,12 +44,22 @@ struct ContentView: View {
                     .tracking(2)
                     .opacity(isThinking ? 0 : 1)
                 } else {
-                    ScrollView {
-                        Text(aiResponse)
-                            .font(.system(size: 16, weight: .regular))
-                            .foregroundColor(.white)
-                            .lineSpacing(8)
-                            .padding(20)
+                    VStack {
+                        ScrollView {
+                            Text(aiResponse)
+                                .font(.system(size: 16, weight: .regular))
+                                .foregroundColor(.white)
+                                .lineSpacing(8)
+                                .padding(20)
+                        }
+                        
+                        // NEW: A visual hint telling the user how to dismiss the window
+                        Text("Tap to close")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white.opacity(0.4))
+                            .textCase(.uppercase)
+                            .tracking(2)
+                            .padding(.bottom, 15)
                     }
                     .frame(maxWidth: .infinity, maxHeight: 250)
                     .background(Color.white.opacity(0.1))
@@ -62,6 +71,10 @@ struct ContentView: View {
                     .padding(.horizontal, 30)
                     .padding(.bottom, 20)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+                    // NEW: The actual invisible button that closes the window when tapped
+                    .onTapGesture {
+                        showResponse = false
+                    }
                 }
                 
                 Spacer()
@@ -124,20 +137,16 @@ struct ContentView: View {
     func startThinking() {
         guard !promptText.isEmpty else { return }
         
-        // 1. Capture what you typed before clearing the box
         let question = promptText
         
         isThinking = true
         showResponse = false
         promptText = ""
         
-        // 2. Send the question to the Brain and get the specific answer
         let answer = brain.getResponse(for: question)
         
-        // Shortened the delay a bit so it feels more responsive
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
             isThinking = false
-            // 3. Display the Brain's actual answer in the glass window
             aiResponse = answer
             showResponse = true
         }
