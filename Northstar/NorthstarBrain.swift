@@ -1,20 +1,48 @@
 import Foundation
 
-struct NorthstarBrain {
-    func getResponse(for prompt: String) -> String {
-        let lowercasedPrompt = prompt.lowercased()
-        
-        // The Brain's new Creative Director logic rules
-        if lowercasedPrompt.contains("hello") || lowercasedPrompt.contains("hi") {
-            return "Hello, Roger. Northstar Creative Direction is online. What are we designing today?"
-        } else if lowercasedPrompt.contains("who are you") {
-            return "I am Northstar, your AI Graphic Design Director. I analyze layouts, typography, and color theory to elevate your creative projects."
-        } else if lowercasedPrompt.contains("phoebe") {
-            return "Ah, Phoebe. The true boss of the studio. I hope her 21-year-old royal highness is having a relaxing day."
-        } else if lowercasedPrompt.contains("color") || lowercasedPrompt.contains("palette") {
-            return "For a modern, premium brand, I recommend a high-contrast palette: deep slate backgrounds with vibrant cyan or stark white accents to control the viewer's focus."
-        } else {
-            return "I am ready to review your design brief. Please provide more details on the typography, layout, or brand identity you want to explore."
+struct OpenAIResponse: Codable {
+    struct Choice: Codable {
+        struct Message: Codable {
+            let content: String
         }
+        let message: Message
+    }
+    let choices: [Choice]
+}
+
+struct NorthstarBrain {
+    // This connects to Secrets.swift to grab your password behind the scenes
+    let apiKey = OPENAI_API_KEY
+    
+    func getResponse(for prompt: String) async -> String {
+        let url = URL(string: "https://api.openai.com/v1/chat/completions")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let systemMessage = "You are Northstar, an elite AI Graphic Design Director. You analyze layouts, typography, and color theory to elevate creative projects. Keep responses concise, professional, and tailored to a premium design agency aesthetic. The user's name is Roger. Their 21-year-old cat is named Phoebe."
+        
+        let requestBody: [String: Any] = [
+            "model": "gpt-4o-mini",
+            "messages": [
+                ["role": "system", "content": systemMessage],
+                ["role": "user", "content": prompt]
+            ]
+        ]
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+            let (data, _) = try await URLSession.shared.data(for: request)
+            
+            let decodedResponse = try JSONDecoder().decode(OpenAIResponse.self, from: data)
+            if let text = decodedResponse.choices.first?.message.content {
+                return text
+            }
+        } catch {
+            print("Network error: \(error)")
+        }
+        
+        return "I am currently experiencing a network interruption. Let's review the creative brief offline."
     }
 }

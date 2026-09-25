@@ -29,14 +29,14 @@ struct ContentView: View {
                     .padding(.bottom, showResponse ? 15 : 30)
                 
                 if !showResponse {
-                    Text(isThinking ? "Thinking..." : "Northstar")
+                    Text(isThinking ? "Analyzing..." : "Northstar")
                         .font(.system(size: 34, weight: .light))
                         .foregroundColor(.white)
                         .tracking(3)
                         .padding(.bottom, 10)
                     
                     VStack(spacing: 4) {
-                        Text("ONE BLANK DESTINATION.")
+                        Text("ONE CLEAR DESTINATION.")
                         Text("AN INTELLIGENT PATH FORWARD.")
                     }
                     .font(.system(size: 11, weight: .medium))
@@ -53,7 +53,6 @@ struct ContentView: View {
                                 .padding(20)
                         }
                         
-                        // NEW: A visual hint telling the user how to dismiss the window
                         Text("Tap to close")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(.white.opacity(0.4))
@@ -71,7 +70,6 @@ struct ContentView: View {
                     .padding(.horizontal, 30)
                     .padding(.bottom, 20)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
-                    // NEW: The actual invisible button that closes the window when tapped
                     .onTapGesture {
                         showResponse = false
                     }
@@ -83,7 +81,7 @@ struct ContentView: View {
                     Image(systemName: "mic")
                         .foregroundColor(.white.opacity(0.7))
                     
-                    TextField("Where to?", text: $promptText)
+                    TextField("What are we designing?", text: $promptText)
                         .foregroundColor(.white)
                         .accentColor(.white)
                         .disabled(isThinking)
@@ -143,12 +141,16 @@ struct ContentView: View {
         showResponse = false
         promptText = ""
         
-        let answer = brain.getResponse(for: question)
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-            isThinking = false
-            aiResponse = answer
-            showResponse = true
+        // NEW: This 'Task' tells the app to wait for the internet without freezing the UI
+        Task {
+            let answer = await brain.getResponse(for: question)
+            
+            // This forces the UI updates to happen on the main thread safely
+            await MainActor.run {
+                isThinking = false
+                aiResponse = answer
+                showResponse = true
+            }
         }
     }
 }
