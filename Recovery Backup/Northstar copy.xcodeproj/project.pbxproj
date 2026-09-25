@@ -8,9 +8,6 @@
 
 /* Begin PBXFileReference section */
 		7C0764563064CED900C9CBAA /* Northstar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Northstar.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		7CDB379E3066E2810041CA0B /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		7CDB379F3066E2810041CA0B /* NorthstarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NorthstarApp.swift; sourceTree = "<group>"; };
-		7CDB37A03066E2810041CA0B /* NorthstarBrain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NorthstarBrain.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -25,9 +22,6 @@
 		7C07644D3064CED900C9CBAA = {
 			isa = PBXGroup;
 			children = (
-				7CDB379E3066E2810041CA0B /* ContentView.swift */,
-				7CDB379F3066E2810041CA0B /* NorthstarApp.swift */,
-				7CDB37A03066E2810041CA0B /* NorthstarBrain.swift */,
 				7C0764573064CED900C9CBAA /* Products */,
 			);
 			sourceTree = "<group>";
