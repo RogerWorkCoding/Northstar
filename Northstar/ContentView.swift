@@ -1,155 +1,766 @@
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
-    @State private var promptText: String = ""
-    @State private var isPulsing = false
+    enum Destination: Hashable {
+        case projects
+        case discovery
+        case learning
+        case memory
+        case documents
+        case history
+        case settings
+        case about
+    }
+    
+    @State private var awaitingMemorySave = false
+    
+    @State private var detectedMemoryCandidate: MemoryCandidate?
+    @State private var isSavingDetectedMemory = false
+
+    private let memoryDetector = MemoryDetector()
+    private let memoryService = MemoryService()
+
+    private let memoryIdentityId = UUID(
+        uuidString: "25bfa23f-efa6-45ff-ad16-1a2658e10d74"
+    )
+    private let projectMemoryKey = "northstarCurrentProject"
+
+    @State private var livePDFText = ""
+    @State private var isLivePDFDraftPresented = false
+    @State private var generatedPDFURL: URL?
+    @State private var isPDFSharePresented = false
+    @State private var documentStep = 0
+    @State private var documentType = ""
+
+    @State private var websiteType = ""
+    @State private var websiteName = ""
+    @State private var websiteServices = ""
+    @State private var webDesignStep = 0
+    @State private var currentWorkflow: NorthstarIntent?
+
+    @State private var navigationPath: [Destination] = []
+    @State private var speechRecognizer = SpeechRecognizer()
+    @State private var viewModel = ChatViewModel()
+    @State private var isCameraPresented = false
+    @State private var isPhotoLibraryPresented = false
+    @State private var selectedImage: UIImage?
+    @State private var promptText = ""
     @State private var isThinking = false
-    @State private var spinDegree = 0.0
-    
-    @State private var showResponse = false
-    @State private var aiResponse = ""
-    
-    let brain = NorthstarBrain()
-    
+    @State private var isStarMenuPresented = false
+    @State private var responseTask: Task<Void, Never>?
+    @FocusState private var isPromptFocused: Bool
+
+    private let gemini = GeminiProvider()
+    private let intelligence = NorthstarIntelligence()
+    private let pdfService = PDFDocumentService()
+
+    private var cleanedPrompt: String {
+        promptText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var body: some View {
-        ZStack {
-            Color(red: 0.08, green: 0.12, blue: 0.25)
+        NavigationStack(path: $navigationPath) {
+            ZStack {
+                Color(red: 0.08, green: 0.12, blue: 0.25)
+                    .ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    header
+                    conversationArea
+                    promptArea
+                }
+
+                if isStarMenuPresented {
+                    starMenu
+                }
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: Destination.self) { destination in
+                destinationView(for: destination)
+            }
+        }
+        .fullScreenCover(isPresented: $isCameraPresented) {
+            CameraView(selectedImage: $selectedImage)
                 .ignoresSafeArea()
-            
-            VStack(spacing: 0) {
-                Spacer()
-                
-                Image(systemName: "sparkle")
-                    .font(.system(size: showResponse ? 50 : 70, weight: .ultraLight))
-                    .foregroundColor(isThinking ? .cyan : .white)
-                    .shadow(color: isThinking ? .cyan.opacity(0.8) : .white.opacity(0.8), radius: isThinking ? 25 : 15, x: 0, y: 0)
-                    .shadow(color: isThinking ? .cyan.opacity(0.4) : .white.opacity(0.4), radius: isThinking ? 50 : 30, x: 0, y: 0)
-                    .scaleEffect(isThinking ? 1.25 : (isPulsing ? 1.15 : 0.85))
-                    .rotationEffect(.degrees(spinDegree))
-                    .padding(.bottom, showResponse ? 15 : 30)
-                
-                if !showResponse {
-                    Text(isThinking ? "Analyzing..." : "Northstar")
-                        .font(.system(size: 34, weight: .light))
-                        .foregroundColor(.white)
-                        .tracking(3)
-                        .padding(.bottom, 10)
-                    
-                    VStack(spacing: 4) {
-                        Text("ONE CLEAR DESTINATION.")
-                        Text("AN INTELLIGENT PATH FORWARD.")
-                    }
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white.opacity(0.6))
-                    .tracking(2)
-                    .opacity(isThinking ? 0 : 1)
-                } else {
-                    VStack {
-                        ScrollView {
-                            Text(aiResponse)
-                                .font(.system(size: 16, weight: .regular))
-                                .foregroundColor(.white)
-                                .lineSpacing(8)
-                                .padding(20)
-                        }
-                        
-                        Text("Tap to close")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.white.opacity(0.4))
-                            .textCase(.uppercase)
-                            .tracking(2)
-                            .padding(.bottom, 15)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: 250)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(20)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                    )
-                    .padding(.horizontal, 30)
-                    .padding(.bottom, 20)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .onTapGesture {
-                        showResponse = false
-                    }
-                }
-                
-                Spacer()
-                
-                HStack {
-                    Image(systemName: "mic")
-                        .foregroundColor(.white.opacity(0.7))
-                    
-                    TextField("What are we designing?", text: $promptText)
-                        .foregroundColor(.white)
-                        .accentColor(.white)
-                        .disabled(isThinking)
-                        .onSubmit {
-                            startThinking()
-                        }
-                    
-                    if isThinking {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
-                    } else {
-                        Image(systemName: "location.fill")
-                            .foregroundColor(promptText.isEmpty ? .white.opacity(0.5) : .white)
-                            .onTapGesture {
-                                startThinking()
-                            }
-                    }
-                }
-                .padding()
-                .background(Color.white.opacity(0.1))
-                .cornerRadius(20)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                )
-                .padding(.horizontal, 30)
-                .padding(.bottom, 40)
-                .opacity(isThinking ? 0.6 : 1.0)
-            }
         }
-        .animation(.easeInOut(duration: 0.8), value: isThinking)
-        .animation(.easeInOut(duration: 0.8), value: showResponse)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
-                isPulsing = true
-            }
+        .sheet(isPresented: $isPhotoLibraryPresented) {
+            PhotoPickerView(selectedImage: $selectedImage)
         }
-        .onChange(of: isThinking) { thinking in
-            if thinking {
-                withAnimation(.linear(duration: 2.0).repeatForever(autoreverses: false)) {
-                    spinDegree = 360.0
-                }
+        .sheet(isPresented: $isLivePDFDraftPresented) {
+            LivePDFDraftView(
+                documentText: $livePDFText,
+                isRecording: speechRecognizer.isRecording,
+                onMicrophoneTapped: { toggleMicrophone() },
+                onSave: { saveLivePDF() }
+            )
+        }
+        .sheet(isPresented: $isPDFSharePresented) {
+            pdfShareView
+        }
+        .onChange(of: speechRecognizer.transcript) {
+            if isLivePDFDraftPresented {
+                livePDFText = speechRecognizer.transcript
             } else {
-                withAnimation(.easeOut(duration: 0.5)) {
-                    spinDegree = 0.0
+                promptText = speechRecognizer.transcript
+            }
+        }
+        .task {
+            loadProjectMemory()
+        }
+    }
+
+    private var header: some View {
+        VStack(spacing: 5) {
+            Image(systemName: "sparkle")
+                .font(.system(size: 30, weight: .ultraLight))
+                .foregroundStyle(.white)
+
+            Text("Northstar")
+                .font(.system(size: 25, weight: .light))
+                .tracking(2)
+                .foregroundStyle(.white)
+        }
+        .padding(.top, 14)
+        .padding(.bottom, 10)
+    }
+
+    private var conversationArea: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 20) {
+                    ForEach(viewModel.messages) { message in
+                        ChatBubbleView(
+                            id: message.id,
+                            text: message.content,
+                            isUser: message.role == .user
+                        )
+                    }
+
+                    Color.clear
+                        .frame(height: 1)
+                        .id("CHAT_BOTTOM")
                 }
+                .frame(maxWidth: .infinity, alignment: .top)
+                .padding(.vertical, 24)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .contentShape(Rectangle())
+            .onTapGesture { isPromptFocused = false }
+            .onChange(of: viewModel.messages.count) {
+                scrollToBottom(proxy)
             }
         }
     }
-    
-    func startThinking() {
-        guard !promptText.isEmpty else { return }
-        
-        let question = promptText
-        
-        isThinking = true
-        showResponse = false
-        promptText = ""
-        
-        // NEW: This 'Task' tells the app to wait for the internet without freezing the UI
+
+    private var promptArea: some View {
+        HStack(spacing: 10) {
+            Button {
+                isPromptFocused = false
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isStarMenuPresented = true
+                }
+            } label: {
+                Image(systemName: "sparkle")
+                    .font(.system(size: 18, weight: .light))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+            }
+
+            TextField("Ask Northstar...", text: $promptText, axis: .vertical)
+                .focused($isPromptFocused)
+                .foregroundStyle(.white)
+                .lineLimit(1...4)
+                .disabled(isThinking)
+                .submitLabel(.send)
+                .onSubmit { sendMessage() }
+
+            Button { toggleMicrophone() } label: {
+                Image(systemName: speechRecognizer.isRecording ? "stop.circle.fill" : "mic.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(speechRecognizer.isRecording ? .red : .white)
+                    .frame(width: 34, height: 34)
+            }
+
+            Button {
+                isThinking ? stopResponse() : sendMessage()
+            } label: {
+                Image(systemName: isThinking ? "stop.fill" : "arrow.up")
+                    .font(.system(size: isThinking ? 12 : 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background { Circle().fill(.white.opacity(0.20)) }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .padding(.horizontal, 20)
+        .padding(.bottom, 12)
+    }
+
+    private var starMenu: some View {
+        StarMenuView(
+            isPresented: $isStarMenuPresented,
+            onNewChat: {
+                startNewChat()
+            },
+            onCamera: {
+                isCameraPresented = true
+            },
+            onPhotoLibrary: {
+                isPhotoLibraryPresented = true
+            },
+            onProjects: {
+                open(.projects)
+            },
+            onDiscovery: {
+                open(.discovery)
+            },
+            onLearning: {
+                open(.learning)
+            },
+            onMemory: {
+                open(.memory)
+            },
+            onDocuments: {
+                open(.documents)
+            },
+            onHistory: {
+                open(.history)
+            },
+            onSettings: {
+                open(.settings)
+            },
+            onAbout: {
+                open(.about)
+            }
+        )
+        .transition(
+            .move(edge: .leading)
+        )
+        .zIndex(10)
+    }
+
+    @ViewBuilder
+    private var pdfShareView: some View {
+        if let generatedPDFURL {
+            NavigationStack {
+                VStack(spacing: 24) {
+                    Image(systemName: "doc.richtext")
+                        .font(.system(size: 54, weight: .light))
+                        .foregroundStyle(Color(red: 0.74, green: 0.61, blue: 0.30))
+
+                    Text("PDF Created")
+                        .font(.system(size: 28, weight: .semibold))
+
+                    Text(generatedPDFURL.lastPathComponent)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    ShareLink(item: generatedPDFURL) {
+                        Label("Share or Save PDF", systemImage: "square.and.arrow.up")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 14)
+                            .background(Color(red: 0.08, green: 0.12, blue: 0.25))
+                            .clipShape(Capsule())
+                    }
+
+                    Spacer()
+                }
+                .padding(32)
+                .navigationTitle("Northstar Document")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { isPDFSharePresented = false }
+                    }
+                }
+            }
+        } else {
+            Text("The PDF is unavailable.").padding()
+        }
+    }
+
+    @ViewBuilder
+    private func destinationView(for destination: Destination) -> some View {
+        switch destination {
+        case .projects:
+            placeholderScreen(title: "Projects", symbol: "folder")
+        case .discovery:
+            placeholderScreen(title: "Discovery", symbol: "safari")
+        case .learning:
+            placeholderScreen(
+                title: "Learning",
+                symbol: "book"
+            )
+        case .memory:
+            MemorySearchView()
+
+        case .documents:
+            DocumentsView()
+        case .history:
+            placeholderScreen(title: "History", symbol: "clock.arrow.circlepath")
+        case .settings:
+            placeholderScreen(title: "Settings", symbol: "gearshape")
+        case .about:
+            placeholderScreen(title: "About Northstar", symbol: "sparkle")
+        }
+    }
+
+    private func placeholderScreen(title: String, symbol: String) -> some View {
+        ZStack {
+            Color(red: 0.08, green: 0.12, blue: 0.25).ignoresSafeArea()
+            VStack(spacing: 18) {
+                Image(systemName: symbol)
+                    .font(.system(size: 42, weight: .ultraLight))
+                Text(title).font(.system(size: 28, weight: .light))
+                Text("This Northstar area is ready to be designed.")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+            .foregroundStyle(.white)
+            .padding()
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func open(_ destination: Destination) {
+        isPromptFocused = false
+        navigationPath.append(destination)
+    }
+
+    private func toggleMicrophone() {
+        if speechRecognizer.isRecording {
+            speechRecognizer.stopRecording()
+            return
+        }
+
         Task {
-            let answer = await brain.getResponse(for: question)
-            
-            // This forces the UI updates to happen on the main thread safely
+            let permissionGranted = await speechRecognizer.requestPermissions()
+            guard permissionGranted else {
+                print("Speech permission denied")
+                return
+            }
+
+            do {
+                try speechRecognizer.startRecording()
+            } catch {
+                print("Speech recording failed:", error.localizedDescription)
+            }
+        }
+    }
+
+    private func wantsSitemap(_ question: String) -> Bool {
+        let text = question.lowercased()
+        return text.contains("sitemap")
+            || text.contains("site map")
+            || text.contains("pages")
+            || text.contains("navigation")
+            || text.contains("structure")
+            || text.contains("what pages")
+            || text.contains("site structure")
+    }
+
+    private func sendMessage() {
+        let question = cleanedPrompt
+        guard !question.isEmpty, !isThinking else { return }
+        
+        let normalizedQuestion =
+            question.lowercased()
+                .trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
+
+        if normalizedQuestion == "northstar save to memory"
+            || normalizedQuestion == "save our conversation"
+            || normalizedQuestion == "northstar save our conversation"
+            || normalizedQuestion == "save this conversation"
+            || normalizedQuestion == "save this discussion" {
+
+            awaitingMemorySave = true
+
+            appendAssistantMessage(
+                """
+                Memory Save Requested
+
+                What would you like me to remember?
+                """
+            )
+
+            return
+        }
+        
+        if awaitingMemorySave {
+            awaitingMemorySave = false
+
+            appendUserMessage(question)
+
+            guard let identityId = memoryIdentityId else {
+                appendAssistantMessage(
+                    """
+                    Memory Save Failed
+
+                    Northstar could not identify the memory owner.
+                    """
+                )
+                return
+            }
+
+            Task {
+                do {
+                    try await memoryService.saveMemory(
+                        identityId: identityId,
+                        projectId: nil,
+                        content: question,
+                        category: "Memory"
+                    )
+
+                    await MainActor.run {
+                        appendAssistantMessage(
+                            """
+                            Memory Saved
+
+                            \(question)
+                            """
+                        )
+                    }
+
+                } catch {
+                    await MainActor.run {
+                        appendAssistantMessage(
+                            """
+                            Memory Save Failed
+
+                            Nothing was added to permanent memory.
+                            """
+                        )
+                    }
+
+                    print(
+                        "Memory save failed:",
+                        error.localizedDescription
+                    )
+                }
+            }
+
+            return
+        }
+        
+
+        if speechRecognizer.isRecording {
+            speechRecognizer.stopRecording()
+        }
+
+        isPromptFocused = false
+
+        if currentWorkflow == .documentCreation {
+            handleDocumentWorkflow(question)
+            return
+        }
+
+        if currentWorkflow == .webDesign {
+            handleWebsiteWorkflow(question)
+            return
+        }
+
+        let intent = intelligence.detectIntent(from: question)
+        print("Northstar Intent:", intent)
+        appendUserMessage(question)
+
+        switch intent {
+        case .imageGeneration:
+            appendAssistantMessage("Image generation is not connected yet.")
+        case .videoGeneration:
+            appendAssistantMessage("Video generation is not connected yet.")
+        case .webDesign:
+            currentWorkflow = .webDesign
+            webDesignStep = 1
+            appendAssistantMessage("""
+            Let's build your website.
+
+            What type of website would you like to create?
+
+            • Business
+            • Portfolio
+            • Ecommerce
+            • Landing Page
+            • Other
+            """)
+        case .projectGuidance:
+            appendAssistantMessage("""
+            Project Guidance
+
+            Tell me about your project.
+
+            Include:
+
+            • What you're building
+            • Where you're currently stuck
+            • What outcome you're trying to achieve
+            """)
+        case .documentCreation:
+            currentWorkflow = .documentCreation
+            documentStep = 1
+            appendAssistantMessage("""
+            Document Creation
+
+            PDF creation is now available.
+
+            Type PDF to continue.
+            """)
+        case .imageAnalysis:
+            appendAssistantMessage("""
+            Image Analysis
+
+            Choose a photo using the Northstar menu.
+            Then tell me what you want Northstar to examine.
+            """)
+        case .conversation:
+            requestGeminiResponse()
+        }
+    }
+
+    private func handleDocumentWorkflow(_ question: String) {
+        appendUserMessage(question)
+
+        switch documentStep {
+        case 1:
+            guard question.lowercased().contains("pdf") else {
+                appendAssistantMessage("""
+                PDF Creation
+
+                PDF is the first connected document format.
+
+                Type PDF to continue.
+                """)
+                return
+            }
+
+            documentType = "PDF"
+            documentStep = 2
+            livePDFText = ""
+            isLivePDFDraftPresented = true
+
+            appendAssistantMessage("""
+            PDF Draft Opened
+
+            Dictate or type your document.
+
+            Tap Save PDF when ready.
+            """)
+
+        default:
+            resetDocumentWorkflow()
+        }
+    }
+
+    private func handleWebsiteWorkflow(_ question: String) {
+        appendUserMessage(question)
+
+        switch webDesignStep {
+        case 1:
+            websiteType = question
+            webDesignStep = 2
+            appendAssistantMessage("Great choice.\n\nWhat is the name of your website?")
+        case 2:
+            websiteName = question
+            webDesignStep = 3
+            appendAssistantMessage("What kind of work or services will the website showcase?")
+        case 3:
+            websiteServices = question
+            saveProjectMemory()
+            webDesignStep = 4
+            appendAssistantMessage("""
+            Website Brief Complete
+
+            Name: \(websiteName)
+            Type: \(websiteType)
+            Services: \(websiteServices)
+
+            What would you like me to create next?
+
+            • Sitemap
+            """)
+        case 4:
+            guard wantsSitemap(question) else {
+                appendAssistantMessage("""
+                I can help with the website structure.
+
+                Try asking:
+
+                • What pages should I have?
+                • Show me the site structure
+                • What should the navigation be?
+                • Create a sitemap
+                """)
+                return
+            }
+            generateSitemap()
+        default:
+            currentWorkflow = nil
+            webDesignStep = 0
+        }
+    }
+
+    private func appendUserMessage(_ content: String) {
+        viewModel.messages.append(MessageModel(role: .user, content: content))
+        promptText = ""
+    }
+
+    private func appendAssistantMessage(_ content: String) {
+        viewModel.messages.append(MessageModel(role: .assistant, content: content))
+    }
+
+    private func requestGeminiResponse() {
+        isThinking = true
+        responseTask = Task {
+            let answer = await gemini.getResponse(for: viewModel.messages)
+            guard !Task.isCancelled else { return }
             await MainActor.run {
+                appendAssistantMessage(answer)
                 isThinking = false
-                aiResponse = answer
-                showResponse = true
+                responseTask = nil
+            }
+        }
+    }
+
+    private func saveLivePDF() {
+        let cleanedText = livePDFText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedText.isEmpty else { return }
+
+        if speechRecognizer.isRecording {
+            speechRecognizer.stopRecording()
+        }
+
+        let firstLine = cleanedText
+            .components(separatedBy: .newlines)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let title = (firstLine?.isEmpty == false) ? firstLine! : "Northstar Document"
+
+        do {
+            let fileURL = try pdfService.createPDF(title: title, topic: cleanedText)
+            generatedPDFURL = fileURL
+
+            appendAssistantMessage("""
+            PDF Created
+
+            Title: \(title)
+
+            The PDF was saved in Northstar Documents.
+            """)
+
+            livePDFText = ""
+            resetDocumentWorkflow()
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                isPDFSharePresented = true
+            }
+        } catch {
+            appendAssistantMessage("I couldn't create the PDF.\n\nPlease try again.")
+            print("Live PDF creation failed:", error.localizedDescription)
+        }
+    }
+
+    private func resetDocumentWorkflow() {
+        currentWorkflow = nil
+        documentStep = 0
+        documentType = ""
+    }
+
+    private func generateSitemap() {
+        isThinking = true
+        let prompt = """
+        Create a professional website sitemap.
+
+        Website name: \(websiteName)
+        Website type: \(websiteType)
+        Services: \(websiteServices)
+
+        Include main navigation pages, important child pages, clear hierarchy,
+        and a short purpose for every page. Keep it concise and practical.
+        """
+
+        responseTask = Task {
+            let sitemap = await gemini.getResponse(
+                for: [MessageModel(role: .user, content: prompt)]
+            )
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                appendAssistantMessage(sitemap)
+                currentWorkflow = nil
+                webDesignStep = 0
+                isThinking = false
+                responseTask = nil
+            }
+        }
+    }
+
+    private func stopResponse() {
+        responseTask?.cancel()
+        responseTask = nil
+        isThinking = false
+    }
+
+    private func startNewChat() {
+        responseTask?.cancel()
+        responseTask = nil
+        currentWorkflow = nil
+        webDesignStep = 0
+        documentStep = 0
+        documentType = ""
+        livePDFText = ""
+        isLivePDFDraftPresented = false
+        generatedPDFURL = nil
+        isPDFSharePresented = false
+
+        if speechRecognizer.isRecording {
+            speechRecognizer.stopRecording()
+        }
+
+        isPromptFocused = false
+        navigationPath.removeAll()
+        promptText = ""
+        selectedImage = nil
+        websiteType = ""
+        websiteName = ""
+        websiteServices = ""
+        viewModel.messages.removeAll()
+        isThinking = false
+    }
+
+    private func saveProjectMemory() {
+        let project = ProjectMemory(
+            websiteType: websiteType,
+            websiteName: websiteName,
+            websiteServices: websiteServices
+        )
+        guard let data = try? JSONEncoder().encode(project) else { return }
+        UserDefaults.standard.set(data, forKey: projectMemoryKey)
+    }
+
+    private func loadProjectMemory() {
+        guard
+            let data = UserDefaults.standard.data(forKey: projectMemoryKey),
+            let project = try? JSONDecoder().decode(ProjectMemory.self, from: data)
+        else { return }
+
+        websiteType = project.websiteType
+        websiteName = project.websiteName
+        websiteServices = project.websiteServices
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.25)) {
+                proxy.scrollTo("CHAT_BOTTOM", anchor: .bottom)
             }
         }
     }

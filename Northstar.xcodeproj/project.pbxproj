@@ -6,8 +6,23 @@
 	objectVersion = 110;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		7CC05415306F3A5100A3E952 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 7CC05414306F3A5100A3E952 /* Supabase */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		7C250705307AC73A00554743 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7C07644E3064CED900C9CBAA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7C0764553064CED900C9CBAA;
+			remoteInfo = Northstar;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		7C0764563064CED900C9CBAA /* Northstar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Northstar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7C250701307AC73A00554743 /* NorthstarTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NorthstarTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +31,21 @@
 			path = Northstar;
 			sourceTree = "<group>";
 		};
+		7C250702307AC73A00554743 /* NorthstarTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = NorthstarTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		7C0764533064CED900C9CBAA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				7CC05415306F3A5100A3E952 /* Supabase in Frameworks */,
+			);
+		};
+		7C2506FE307AC73A00554743 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
 			);
@@ -30,8 +56,9 @@
 		7C07644D3064CED900C9CBAA = {
 			isa = PBXGroup;
 			children = (
-				7C0764583064CED900C9CBAA /* Northstar */,
+				7C250702307AC73A00554743 /* NorthstarTests */,
 				7C0764573064CED900C9CBAA /* Products */,
+				7C0764583064CED900C9CBAA /* Northstar */,
 			);
 			sourceTree = "<group>";
 		};
@@ -39,6 +66,7 @@
 			isa = PBXGroup;
 			children = (
 				7C0764563064CED900C9CBAA /* Northstar.app */,
+				7C250701307AC73A00554743 /* NorthstarTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -60,9 +88,33 @@
 				7C0764583064CED900C9CBAA /* Northstar */,
 			);
 			name = Northstar;
+			packageProductDependencies = (
+				7CC05414306F3A5100A3E952 /* Supabase */,
+			);
 			productName = Northstar;
 			productReference = 7C0764563064CED900C9CBAA /* Northstar.app */;
 			productType = "com.apple.product-type.application";
+		};
+		7C250700307AC73A00554743 /* NorthstarTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7C250709307AC73A00554743 /* Build configuration list for PBXNativeTarget "NorthstarTests" */;
+			buildPhases = (
+				7C2506FD307AC73A00554743 /* Sources */,
+				7C2506FE307AC73A00554743 /* Frameworks */,
+				7C2506FF307AC73A00554743 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7C250706307AC73A00554743 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				7C250702307AC73A00554743 /* NorthstarTests */,
+			);
+			name = NorthstarTests;
+			productName = NorthstarTests;
+			productReference = 7C250701307AC73A00554743 /* NorthstarTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -77,6 +129,10 @@
 					7C0764553064CED900C9CBAA = {
 						CreatedOnToolsVersion = 27.0;
 					};
+					7C250700307AC73A00554743 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = 7C0764553064CED900C9CBAA;
+					};
 				};
 			};
 			buildConfigurationList = 7C0764513064CED900C9CBAA /* Build configuration list for PBXProject "Northstar" */;
@@ -88,18 +144,27 @@
 			);
 			mainGroup = 7C07644D3064CED900C9CBAA;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				7CC05413306F3A5100A3E952 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 7C0764573064CED900C9CBAA /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				7C0764553064CED900C9CBAA /* Northstar */,
+				7C250700307AC73A00554743 /* NorthstarTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		7C0764543064CED900C9CBAA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		7C2506FF307AC73A00554743 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
 			);
@@ -112,7 +177,20 @@
 			files = (
 			);
 		};
+		7C2506FD307AC73A00554743 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		7C250706307AC73A00554743 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7C0764553064CED900C9CBAA /* Northstar */;
+			targetProxy = 7C250705307AC73A00554743 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		7C07645F3064CEDA00C9CBAA /* Debug configuration for PBXProject "Northstar" */ = {
@@ -241,8 +319,14 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = L4362YT6QS;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Northstar uses the camera to capture images for guidance.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Northstar uses the microphone to capture voice prompts.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Northstar uses your photo library so you can select images for guidance and feedback.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Northstar uses speech recognition to convert voice into text.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -272,8 +356,14 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = L4362YT6QS;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Northstar uses the camera to capture images for guidance.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Northstar uses the microphone to capture voice prompts.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Northstar uses your photo library so you can select images for guidance and feedback.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Northstar uses speech recognition to convert voice into text.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -296,6 +386,56 @@
 			};
 			name = Release;
 		};
+		7C250707307AC73A00554743 /* Debug configuration for PBXNativeTarget "NorthstarTests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.mynorthstarlabs.Northstar.NorthstarTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Northstar.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Northstar";
+				XROS_DEPLOYMENT_TARGET = 27.0;
+			};
+			name = Debug;
+		};
+		7C250708307AC73A00554743 /* Release configuration for PBXNativeTarget "NorthstarTests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.mynorthstarlabs.Northstar.NorthstarTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Northstar.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Northstar";
+				XROS_DEPLOYMENT_TARGET = 27.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -315,7 +455,34 @@
 			);
 			defaultConfigurationName = Release;
 		};
+		7C250709307AC73A00554743 /* Build configuration list for PBXNativeTarget "NorthstarTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7C250707307AC73A00554743 /* Debug configuration for PBXNativeTarget "NorthstarTests" */,
+				7C250708307AC73A00554743 /* Release configuration for PBXNativeTarget "NorthstarTests" */,
+			);
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		7CC05413306F3A5100A3E952 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		7CC05414306F3A5100A3E952 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7CC05413306F3A5100A3E952 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 7C07644E3064CED900C9CBAA /* Project object */;
 	validationLevel = 1;
