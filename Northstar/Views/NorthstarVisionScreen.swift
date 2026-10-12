@@ -1,9 +1,14 @@
 import SwiftUI
 
-// Temporary design prototype only — not wired into NorthstarApp's navigation.
-// Built on the real NorthstarVisionLandscape artwork rather than a procedurally
-// drawn mountain silhouette; the landscape is the hero, everything else is quiet.
+// Arrival screen: the landscape + star + wordmark are the hero, with a lightweight
+// functional composer at the bottom whose only job is to capture first intent and
+// hand it to NorthstarRootView — all real chat behavior (send pipeline, star menu,
+// microphone) lives in ContentView, untouched.
 struct NorthstarVisionScreen: View {
+    let onSubmitPrompt: (String) -> Void
+    let onSelectStar: () -> Void
+    let onSelectMicrophone: () -> Void
+
     var body: some View {
         ZStack {
             NorthstarVisionLandscapeBackground()
@@ -34,14 +39,14 @@ struct NorthstarVisionScreen: View {
                 .multilineTextAlignment(.center)
                 .accessibilityElement(children: .combine)
 
-                Spacer(minLength: 30)
-
-                NorthstarVisionPrincipleRow()
-
                 Spacer()
 
-                NorthstarVisionComposer()
-                    .padding(.horizontal, 22)
+                NorthstarVisionComposer(
+                    onSubmitPrompt: onSubmitPrompt,
+                    onSelectStar: onSelectStar,
+                    onSelectMicrophone: onSelectMicrophone
+                )
+                .padding(.horizontal, 22)
 
                 Spacer(minLength: 18)
             }
@@ -83,7 +88,8 @@ private struct NorthstarVisionLandscapeBackground: View {
 
 /// A soft white-to-cool-blue glow, restrained and focused rather than diffuse —
 /// deliberately not gold, so it harmonizes with the photographed night sky
-/// instead of competing with it.
+/// instead of competing with it. Purely decorative (the functional star control
+/// lives in the composer below, mirroring ContentView's sparkle menu button).
 private struct NorthstarVisionStarMark: View {
     var body: some View {
         ZStack {
@@ -111,51 +117,26 @@ private struct NorthstarVisionStarMark: View {
     }
 }
 
-/// The four principles as a quiet, evenly sized 2x2 grid — a fixed grid (rather
-/// than one shrink-to-fit line) is what keeps every word at the same size on
-/// every device width, instead of minimumScaleFactor shrinking words unevenly.
-private struct NorthstarVisionPrincipleRow: View {
-    private let topRow = ["Reflect", "Perspective"]
-    private let bottomRow = ["Clarity", "Progress"]
-
-    var body: some View {
-        VStack(spacing: 8) {
-            principleLine(topRow)
-            principleLine(bottomRow)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Core principles: Reflect, Perspective, Clarity, Progress")
-    }
-
-    private func principleLine(_ words: [String]) -> some View {
-        HStack(spacing: 14) {
-            ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                Text(word.uppercased())
-                    .font(.system(size: 10, weight: .medium))
-                    .tracking(2)
-                    .foregroundStyle(NorthstarResponseTheme.warmWhite.opacity(0.5))
-
-                if index < words.count - 1 {
-                    Text("·")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(NorthstarResponseTheme.warmWhite.opacity(0.3))
-                }
-            }
-        }
-    }
-}
-
-/// A restrained, translucent composer — secondary to the landscape and brand,
-/// not a bright floating card. Non-functional; this screen is a visual
-/// prototype only, so there is no send action or view-model wiring.
+/// A lightweight, locally-owned composer — not extracted from or shared with
+/// ContentView's promptArea (that stays untouched per the approved low-risk plan).
+/// Its only responsibility is to capture the first prompt/star/mic intent and
+/// report it upward; it does not call Gemini, append messages, or detect intent.
 private struct NorthstarVisionComposer: View {
+    let onSubmitPrompt: (String) -> Void
+    let onSelectStar: () -> Void
+    let onSelectMicrophone: () -> Void
+
     @State private var draftText = ""
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "mic")
-                .font(.system(size: 15, weight: .light))
-                .foregroundStyle(NorthstarResponseTheme.warmWhite.opacity(0.6))
+        HStack(spacing: 10) {
+            Button(action: onSelectStar) {
+                Image(systemName: "sparkle")
+                    .font(.system(size: 16, weight: .light))
+                    .foregroundStyle(NorthstarResponseTheme.warmWhite.opacity(0.7))
+                    .frame(width: 30, height: 30)
+            }
+            .accessibilityLabel("Open Northstar menu")
 
             TextField(
                 "",
@@ -165,20 +146,44 @@ private struct NorthstarVisionComposer: View {
             )
             .font(.system(size: 14, weight: .regular))
             .foregroundStyle(NorthstarResponseTheme.warmWhite.opacity(0.85))
+            .submitLabel(.send)
+            .onSubmit(submit)
 
-            Image(systemName: "waveform")
-                .font(.system(size: 14, weight: .light))
-                .foregroundStyle(NorthstarResponseTheme.warmWhite.opacity(0.5))
+            Button(action: onSelectMicrophone) {
+                Image(systemName: "mic")
+                    .font(.system(size: 15, weight: .light))
+                    .foregroundStyle(NorthstarResponseTheme.warmWhite.opacity(0.6))
+                    .frame(width: 30, height: 30)
+            }
+            .accessibilityLabel("Use microphone")
+
+            Button(action: submit) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(NorthstarResponseTheme.warmWhite.opacity(0.85))
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(NorthstarResponseTheme.warmWhite.opacity(0.14)))
+            }
+            .accessibilityLabel("Send")
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
         .background(Capsule().fill(.ultraThinMaterial).opacity(0.55))
         .overlay(Capsule().strokeBorder(NorthstarResponseTheme.warmWhite.opacity(0.12), lineWidth: 1))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Message composer, ask anything")
+    }
+
+    private func submit() {
+        let trimmed = draftText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        onSubmitPrompt(trimmed)
+        draftText = ""
     }
 }
 
 #Preview("Northstar Vision Screen") {
-    NorthstarVisionScreen()
+    NorthstarVisionScreen(
+        onSubmitPrompt: { _ in },
+        onSelectStar: {},
+        onSelectMicrophone: {}
+    )
 }
