@@ -469,7 +469,7 @@ struct ContentView: View {
         case .history:
             placeholderScreen(title: "History", symbol: "clock.arrow.circlepath")
         case .settings:
-            placeholderScreen(title: "Settings", symbol: "gearshape")
+            NorthstarSettingsView()
         case .about:
             placeholderScreen(title: "About Northstar", symbol: "sparkle")
         }
@@ -844,13 +844,18 @@ struct ContentView: View {
     private func requestGeminiResponse() {
         isThinking = true
         responseTask = Task {
-            let memory = await memoryForEngine()
+            let settings = EngineSettings.current
+            var memory: [NorthstarEngineClient.MemoryItem] = []
+            if settings.memoryOn {
+                memory = await memoryForEngine()
+            }
             let corrections = pendingCorrections
             pendingCorrections = []
             let answer = await engine.getReply(
                 for: viewModel.messages,
                 memory: memory,
-                corrections: corrections
+                corrections: corrections,
+                settings: settings
             )
             guard !Task.isCancelled else { return }
             await MainActor.run {

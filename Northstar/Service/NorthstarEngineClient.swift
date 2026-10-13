@@ -22,10 +22,19 @@ struct NorthstarEngineClient {
         let text: String
     }
 
+    /// Settings the brain turns into rules (answer length, name, visuals, memory).
+    nonisolated private struct SettingsPayload: Encodable, Sendable {
+        let answer_length: String
+        let preferred_name: String
+        let show_visuals: Bool
+        let memory_on: Bool
+    }
+
     nonisolated private struct Request: Encodable, Sendable {
         let messages: [Turn]
         let memory: [MemoryItem]
         let corrections: [String]
+        let settings: SettingsPayload?
     }
 
     nonisolated private struct Reply: Decodable, Sendable {
@@ -47,8 +56,18 @@ struct NorthstarEngineClient {
     func getReply(
         for messages: [MessageModel],
         memory: [MemoryItem] = [],
-        corrections: [String] = []
+        corrections: [String] = [],
+        settings: EngineSettings? = nil
     ) async -> EngineReply {
+        let settingsPayload = settings.map {
+            SettingsPayload(
+                answer_length: $0.answerLength.rawValue,
+                preferred_name: $0.preferredName,
+                show_visuals: $0.showVisuals,
+                memory_on: $0.memoryOn
+            )
+        }
+
         let turns = messages
             .filter { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .suffix(20)
@@ -65,7 +84,8 @@ struct NorthstarEngineClient {
                     body: Request(
                         messages: Array(turns),
                         memory: Array(memory.prefix(20)),
-                        corrections: Array(corrections.prefix(10))
+                        corrections: Array(corrections.prefix(10)),
+                        settings: settingsPayload
                     )
                 )
             )

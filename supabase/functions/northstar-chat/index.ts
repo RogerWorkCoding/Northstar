@@ -172,6 +172,7 @@ function settingsRules(s: unknown): string {
   const name = str(o.preferred_name, 40);
   if (name) lines.push(`- Call the person ${name}.`);
   if (o.memory_on === false) lines.push("- Memory is off: propose no saves.");
+  if (o.show_visuals === false) lines.push("- Visuals are off: don't include a wireframe unless they ask for one directly.");
   return lines.length ? "Person's settings:\n" + lines.join("\n") : "";
 }
 
