@@ -74,7 +74,6 @@ struct NorthstarReplyView: View {
 
             Text(Self.formatted(text))
                 .font(.system(size: 18))
-                .lineSpacing(5)
                 .foregroundStyle(NorthstarChatStyle.text)
                 .northstarReadingStyle()
                 .textSelection(.enabled)

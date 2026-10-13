@@ -15,7 +15,7 @@ enum SettingsKeys {
     static let easierFont    = "ns.reading.easierFont"
 }
 
-enum AnswerLength: String, CaseIterable, Identifiable {
+nonisolated enum AnswerLength: String, CaseIterable, Identifiable, Sendable {
     case short, detailed
     var id: String { rawValue }
     var label: String { self == .short ? "Short" : "Detailed" }
@@ -140,6 +140,7 @@ struct NorthstarReadingStyle: ViewModifier {
                 .lineSpacing(8)
         } else {
             content
+                .lineSpacing(5)
         }
     }
 }
