@@ -5,7 +5,7 @@
 // secrets, never in the app.
 //
 // Response (always includes `reply`, so older app versions keep working):
-// { reply, stage, stage_reason, destination, heard[], proposed_saves[] }
+// { reply, stage, stage_reason, personal, destination, heard[], proposed_saves[] }
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = Deno.env.get("NORTHSTAR_MODEL") ?? "claude-sonnet-5-5";
@@ -41,6 +41,9 @@ const ENGINE_RULES = `How you work:
 - Heard: pull 0–6 short key words or phrases (1–4 words) from THEIR message, grouped as
   what (the thing), feeling (only feelings they said out loud), for (who it's for),
   must (must-haves), avoid (things to avoid). Use their words. Never invent feelings.
+- Personal: set personal=true when the person is sharing something personal or emotional
+  (feelings, relationships, family, health, grief, life struggles). Set false for general work:
+  projects, tasks, how-to questions, ideas. When personal is true, return no heard pills.
 - Destination: if they named a goal they are working toward, restate it in a few words; otherwise null.
 - Proposed saves: suggest saving only things they stated or confirmed:
   destination, decision (with their reason), next_step, taste (a stated preference), open_question.
@@ -58,6 +61,7 @@ const REPLY_TOOL = {
       reply: { type: "string", description: "What Northstar says to the person." },
       stage: { type: "string", enum: ["Reflection", "Perspective", "Clarity", "Direction", "Progress"] },
       stage_reason: { type: "string", description: "One short line: why this stage." },
+      personal: { type: "boolean", description: "True if the person is sharing something personal or emotional." },
       destination: { type: ["string", "null"], description: "The goal they named, in a few words, or null." },
       heard: {
         type: "array",
@@ -85,7 +89,7 @@ const REPLY_TOOL = {
         },
       },
     },
-    required: ["reply", "stage", "stage_reason", "heard", "proposed_saves"],
+    required: ["reply", "stage", "stage_reason", "personal", "heard", "proposed_saves"],
   },
 };
 
@@ -220,7 +224,9 @@ Deno.serve(async (req) => {
 
   // Validate everything before it reaches the app.
   const stage = STAGES.includes(str(tool.stage)) ? str(tool.stage) : null;
-  const heard = (Array.isArray(tool.heard) ? tool.heard : [])
+  // Approved rule: personal conversations get no "What I heard" pills.
+  const personal = tool.personal === true;
+  const heard = personal ? [] : (Array.isArray(tool.heard) ? tool.heard : [])
     .map((h: Record<string, unknown>) => ({ group: str(h?.group, 10), text: str(h?.text, 60) }))
     .filter((h) => GROUPS.includes(h.group) && h.text)
     .slice(0, 6);
@@ -234,6 +240,7 @@ Deno.serve(async (req) => {
     reply: str(tool.reply, 8000) || "I'm here. Could you say that another way?",
     stage,
     stage_reason: str(tool.stage_reason, 200),
+    personal,
     destination: str(tool.destination, 120) || null,
     heard,
     proposed_saves,

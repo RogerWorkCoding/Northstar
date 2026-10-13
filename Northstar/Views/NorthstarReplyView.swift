@@ -137,9 +137,7 @@ struct NorthstarReplyView: View {
             PillFlowLayout(spacing: 8) {
                 ForEach(pills, id: \.self) { pill in
                     HStack(spacing: 0) {
-                        Text(pill.label)
-                            .foregroundStyle(NorthstarChatStyle.label)
-                            .padding(.trailing, 6)
+                        // Plain words only (approved): no group labels on pills.
                         Text(pill.text)
                             .foregroundStyle(.white)
                         Button {
@@ -154,7 +152,7 @@ struct NorthstarReplyView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Remove \(pill.label): \(pill.text)")
+                        .accessibilityLabel("Remove \(pill.text)")
                     }
                     .font(.system(size: 15))
                     .padding(.leading, 14)
