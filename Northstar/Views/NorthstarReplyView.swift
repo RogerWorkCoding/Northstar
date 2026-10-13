@@ -57,6 +57,8 @@ struct NorthstarReplyView: View {
     var chosenDirection: String? = nil
     /// Only the newest reply can be chosen from, and not while Northstar is thinking.
     var canChooseDirection: Bool = true
+    /// "Use this" on a From before card: bring that line into the conversation.
+    var onUseFromBefore: (Note) -> Void = { _ in }
 
     @State private var whyOpen = false
     @State private var removedPills: Set<NorthstarInsight.Heard> = []
@@ -88,6 +90,10 @@ struct NorthstarReplyView: View {
                 .northstarReadingStyle()
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let earlier = insight?.fromBefore.first {
+                FromBeforeCard(note: earlier, canUse: canChooseDirection, onUse: onUseFromBefore)
+            }
 
             if let sources = insight?.sources, !sources.isEmpty {
                 SourcesRow(sources: sources)
@@ -460,6 +466,71 @@ struct SourcesRow: View {
                     .accessibilityHint("Opens in Safari")
                 }
             }
+        }
+    }
+}
+
+/// "From before": a matching line from an earlier conversation.
+/// Northstar only uses it if the person taps "Use this".
+struct FromBeforeCard: View {
+    let note: Note
+    var canUse: Bool = true
+    var onUse: (Note) -> Void = { _ in }
+
+    @State private var hidden = false
+    @State private var used = false
+
+    var body: some View {
+        if !hidden {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath")
+                    Text("FROM BEFORE").tracking(2)
+                    Text("·")
+                    Text(note.createdAt, format: .dateTime.month(.abbreviated).day())
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(NorthstarChatStyle.label)
+
+                Text(note.text)
+                    .font(.body)
+                    .foregroundStyle(NorthstarChatStyle.text)
+                    .northstarReadingStyle()
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if used {
+                    Label("Using this", systemImage: "checkmark")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(NorthstarChatStyle.savedGreen)
+                } else if canUse {
+                    HStack(spacing: 10) {
+                        Button {
+                            used = true
+                            onUse(note)
+                        } label: {
+                            Text("Use this")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .background(Capsule().fill(Color(red: 0.91, green: 0.93, blue: 1.0)))
+                        }
+                        Button {
+                            withAnimation(.easeOut(duration: 0.2)) { hidden = true }
+                        } label: {
+                            Text("Not now")
+                                .font(.body)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .overlay(Capsule().strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.06)))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+            .accessibilityElement(children: .contain)
         }
     }
 }

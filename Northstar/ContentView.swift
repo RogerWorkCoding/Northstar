@@ -276,7 +276,8 @@ struct ContentView: View {
                                 onRemovePill: { pendingCorrections.append($0) },
                                 onChooseDirection: chooseDirection,
                                 chosenDirection: chosenDirection(after: message),
-                                canChooseDirection: !isThinking && message.id == viewModel.messages.last?.id
+                                canChooseDirection: !isThinking && message.id == viewModel.messages.last?.id,
+                                onUseFromBefore: useFromBefore
                             )
                         }
                     }
@@ -817,6 +818,14 @@ struct ContentView: View {
     private func chooseDirection(_ direction: NorthstarInsight.Direction) {
         guard !isThinking else { return }
         viewModel.messages.append(MessageModel(role: .user, content: Self.choicePrefix + direction.name + "\u{201D}."))
+        requestGeminiResponse()
+    }
+
+    /// "Use this" on a From before card: bring the earlier line into the chat, in plain words.
+    private func useFromBefore(_ note: Note) {
+        guard !isThinking else { return }
+        let day = note.createdAt.formatted(.dateTime.month(.wide).day())
+        viewModel.messages.append(MessageModel(role: .user, content: "From before (\(day)): \u{201C}\(note.text)\u{201D}. Let's use this."))
         requestGeminiResponse()
     }
 

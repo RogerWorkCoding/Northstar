@@ -340,6 +340,38 @@ const CRISIS_FALLBACK =
 let meaningSession: any;
 // deno-lint-ignore no-explicit-any
 const meaning = () => (meaningSession ??= new (globalThis as any).Supabase.ai.Session("gte-small"));
+// "From before": a strong match from an EARLIER conversation, shown as a card.
+// The brain doesn't see it unless the person taps "Use this".
+const FROM_BEFORE_MAX = 0.15;        // how close in meaning (0 = same)
+const FROM_BEFORE_MIN_AGE_MIN = 30;  // not lines from the last 30 minutes (this conversation)
+async function findFromBefore(auth: string, text: string) {
+  try {
+    if (text.trim().split(/\s+/).length < 4) return []; // "hi", "yes", "thanks"
+    if (/^From before \(/.test(text)) return [];        // they just used one; don't offer it again
+    const embedding = Array.from(await meaning().run(text, { mean_pool: true, normalize: true }) as number[]);
+    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: auth } },
+      auth: { persistSession: false },
+    });
+    const vec = JSON.stringify(embedding);
+    const [close, same] = await Promise.all([
+      db.rpc("search_notes", { query_text: "", query_embedding: vec, match_count: 3, max_distance: FROM_BEFORE_MAX }),
+      db.rpc("search_notes", { query_text: "", query_embedding: vec, match_count: 3, max_distance: NEAR_COPY }),
+    ]);
+    const sameIds = new Set((Array.isArray(same.data) ? same.data : []).map((n: { id: string }) => n.id));
+    const cutoff = Date.now() - FROM_BEFORE_MIN_AGE_MIN * 60_000;
+    const hit = (Array.isArray(close.data) ? close.data : []).find(
+      (n: { id: string; created_at: string }) => !sameIds.has(n.id) && Date.parse(n.created_at) < cutoff,
+    );
+    return hit
+      ? [{ id: hit.id, text: str(hit.text, 300), subject: str(hit.subject, 120) || null, created_at: hit.created_at }]
+      : [];
+  } catch (e) {
+    console.error("from before failed:", String(e).slice(0, 200));
+    return [];
+  }
+}
+
 // How close two notes must be to count as the same thing said twice
 // (0 = identical). Small on purpose: "logo" and "website" stay separate notes.
 const NEAR_COPY = 0.06;
@@ -469,6 +501,13 @@ Deno.serve(async (req) => {
   // Web search is part of the core: Claude decides when a question needs current facts.
   // If they name a site ("search Dell.com"), searches stay on that site.
   const lastText = messages[messages.length - 1].content;
+
+  // Look for a line from before while Claude thinks (no extra wait).
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const memoryOnSetting = (body.settings as Record<string, unknown> | undefined)?.memory_on === true;
+  const fromBeforeJob = memoryOnSetting && authHeader.startsWith("Bearer ") && !crisisNet(lastText)
+    ? findFromBefore(authHeader, lastText)
+    : Promise.resolve([]);
   const site = lastText.match(/\b((?:[a-z0-9-]+\.)+(?:com|org|net|io|co|gov|edu|ai|app|dev|us|uk|ca))\b/i)?.[1]?.toLowerCase();
   const webTool = {
     type: "web_search_20250305",
@@ -611,6 +650,8 @@ Deno.serve(async (req) => {
     visual,
     directions,
     sources: crisis ? [] : sourcesFrom(tool.sources),
+    // A line from an earlier conversation that matches (never in personal or crisis moments).
+    from_before: personal || crisis ? [] : await fromBeforeJob,
     // The one-liner kept for Search (empty when nothing was kept). Not shown in chat.
     note: note && memoryOn && !personal && !crisis ? note : "",
   });
