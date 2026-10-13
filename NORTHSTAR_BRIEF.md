@@ -251,16 +251,18 @@ Image and video generation (providers not yet verified for ownership and commerc
 ## 12. Status (updated Oct 13, 2026)
 
 **Built and live**
-- **Backend:** Supabase function `northstar-chat` calls Claude (key only in Supabase secrets). Prompt order: constitution, calm playbook v1 (with safety path), engine rules, settings, memory, corrections.
-- **Brain returns:** reply, stage + reason, personal, crisis, destination, heard pills, save suggestions, optional wireframe, and three directions when someone isn't sure of a style.
-- **Brain safety:** one retry when Claude is busy; a crisis safety net (first-person phrases always get the help card, even if Claude can't be reached).
-- **Data locked:** quiet (anonymous) sign-in; every table has an owner; row-level security on all four tables; old test rows backed up in `backup_20261012`.
-- **App:** talks to the Engine (no AI keys in the app), approved chat design, chat veil, frosted field, keyboard fix, app icon.
+- **Brain (`northstar-chat`):** general **core rules** (talking, looking things up, using memory, reading the person, saving) + **skills** loaded only when needed (design: wireframes and three directions). Rules are cached (faster, ~90% cheaper input).
+- **Looks things up on the web** (core): sources only from real search results, one per site, bold product links; looks, never acts.
+- **Knows the time** in the person's time zone. **Long chats:** last 14 messages in full, older ones as short lines.
+- **Safety:** crisis safety net, retry when Claude is busy, plain-text replies, checked links and wireframes (drawn by the server from a short layout list).
+- **Memory:** saves (ask first), **Notes** (one-liners kept after each reply, never feelings/health/money), **Search** by words and meaning (`northstar-search`), **From before** card for strong matches from earlier chats.
+- **Data locked:** anonymous sign-in, row-level security on every table (incl. `notes`).
+- **App:** chat design, Search screen (rotating hint, recent frosted pills), Sources row, directions cards, From before card, Settings.
 
-**Engine v1: all 6 items built.** (1) stage, (2) heard pills, (3) memory + saves, (4) safety path, (5) settings, (6) show options instead of asking.
+**Brain tests:** `supabase/tests/engine-tests.js` (41 live cases, run in a browser) and `supabase/tests/crisis-net-test.js` (29 phrase checks). Run both after every brain change.
 
-**Brain tests:** `supabase/tests/engine-tests.js` (22 live cases, run in a browser) and `supabase/tests/crisis-net-test.js` (29 phrase checks, `node`). Run both after every brain change. Last run: 22/22 and 29/29.
+**Waiting for Roger (PRs, stacked, merge in order):** #26 speed → #27 long chats → #28 clock → #29 smoother conversations. Then #30 (this plan).
 
-**Waiting for Roger:** PR #13 (three directions) and PR #14 (brain safety, tests, review fixes). Merge #13 first, then #14, then test once on iPhone.
+**Next step:** subject cards (memory step 4). Plan in `docs/subject-cards.md`; database draft waits for Roger's OK and one answer (updates automatic with Undo, or ask each time).
 
-**Next step:** Roger merges #13 → #14 and tests on iPhone. Then build the Destinations screen (menu).
+**Roger's rules learned while testing:** don't stretch memory (a choice belongs to what it names); be exact (a month is not a day); ask first, save after; small bites (max 3 short options); proper names (Dell.com); general, not specific; never ask the same question twice.
