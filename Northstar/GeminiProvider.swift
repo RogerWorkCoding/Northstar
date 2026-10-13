@@ -2,7 +2,9 @@ import Foundation
 
 struct GeminiProvider {
 
-    private let apiKey = GEMINI_API_KEY
+    // Retired: Northstar now uses NorthstarEngineClient (Claude via Supabase).
+    // No AI keys live in the app anymore.
+    private let apiKey = ""
     private let model = "gemini-3.5-flash"
 
     func getResponse(

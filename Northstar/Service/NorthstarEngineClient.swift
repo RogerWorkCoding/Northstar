@@ -5,16 +5,16 @@ import Supabase
 /// "northstar-chat"), which asks Claude. No AI key lives in the app.
 struct NorthstarEngineClient {
 
-    private struct Turn: Encodable {
+    nonisolated private struct Turn: Encodable, Sendable {
         let role: String
         let content: String
     }
 
-    private struct Request: Encodable {
+    nonisolated private struct Request: Encodable, Sendable {
         let messages: [Turn]
     }
 
-    private struct Reply: Decodable {
+    nonisolated private struct Reply: Decodable, Sendable {
         let reply: String?
         let error: String?
     }
