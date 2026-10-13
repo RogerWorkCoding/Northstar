@@ -62,9 +62,10 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         let title: String
         let url: URL
 
-        /// Short site name for the link, e.g. "dell.com".
+        /// Site name for the link, written like a name: "Dell.com", "Weather.gov".
         var site: String {
-            (url.host() ?? title).replacingOccurrences(of: "www.", with: "")
+            let host = (url.host() ?? title).replacingOccurrences(of: "www.", with: "")
+            return host.prefix(1).uppercased() + host.dropFirst()
         }
     }
 
