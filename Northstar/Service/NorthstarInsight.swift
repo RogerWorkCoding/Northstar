@@ -1,0 +1,82 @@
+import Foundation
+
+/// The extra things the Northstar Engine returns with a reply:
+/// the stage, what it heard, and what it suggests saving.
+nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
+
+    nonisolated struct Heard: Hashable, Sendable, Decodable {
+        let group: String   // what | feeling | for | must | avoid
+        let text: String
+
+        /// Word label shown on the pill, so meaning never depends on color.
+        var label: String {
+            switch group {
+            case "what": return "What"
+            case "feeling": return "Feeling"
+            case "for": return "For"
+            case "must": return "Must"
+            case "avoid": return "Avoid"
+            default: return group.capitalized
+            }
+        }
+    }
+
+    nonisolated struct Save: Hashable, Sendable, Decodable {
+        let kind: String    // destination | decision | next_step | taste | open_question
+        let text: String
+        let reason: String
+
+        /// Card title, e.g. "SAVE AS YOUR DESTINATION?"
+        var question: String {
+            switch kind {
+            case "destination": return "Save as your destination?"
+            case "decision": return "Save this decision?"
+            case "next_step": return "Save as your next step?"
+            case "taste": return "Remember this preference?"
+            case "open_question": return "Keep this question open?"
+            default: return "Save this?"
+            }
+        }
+
+        /// Confirmation line after saving.
+        var savedLine: String {
+            switch kind {
+            case "destination": return "Saved as your destination"
+            case "decision": return "Decision saved"
+            case "next_step": return "Next step saved"
+            case "taste": return "Preference saved"
+            case "open_question": return "Question saved"
+            default: return "Saved"
+            }
+        }
+    }
+
+    let stage: String?
+    let stageReason: String?
+    let destination: String?
+    let heard: [Heard]
+    let proposedSaves: [Save]
+
+    /// Approved design rule: stage, pills and save cards only show when
+    /// Northstar is guiding. Quick questions get just the answer.
+    var isGuiding: Bool {
+        destination != nil || !proposedSaves.isEmpty
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case stage
+        case stageReason = "stage_reason"
+        case destination
+        case heard
+        case proposedSaves = "proposed_saves"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        stage = try c.decodeIfPresent(String.self, forKey: .stage)
+        stageReason = try c.decodeIfPresent(String.self, forKey: .stageReason)
+        destination = try c.decodeIfPresent(String.self, forKey: .destination)
+        heard = (try? c.decodeIfPresent([Heard].self, forKey: .heard)) ?? []
+        proposedSaves = (try? c.decodeIfPresent([Save].self, forKey: .proposedSaves)) ?? []
+    }
+}

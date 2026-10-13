@@ -11,16 +11,20 @@ struct MessageModel: Identifiable, Hashable, Sendable {
     let role: Role
     let content: String
     let timestamp: Date
+    /// Stage, what Northstar heard and save suggestions (assistant replies only).
+    let insight: NorthstarInsight?
 
     init(
         id: UUID = UUID(),
         role: Role,
         content: String,
-        timestamp: Date = .now
+        timestamp: Date = .now,
+        insight: NorthstarInsight? = nil
     ) {
         self.id = id
         self.role = role
         self.content = content
         self.timestamp = timestamp
+        self.insight = insight
     }
 }
