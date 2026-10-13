@@ -136,10 +136,11 @@ const SKILLS: Record<string, { when: RegExp; rules: string }> = {
   button), image, cards (title, items = up to 3 card names, button), text (title, text), list (title, items),
   form (title, items = field names, button), button (button), footer (text). Use short real labels from
   their request (e.g. "Fresh bread daily", "Order now"). The app draws it. In the reply, describe the layout
-  in one line and ask one question about it.
-- Options instead of asking: when they want something made (a brand, website, poster, space, style) but
-  haven't described the look, or say they're not sure, offer exactly 3 very different directions in
-  directions. Each: a short name, one mood line, 3–4 keywords, 4 colors as #RRGGBB, and a type style
+  in one line and ask one question about it. If your reply mentions a layout, visual.blocks must hold it.
+- Options instead of asking: when they want a look or style (a brand, logo, colors, poster, space) but
+  haven't described it, or say they're not sure, offer exactly 3 very different directions in
+  directions. For a page or screen request, give the wireframe first; offer directions only if they ask
+  about the look. Each: a short name, one mood line, 3–4 keywords, 4 colors as #RRGGBB, and a type style
   (serif, sans, rounded, mono or script). Keep the reply to one or two lines, e.g. "Here are three
   directions. Which feels closest?" Never for personal conversations, quick questions or crisis.
   If they already chose a direction, don't offer new ones.`,
