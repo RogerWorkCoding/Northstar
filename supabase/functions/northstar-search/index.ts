@@ -22,9 +22,15 @@ function json(body: unknown, status = 200) {
   });
 }
 
-// Built into Supabase Edge Functions.
+// Built into Supabase Edge Functions. Created on first use, so search still
+// works by words if the meaning model is unavailable.
 // deno-lint-ignore no-explicit-any
-const meaning = new (globalThis as any).Supabase.ai.Session("gte-small");
+let meaningSession: any;
+// deno-lint-ignore no-explicit-any
+const meaning = () => (meaningSession ??= new (globalThis as any).Supabase.ai.Session("gte-small"));
+
+// How close in meaning a note must be (0 = same, 2 = opposite). Tuned on real notes.
+const MAX_DISTANCE = 0.2;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -51,7 +57,7 @@ Deno.serve(async (req) => {
 
   let embedding: number[] | null = null;
   try {
-    embedding = await meaning.run(query, { mean_pool: true, normalize: true });
+    embedding = Array.from(await meaning().run(query, { mean_pool: true, normalize: true }) as number[]);
   } catch (e) {
     console.error("meaning failed, words only:", String(e).slice(0, 200));
   }
@@ -60,6 +66,7 @@ Deno.serve(async (req) => {
     query_text: query,
     query_embedding: embedding ? JSON.stringify(embedding) : null,
     match_count: limit,
+    max_distance: MAX_DISTANCE,
   });
   if (error) {
     console.error("search failed:", error.message);

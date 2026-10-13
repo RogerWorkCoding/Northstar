@@ -42,8 +42,8 @@ nonisolated struct Note: Identifiable, Hashable, Sendable, Decodable {
 struct NotesService {
     private var client: SupabaseClient { SupabaseManager.shared.client }
 
-    private struct SearchRequest: Encodable, Sendable { let query: String; let limit: Int }
-    private struct SearchReply: Decodable, Sendable { let results: [Note]?; let error: String? }
+    nonisolated private struct SearchRequest: Encodable, Sendable { let query: String; let limit: Int }
+    nonisolated private struct SearchReply: Decodable, Sendable { let results: [Note]?; let error: String? }
 
     /// Find notes by a word or a sentence (by words and by meaning).
     func search(_ query: String, limit: Int = 30) async throws -> [Note] {

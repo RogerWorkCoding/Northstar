@@ -11,6 +11,7 @@ struct NotesSearchView: View {
     @State private var errorMessage: String?
     @State private var searched = ""          // the query the results belong to
     @State private var opened: Note?
+    @State private var deleteFailed = false
     @FocusState private var fieldFocused: Bool
 
     private let notes = NotesService()
@@ -34,10 +35,12 @@ struct NotesSearchView: View {
         // Search a moment after typing stops.
         .task(id: query) {
             let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            errorMessage = nil
             guard q.count >= 2 else {
-                results = []; searched = ""; errorMessage = nil
+                results = []; searched = ""; isSearching = false
                 return
             }
+            isSearching = true
             try? await Task.sleep(for: .milliseconds(450))
             guard !Task.isCancelled else { return }
             await run(q)
@@ -48,6 +51,11 @@ struct NotesSearchView: View {
                 opened = nil
             }
             .presentationDetents([.medium, .large])
+        }
+        .alert("Couldn't delete that note", isPresented: $deleteFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Check your connection and try again.")
         }
     }
 
@@ -81,8 +89,8 @@ struct NotesSearchView: View {
     private var content: some View {
         if let errorMessage {
             message(icon: "exclamationmark.triangle", title: errorMessage, detail: "Check your connection and try again.")
-        } else if searched.isEmpty {
-            if isSearching { ProgressView().tint(.white).padding(.top, 40); Spacer() }
+        } else if searched.isEmpty || (isSearching && results.isEmpty) {
+            if isSearching { VStack { ProgressView().tint(.white).padding(.top, 48); Spacer() } }
             else {
                 message(icon: "text.magnifyingglass",
                         title: "Find anything you've said",
@@ -138,18 +146,21 @@ struct NotesSearchView: View {
 
     // MARK: - Actions
 
+    private var currentQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
+
     private func run(_ q: String) async {
-        isSearching = true
-        defer { isSearching = false }
         do {
             let found = try await notes.search(q)
-            guard q == query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+            // A newer search may have started; only the latest one updates the screen.
+            guard q == currentQuery, !Task.isCancelled else { return }
             results = found
             searched = q
             errorMessage = nil
         } catch {
-            if !Task.isCancelled { errorMessage = "Search didn't work." }
+            guard q == currentQuery, !Task.isCancelled else { return }
+            errorMessage = "Search didn't work."
         }
+        isSearching = false
     }
 
     private func delete(_ note: Note) async {
@@ -157,7 +168,7 @@ struct NotesSearchView: View {
             try await notes.delete(id: note.id)
             results.removeAll { $0.id == note.id }
         } catch {
-            print("Note delete failed:", error.localizedDescription)
+            deleteFailed = true
         }
     }
 }

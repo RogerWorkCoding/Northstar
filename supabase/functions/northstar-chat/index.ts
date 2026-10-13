@@ -271,11 +271,14 @@ const CRISIS_FALLBACK =
 // Keep a one-liner for Search. Runs as the signed-in person (row-level security);
 // without a real sign-in (e.g. tests with the public key) nothing is saved.
 // Meaning comes from Supabase's built-in gte-small model (no extra key).
+// Created on first use, so chat never fails to start if the model is unavailable.
 // deno-lint-ignore no-explicit-any
-const meaning = new (globalThis as any).Supabase.ai.Session("gte-small");
+let meaningSession: any;
+// deno-lint-ignore no-explicit-any
+const meaning = () => (meaningSession ??= new (globalThis as any).Supabase.ai.Session("gte-small"));
 async function keepNote(auth: string, text: string, context: string, subject: string | null) {
   try {
-    const embedding = await meaning.run(text, { mean_pool: true, normalize: true });
+    const embedding = Array.from(await meaning().run(text, { mean_pool: true, normalize: true }) as number[]);
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: auth } },
       auth: { persistSession: false },
@@ -438,7 +441,9 @@ Deno.serve(async (req) => {
   // Quietly keep a one-liner for Search, after the reply is on its way.
   const note = str(tool.note, 300);
   const auth = req.headers.get("Authorization") ?? "";
-  if (note && !personal && !crisis && !memoryOff && auth.startsWith("Bearer ")) {
+  // Memory must be explicitly on (an app that sends no settings keeps nothing).
+  const memoryOn = (body.settings as Record<string, unknown> | undefined)?.memory_on === true;
+  if (note && memoryOn && !personal && !crisis && auth.startsWith("Bearer ")) {
     const job = keepNote(auth, note, reply, destination);
     // deno-lint-ignore no-explicit-any
     const rt = (globalThis as any).EdgeRuntime;
@@ -457,6 +462,6 @@ Deno.serve(async (req) => {
     visual,
     directions,
     // The one-liner kept for Search (empty when nothing was kept). Not shown in chat.
-    note: note && !personal && !crisis && !memoryOff ? note : "",
+    note: note && memoryOn && !personal && !crisis ? note : "",
   });
 });

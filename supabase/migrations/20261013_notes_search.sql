@@ -32,7 +32,8 @@ create policy "Own rows only" on public.notes
 create unique index if not exists notes_no_duplicates on public.notes (user_id, md5(lower(text)));
 create index if not exists notes_recent on public.notes (user_id, created_at desc);
 create index if not exists notes_words on public.notes using gin (fts);
-create index if not exists notes_meaning on public.notes using hnsw (embedding extensions.vector_cosine_ops);
+-- No approximate (hnsw) index yet: with RLS it could drop a person's matches.
+-- An exact scan of one person's notes is fast at this size. Revisit at ~100k notes.
 
 -- Search by words and meaning together, best matches first.
 -- Runs as the person calling it, so row-level security still applies.
@@ -54,6 +55,7 @@ as $$
     select n.id, row_number() over (order by n.embedding <=> query_embedding) as rank
     from public.notes n
     where query_embedding is not null
+      and n.user_id = auth.uid()
       and n.embedding is not null
       and (n.embedding <=> query_embedding) < max_distance
     order by n.embedding <=> query_embedding
@@ -62,7 +64,7 @@ as $$
   by_words as (
     select n.id, row_number() over (order by ts_rank_cd(n.fts, q.tsq) desc) as rank
     from public.notes n, q
-    where q.tsq is not null and n.fts @@ q.tsq
+    where q.tsq is not null and n.user_id = auth.uid() and n.fts @@ q.tsq
     limit 50
   ),
   fused as (

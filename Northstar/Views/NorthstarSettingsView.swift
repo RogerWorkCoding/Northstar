@@ -122,16 +122,16 @@ struct NorthstarSettingsView: View {
     private func deleteAll() async {
         let id = SupabaseManager.shared.identityId
         do {
+            try await notesService.deleteAll()
             let items = try await memoryService.loadMemories(identityId: id)
             for item in items {
                 try await memoryService.deleteMemory(id: item.id)
             }
-            try await notesService.deleteAll()
             statusMessage = "All memory deleted."
-            exportText = "[]"
         } catch {
             statusMessage = "Couldn't delete everything. Please try again."
         }
+        await loadExport()
     }
 }
 
