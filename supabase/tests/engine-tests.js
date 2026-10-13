@@ -298,6 +298,7 @@ const NS_CASES = [
     check: (r) => [
       ["looked it up", (r.sources ?? []).length >= 1],
       ["only that site", (r.sources ?? []).every((x) => /(^|\.)dell\.com$/i.test(new URL(x.url).hostname))],
+      ["product names are bold links", /\[\*\*[^\]]+\*\*\]\(https:\/\/[^)]*dell\.com/i.test(r.reply ?? "")],
       ["one source per site", new Set((r.sources ?? []).map((x) => new URL(x.url).hostname.replace(/^www\./, ""))).size === (r.sources ?? []).length],
       ["small bites: at most 3 list lines", ((r.reply ?? "").match(/^\s*[•\-*] /gm) ?? []).length <= 3],
       ["short", (r.reply ?? "").length < 550],

@@ -12,6 +12,7 @@ enum NorthstarChatStyle {
     static let userBubble = Color(red: 0.17, green: 0.24, blue: 0.48) // #2B3C7A
     static let savedGreen = Color(red: 0.81, green: 0.96, blue: 0.89) // #CFF5E3
     static let background = Color(red: 0.08, green: 0.12, blue: 0.25) // screens like Search
+    static let linkBlue = Color(red: 0.62, green: 0.75, blue: 1.0)    // #9EBFFF links in replies
 }
 
 /// Your message: one soft blue bubble on the right.
@@ -79,9 +80,11 @@ struct NorthstarReplyView: View {
                 stageChip(stage: stage, reason: insight.stageReason)
             }
 
+            // Bold product names can be links (checked on the server); tap opens Safari.
             Text(Self.formatted(text))
                 .font(.system(size: 18))
                 .foregroundStyle(NorthstarChatStyle.text)
+                .tint(NorthstarChatStyle.linkBlue)
                 .northstarReadingStyle()
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
