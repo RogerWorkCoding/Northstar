@@ -95,6 +95,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let directions: [Direction]
     /// Web pages used for this answer (empty when Northstar didn't look anything up).
     let sources: [Source]
+    /// A line from an earlier conversation that matches (shown as a "From before" card).
+    let fromBefore: [Note]
 
     /// Approved design rule: stage, pills and save cards only show when
     /// Northstar is guiding. Quick questions get just the answer.
@@ -112,6 +114,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case crisis
         case directions
         case sources
+        case fromBefore = "from_before"
     }
 
     init(from decoder: Decoder) throws {
@@ -129,5 +132,6 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         var seenSites = Set<String>()
         sources = ((try? c.decodeIfPresent([Source].self, forKey: .sources)) ?? [])
             .filter { $0.url.scheme == "https" && seenSites.insert($0.site).inserted }
+        fromBefore = (try? c.decodeIfPresent([Note].self, forKey: .fromBefore)) ?? []
     }
 }

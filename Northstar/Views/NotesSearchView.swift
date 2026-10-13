@@ -390,7 +390,8 @@ extension View {
             .background {
                 ZStack {
                     Capsule().fill(.ultraThinMaterial)
-                    Capsule().fill(Color.white.opacity(0.10))
+                    // Tinted toward navy so the glass belongs to the screen (not grey).
+                    Capsule().fill(Color(red: 0.42, green: 0.52, blue: 0.95).opacity(0.14))
                 }
                 .environment(\.colorScheme, .dark)
             }
