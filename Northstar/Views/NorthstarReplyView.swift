@@ -64,6 +64,10 @@ struct NorthstarReplyView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            if insight?.crisis == true {
+                CrisisHelpCard()
+            }
+
             if let insight = guiding, let stage = insight.stage {
                 stageChip(stage: stage, reason: insight.stageReason)
             }
@@ -293,6 +297,58 @@ struct NorthstarReplyView: View {
             markdown: text,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         )) ?? AttributedString(text)
+    }
+}
+
+/// Safety path: real help, one tap away. Shown above Northstar's reply
+/// whenever the brain says someone may be in crisis.
+struct CrisisHelpCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "heart")
+                    .font(.system(size: 13, weight: .semibold))
+                Text("YOU DON'T HAVE TO DO THIS ALONE")
+                    .font(.system(size: 12, weight: .semibold))
+                    .tracking(1.5)
+            }
+            .foregroundStyle(NorthstarChatStyle.label)
+
+            Text("Talk to someone now. It's free and confidential.")
+                .font(.system(size: 17))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                helpLink("Call 988", systemImage: "phone.fill", url: "tel:988")
+                helpLink("Text 988", systemImage: "message.fill", url: "sms:988")
+            }
+
+            Link(destination: URL(string: "tel:911")!) {
+                Text("In danger right now? Call 911")
+                    .font(.system(size: 15, weight: .semibold))
+                    .underline()
+                    .foregroundStyle(.white)
+                    .frame(minHeight: 44)
+            }
+
+            Text("Outside the US? Call your local emergency number.")
+                .font(.system(size: 14))
+                .foregroundStyle(NorthstarChatStyle.soft)
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.10)))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.30), lineWidth: 1))
+    }
+
+    private func helpLink(_ title: String, systemImage: String, url: String) -> some View {
+        Link(destination: URL(string: url)!) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .background(Capsule().fill(Color(red: 0.91, green: 0.93, blue: 1.0)))
+        }
     }
 }
 

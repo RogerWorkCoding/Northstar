@@ -63,6 +63,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let heard: [Heard]
     let proposedSaves: [Save]
     let visual: Visual?
+    /// Safety path: the person may be in crisis. The app shows real help first.
+    let crisis: Bool
 
     /// Approved design rule: stage, pills and save cards only show when
     /// Northstar is guiding. Quick questions get just the answer.
@@ -77,6 +79,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case heard
         case proposedSaves = "proposed_saves"
         case visual
+        case crisis
     }
 
     init(from decoder: Decoder) throws {
@@ -87,5 +90,6 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         heard = (try? c.decodeIfPresent([Heard].self, forKey: .heard)) ?? []
         proposedSaves = (try? c.decodeIfPresent([Save].self, forKey: .proposedSaves)) ?? []
         visual = try? c.decodeIfPresent(Visual.self, forKey: .visual)
+        crisis = (try? c.decodeIfPresent(Bool.self, forKey: .crisis)) ?? false
     }
 }
