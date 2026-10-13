@@ -301,7 +301,8 @@ const NS_CASES = [
       ["product names are bold links", /\[\*\*[^\]]+\*\*\]\(https:\/\/[^)]*dell\.com/i.test(r.reply ?? "")],
       ["one source per site", new Set((r.sources ?? []).map((x) => new URL(x.url).hostname.replace(/^www\./, ""))).size === (r.sources ?? []).length],
       ["small bites: at most 3 list lines", ((r.reply ?? "").match(/^\s*[•\-*] /gm) ?? []).length <= 3],
-      ["short", (r.reply ?? "").length < 550],
+      // What the person reads (link addresses don't count).
+      ["short", (r.reply ?? "").replace(/\]\([^)]*\)/g, "]").length < 550],
       ["doesn't offer to buy", !has(r.reply, /\b(I('ll| will) (buy|order|purchase)|add(ed)? to (your )?cart)\b/i)],
     ],
   },
