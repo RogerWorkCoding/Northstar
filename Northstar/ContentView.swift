@@ -47,6 +47,8 @@ struct ContentView: View {
     @State private var selectedImage: UIImage?
     @State private var promptText = ""
     @State private var isThinking = false
+    /// Replies whose "From before" card was used or set aside (survives scrolling).
+    @State private var fromBeforeDone: Set<UUID> = []
     /// Pills the person removed since the last message; sent once as corrections.
     @State private var pendingCorrections: [String] = []
     @State private var isStarMenuPresented = false
@@ -277,7 +279,12 @@ struct ContentView: View {
                                 onChooseDirection: chooseDirection,
                                 chosenDirection: chosenDirection(after: message),
                                 canChooseDirection: !isThinking && message.id == viewModel.messages.last?.id,
-                                onUseFromBefore: useFromBefore
+                                onUseFromBefore: { note in
+                                    fromBeforeDone.insert(message.id)
+                                    useFromBefore(note)
+                                },
+                                fromBeforeDone: fromBeforeDone.contains(message.id),
+                                onDismissFromBefore: { fromBeforeDone.insert(message.id) }
                             )
                         }
                     }

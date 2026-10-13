@@ -344,7 +344,7 @@ const meaning = () => (meaningSession ??= new (globalThis as any).Supabase.ai.Se
 // The brain doesn't see it unless the person taps "Use this".
 const FROM_BEFORE_MAX = 0.15;        // how close in meaning (0 = same)
 const FROM_BEFORE_MIN_AGE_MIN = 30;  // not lines from the last 30 minutes (this conversation)
-async function findFromBefore(auth: string, text: string) {
+async function findFromBefore(auth: string, text: string, conversation: string) {
   try {
     if (text.trim().split(/\s+/).length < 4) return []; // "hi", "yes", "thanks"
     if (/^From before \(/.test(text)) return [];        // they just used one; don't offer it again
@@ -355,13 +355,19 @@ async function findFromBefore(auth: string, text: string) {
     });
     const vec = JSON.stringify(embedding);
     const [close, same] = await Promise.all([
-      db.rpc("search_notes", { query_text: "", query_embedding: vec, match_count: 3, max_distance: FROM_BEFORE_MAX }),
+      // 10, not 3: lines from this same chat are filtered out below and mustn't crowd out older ones.
+      db.rpc("search_notes", { query_text: "", query_embedding: vec, match_count: 10, max_distance: FROM_BEFORE_MAX }),
       db.rpc("search_notes", { query_text: "", query_embedding: vec, match_count: 3, max_distance: NEAR_COPY }),
     ]);
     const sameIds = new Set((Array.isArray(same.data) ? same.data : []).map((n: { id: string }) => n.id));
     const cutoff = Date.now() - FROM_BEFORE_MIN_AGE_MIN * 60_000;
+    const said = conversation.toLowerCase();
     const hit = (Array.isArray(close.data) ? close.data : []).find(
-      (n: { id: string; created_at: string }) => !sameIds.has(n.id) && Date.parse(n.created_at) < cutoff,
+      (n: { id: string; text: string; created_at: string }) =>
+        !sameIds.has(n.id) &&
+        Date.parse(n.created_at) < cutoff &&
+        // Already in this conversation (used before, or said again): don't offer it again.
+        !said.includes(str(n.text, 300).toLowerCase()),
     );
     return hit
       ? [{ id: hit.id, text: str(hit.text, 300), subject: str(hit.subject, 120) || null, created_at: hit.created_at }]
@@ -506,7 +512,7 @@ Deno.serve(async (req) => {
   const authHeader = req.headers.get("Authorization") ?? "";
   const memoryOnSetting = (body.settings as Record<string, unknown> | undefined)?.memory_on === true;
   const fromBeforeJob = memoryOnSetting && authHeader.startsWith("Bearer ") && !crisisNet(lastText)
-    ? findFromBefore(authHeader, lastText)
+    ? findFromBefore(authHeader, lastText, messages.map((m) => m.content).join("\n"))
     : Promise.resolve([]);
   const site = lastText.match(/\b((?:[a-z0-9-]+\.)+(?:com|org|net|io|co|gov|edu|ai|app|dev|us|uk|ca))\b/i)?.[1]?.toLowerCase();
   const webTool = {
