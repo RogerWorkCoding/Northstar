@@ -79,6 +79,10 @@ struct ContentView: View {
             ZStack {
                 NorthstarVisionLandscapeBackground()
 
+                // Chat veil (approved): once a conversation starts, the landscape
+                // dims and softens so long replies stay easy to read.
+                chatVeil
+
                 VStack(spacing: 0) {
                     adaptiveHeader
                     conversationArea
@@ -224,6 +228,27 @@ struct ContentView: View {
                 isWelcomeMessageVisible = false
             }
         }
+    }
+
+    /// Dark navy veil over the landscape while chatting. Home stays clear.
+    private var chatVeil: some View {
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial)
+            LinearGradient(
+                colors: [
+                    Color(red: 0.05, green: 0.09, blue: 0.21).opacity(0.55),
+                    Color(red: 0.05, green: 0.09, blue: 0.21).opacity(0.75)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .environment(\.colorScheme, .dark)
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .opacity(viewModel.messages.isEmpty ? 0 : 1)
+        .animation(.easeInOut(duration: reduceMotion ? 0.15 : 0.6), value: viewModel.messages.isEmpty)
+        .accessibilityHidden(true)
     }
 
     private var conversationArea: some View {
