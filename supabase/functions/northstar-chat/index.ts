@@ -344,7 +344,10 @@ function memoryBlock(m: unknown): string {
       lines.join("\n") +
       "\nWhen they clearly return to one of these (they name it or plainly refer to it), pick up where they left off:" +
       " name it and their last next step, then ask one question to move forward. If a new message only might be" +
-      " related, ask which it is instead of assuming. Don't propose saving things that are already saved."
+      " related, ask which it is instead of assuming. Don't propose saving things that are already saved." +
+      " Each saved choice belongs only to the thing it names (a logo style is for the logo, not the website" +
+      " or anything else). Never carry it over or build on it for something else; if it might fit, ask first" +
+      " (e.g. \"Should the website match your Warm Morning logo?\")."
     : "";
 }
 
