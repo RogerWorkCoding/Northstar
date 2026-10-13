@@ -273,7 +273,8 @@ struct ContentView: View {
                                 insight: message.insight,
                                 onSave: saveSuggestion,
                                 onUndo: undoSave,
-                                onRemovePill: { pendingCorrections.append($0) }
+                                onRemovePill: { pendingCorrections.append($0) },
+                                onChooseDirection: chooseDirection
                             )
                         }
                     }
@@ -285,7 +286,7 @@ struct ContentView: View {
                     // .safeAreaInset is correctly shrinking this ScrollView's
                     // own viewport in this hierarchy.
                     Color.clear
-                        .frame(height: composerHeight + 16)
+                        .frame(height: composerHeight + 40)
                         .id("CHAT_BOTTOM")
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
@@ -806,6 +807,13 @@ struct ContentView: View {
             print("Save suggestion failed:", error.localizedDescription)
             return nil
         }
+    }
+
+    /// The person picked a direction: say it in their words and continue.
+    private func chooseDirection(_ direction: NorthstarInsight.Direction) {
+        guard !isThinking else { return }
+        appendUserMessage("Let's go with \u{201C}\(direction.name)\u{201D}.")
+        requestGeminiResponse()
     }
 
     /// Undo from the "Saved" line: removes the item that was just saved.
