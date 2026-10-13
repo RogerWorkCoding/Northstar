@@ -5,7 +5,7 @@
 // secrets, never in the app.
 //
 // Response (always includes `reply`, so older app versions keep working):
-// { reply, stage, stage_reason, personal, destination, heard[], proposed_saves[], visual }
+// { reply, stage, stage_reason, personal, crisis, destination, heard[], proposed_saves[], visual }
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = Deno.env.get("NORTHSTAR_MODEL") ?? "claude-sonnet-5-5";
@@ -25,11 +25,25 @@ Follow these promises:
 
 // 2. The crew playbook (calm crew first)
 const PLAYBOOKS: Record<string, string> = {
-  calm: `Crew: calm guide.
-- Speak gently and slowly. Short sentences. One idea at a time.
-- Offer one small next step, never a list of ten.
-- If someone describes distress, a crisis or thoughts of harm, respond with care, encourage reaching a real person, and mention that in the US they can call or text 988.
-- Never diagnose. Never claim to be therapy.`,
+  calm: `Crew: calm guide (playbook v1).
+Voice
+- Warm, steady and unhurried. Short sentences. Plain words. One idea at a time.
+- Answer first. Don't turn a simple question into a session.
+- Offer one small next step, never a list of ten. No streaks, no guilt, no pressure.
+Practices (offer one, and ask before starting)
+- Breathing: about one minute, in for 4, out for 6, at their pace.
+- Grounding: name 5 things you can see, 4 you can hear, 3 you can feel.
+- Journaling: one gentle prompt, e.g. "What felt heavy today, and what felt a little lighter?"
+- Quiet: a minute of stillness, no task.
+Care
+- Never diagnose. Never claim to be therapy. Say so when a real person would help more.
+Safety path (always comes first)
+- If someone mentions wanting to die, suicide, self-harm, being unsafe, abuse, or a crisis:
+  set crisis=true. Respond with care first: thank them for telling you, and say you're glad they did.
+  Say you're not a crisis service. Encourage reaching a person right now: in the US, call or text 988
+  (Suicide & Crisis Lifeline); if they're in immediate danger, call 911; outside the US, their local
+  emergency number. Ask one gentle question: are they safe right now?
+  Keep it short and kind. No lecture, no methods, no saves, no visual, no pills. Don't end the conversation.`,
 };
 
 // 3. How Northstar works out the stage and what it heard
@@ -70,6 +84,7 @@ const REPLY_TOOL = {
       stage: { type: "string", enum: ["Reflection", "Perspective", "Clarity", "Direction", "Progress"] },
       stage_reason: { type: "string", description: "One short line: why this stage." },
       personal: { type: "boolean", description: "True if the person is sharing something personal or emotional." },
+      crisis: { type: "boolean", description: "True only if the person may be in crisis or unsafe (safety path)." },
       destination: { type: ["string", "null"], description: "The goal they named, in a few words, or null." },
       heard: {
         type: "array",
@@ -270,14 +285,15 @@ Deno.serve(async (req) => {
   // Validate everything before it reaches the app.
   const stage = STAGES.includes(str(tool.stage)) ? str(tool.stage) : null;
   // Approved rule: personal conversations get no "What I heard" pills.
-  const personal = tool.personal === true;
+  const crisis = tool.crisis === true;
+  const personal = tool.personal === true || crisis;
   const heard = personal ? [] : (Array.isArray(tool.heard) ? tool.heard : [])
     .map((h: Record<string, unknown>) => ({ group: str(h?.group, 10), text: str(h?.text, 60) }))
     .filter((h) => GROUPS.includes(h.group) && h.text)
     .slice(0, 6);
   const memoryOff = (body.settings as Record<string, unknown> | undefined)?.memory_on === false;
-  const visual = safeVisual(tool.visual);
-  const proposed_saves = memoryOff ? [] : (Array.isArray(tool.proposed_saves) ? tool.proposed_saves : [])
+  const visual = crisis ? null : safeVisual(tool.visual);
+  const proposed_saves = memoryOff || crisis ? [] : (Array.isArray(tool.proposed_saves) ? tool.proposed_saves : [])
     .map((p: Record<string, unknown>) => ({ kind: str(p?.kind, 20), text: str(p?.text, 200), reason: str(p?.reason, 200) }))
     .filter((p) => KINDS.includes(p.kind) && p.text)
     .slice(0, 3);
@@ -287,6 +303,7 @@ Deno.serve(async (req) => {
     stage,
     stage_reason: str(tool.stage_reason, 200),
     personal,
+    crisis,
     destination: str(tool.destination, 120) || null,
     heard,
     proposed_saves,
