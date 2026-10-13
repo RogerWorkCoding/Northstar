@@ -44,11 +44,16 @@ struct NorthstarReplyView: View {
     let text: String
     let insight: NorthstarInsight?
     /// Saves one suggestion; returns true when it worked.
-    var onSave: (NorthstarInsight.Save) async -> Bool = { _ in false }
+    var onSave: (NorthstarInsight.Save) async -> UUID? = { _ in nil }
+    /// Removes a just-saved item; returns true when it worked.
+    var onUndo: (UUID) async -> Bool = { _ in false }
+    /// Tells the chat a pill was wrong, so Northstar is corrected next time.
+    var onRemovePill: (String) -> Void = { _ in }
 
     @State private var whyOpen = false
     @State private var removedPills: Set<NorthstarInsight.Heard> = []
     @State private var cardStates: [NorthstarInsight.Save: CardState] = [:]
+    @State private var savedIds: [NorthstarInsight.Save: UUID] = [:]
 
     private enum CardState { case saving, saved, dismissed, failed }
 
@@ -148,6 +153,7 @@ struct NorthstarReplyView: View {
                             withAnimation(.easeOut(duration: 0.2)) {
                                 _ = removedPills.insert(pill)
                             }
+                            onRemovePill(pill.text)
                         } label: {
                             Image(systemName: "xmark")
                                 .font(.system(size: 11, weight: .bold))
@@ -183,13 +189,33 @@ struct NorthstarReplyView: View {
                 Text(save.savedLine)
                     .font(.system(size: 15))
                 Spacer()
+                Button {
+                    guard let id = savedIds[save] else { return }
+                    Task {
+                        let ok = await onUndo(id)
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            if ok {
+                                savedIds[save] = nil
+                                cardStates[save] = nil
+                            }
+                        }
+                    }
+                } label: {
+                    Text("Undo")
+                        .font(.system(size: 15, weight: .semibold))
+                        .underline()
+                        .foregroundStyle(.white)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Undo save")
             }
             .foregroundStyle(NorthstarChatStyle.savedGreen)
             .padding(.horizontal, 16)
             .frame(height: 48)
             .background(Capsule().fill(Color(red: 0.56, green: 0.90, blue: 0.75).opacity(0.12)))
             .overlay(Capsule().strokeBorder(Color(red: 0.56, green: 0.90, blue: 0.75).opacity(0.35), lineWidth: 1))
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .contain)
         default:
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
@@ -223,9 +249,10 @@ struct NorthstarReplyView: View {
                     Button {
                         cardStates[save] = .saving
                         Task {
-                            let ok = await onSave(save)
+                            let id = await onSave(save)
                             withAnimation(.easeOut(duration: 0.2)) {
-                                cardStates[save] = ok ? .saved : .failed
+                                savedIds[save] = id
+                                cardStates[save] = id != nil ? .saved : .failed
                             }
                         }
                     } label: {

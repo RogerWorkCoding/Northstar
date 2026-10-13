@@ -8,16 +8,22 @@ final class MemoryService {
 
     // MARK: Save Memory
 
+    @discardableResult
     func saveMemory(
         identityId: UUID,
         projectId: UUID?,
         content: String,
         category: String? = nil
-    ) async throws {
+    ) async throws -> UUID {
+
+        let id = UUID()
 
         try await client
             .from("memories")
             .insert([
+                "id":
+                    id.uuidString,
+
                 "identity_id":
                     identityId.uuidString,
 
@@ -31,6 +37,8 @@ final class MemoryService {
                     category ?? ""
             ])
             .execute()
+
+        return id
     }
 
     // MARK: Load Memories

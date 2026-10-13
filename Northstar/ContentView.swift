@@ -47,6 +47,8 @@ struct ContentView: View {
     @State private var selectedImage: UIImage?
     @State private var promptText = ""
     @State private var isThinking = false
+    /// Pills the person removed since the last message; sent once as corrections.
+    @State private var pendingCorrections: [String] = []
     @State private var isStarMenuPresented = false
     @State private var responseTask: Task<Void, Never>?
     @FocusState private var isPromptFocused: Bool
@@ -269,7 +271,9 @@ struct ContentView: View {
                             NorthstarReplyView(
                                 text: message.content,
                                 insight: message.insight,
-                                onSave: saveSuggestion
+                                onSave: saveSuggestion,
+                                onUndo: undoSave,
+                                onRemovePill: { pendingCorrections.append($0) }
                             )
                         }
                     }
@@ -789,19 +793,47 @@ struct ContentView: View {
     }
 
     /// One-tap save from a Northstar save card. Only what the person confirms is stored.
-    private func saveSuggestion(_ save: NorthstarInsight.Save) async -> Bool {
-        guard let identityId = memoryIdentityId else { return false }
+    private func saveSuggestion(_ save: NorthstarInsight.Save) async -> UUID? {
+        guard let identityId = memoryIdentityId else { return nil }
         do {
-            try await memoryService.saveMemory(
+            return try await memoryService.saveMemory(
                 identityId: identityId,
                 projectId: nil,
                 content: save.text,
                 category: save.kind
             )
-            return true
         } catch {
             print("Save suggestion failed:", error.localizedDescription)
+            return nil
+        }
+    }
+
+    /// Undo from the "Saved" line: removes the item that was just saved.
+    private func undoSave(_ id: UUID) async -> Bool {
+        do {
+            try await memoryService.deleteMemory(id: id)
+            return true
+        } catch {
+            print("Undo save failed:", error.localizedDescription)
             return false
+        }
+    }
+
+    /// Confirmed memories for the brain: newest first, at most 20.
+    /// Only what the person saved is sent; nothing is guessed.
+    private func memoryForEngine() async -> [NorthstarEngineClient.MemoryItem] {
+        guard let identityId = memoryIdentityId else { return [] }
+        do {
+            let items = try await memoryService.loadMemories(identityId: identityId)
+            return items.prefix(20).compactMap { item in
+                let text = item.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else { return nil }
+                let kind = (item.category ?? "").isEmpty ? "note" : (item.category ?? "note")
+                return NorthstarEngineClient.MemoryItem(kind: kind, text: text)
+            }
+        } catch {
+            print("Loading memory for the Engine failed:", error.localizedDescription)
+            return []
         }
     }
 
@@ -812,7 +844,14 @@ struct ContentView: View {
     private func requestGeminiResponse() {
         isThinking = true
         responseTask = Task {
-            let answer = await engine.getReply(for: viewModel.messages)
+            let memory = await memoryForEngine()
+            let corrections = pendingCorrections
+            pendingCorrections = []
+            let answer = await engine.getReply(
+                for: viewModel.messages,
+                memory: memory,
+                corrections: corrections
+            )
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 viewModel.messages.append(

@@ -16,8 +16,16 @@ struct NorthstarEngineClient {
         let content: String
     }
 
+    /// One confirmed memory sent to the brain (kind + text only).
+    nonisolated struct MemoryItem: Encodable, Sendable {
+        let kind: String
+        let text: String
+    }
+
     nonisolated private struct Request: Encodable, Sendable {
         let messages: [Turn]
+        let memory: [MemoryItem]
+        let corrections: [String]
     }
 
     nonisolated private struct Reply: Decodable, Sendable {
@@ -36,7 +44,11 @@ struct NorthstarEngineClient {
     }
 
     /// Full reply with stage, pills and save suggestions.
-    func getReply(for messages: [MessageModel]) async -> EngineReply {
+    func getReply(
+        for messages: [MessageModel],
+        memory: [MemoryItem] = [],
+        corrections: [String] = []
+    ) async -> EngineReply {
         let turns = messages
             .filter { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .suffix(20)
@@ -49,7 +61,13 @@ struct NorthstarEngineClient {
         do {
             let result: Reply = try await SupabaseManager.shared.client.functions.invoke(
                 "northstar-chat",
-                options: FunctionInvokeOptions(body: Request(messages: Array(turns)))
+                options: FunctionInvokeOptions(
+                    body: Request(
+                        messages: Array(turns),
+                        memory: Array(memory.prefix(20)),
+                        corrections: Array(corrections.prefix(10))
+                    )
+                )
             )
 
             if let text = result.reply?.trimmingCharacters(in: .whitespacesAndNewlines),
