@@ -553,7 +553,7 @@ Deno.serve(async (req) => {
     .filter((p) => KINDS.includes(p.kind) && p.text)
     .slice(0, 3);
 
-  const reply = str(tool.reply, 8000) || "I'm here. Could you say that another way?";
+  const reply = cleanReply(str(tool.reply, 8000)) || "I'm here. Could you say that another way?";
   const destination = str(tool.destination, 120) || null;
 
   // Quietly keep a one-liner for Search, after the reply is on its way.
@@ -569,7 +569,7 @@ Deno.serve(async (req) => {
   }
 
   return json({
-    reply: cleanReply(reply),
+    reply,
     stage,
     stage_reason: str(tool.stage_reason, 200),
     personal,
