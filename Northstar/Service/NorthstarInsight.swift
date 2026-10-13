@@ -57,6 +57,20 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         let svg: String
     }
 
+    /// One look to react to: name, mood, keywords, colors and a type style.
+    nonisolated struct Direction: Hashable, Sendable, Decodable {
+        let name: String
+        let mood: String
+        let keywords: [String]
+        let palette: [String]   // "#RRGGBB"
+        let typeStyle: String   // serif | sans | rounded | mono | script
+
+        enum CodingKeys: String, CodingKey {
+            case name, mood, keywords, palette
+            case typeStyle = "type_style"
+        }
+    }
+
     let stage: String?
     let stageReason: String?
     let destination: String?
@@ -65,6 +79,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let visual: Visual?
     /// Safety path: the person may be in crisis. The app shows real help first.
     let crisis: Bool
+    /// "Show options instead of asking": three directions, or none.
+    let directions: [Direction]
 
     /// Approved design rule: stage, pills and save cards only show when
     /// Northstar is guiding. Quick questions get just the answer.
@@ -80,6 +96,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case proposedSaves = "proposed_saves"
         case visual
         case crisis
+        case directions
     }
 
     init(from decoder: Decoder) throws {
@@ -91,5 +108,6 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         proposedSaves = (try? c.decodeIfPresent([Save].self, forKey: .proposedSaves)) ?? []
         visual = try? c.decodeIfPresent(Visual.self, forKey: .visual)
         crisis = (try? c.decodeIfPresent(Bool.self, forKey: .crisis)) ?? false
+        directions = (try? c.decodeIfPresent([Direction].self, forKey: .directions)) ?? []
     }
 }

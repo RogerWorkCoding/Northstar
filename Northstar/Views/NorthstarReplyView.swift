@@ -49,6 +49,8 @@ struct NorthstarReplyView: View {
     var onUndo: (UUID) async -> Bool = { _ in false }
     /// Tells the chat a pill was wrong, so Northstar is corrected next time.
     var onRemovePill: (String) -> Void = { _ in }
+    /// The person picked one of the three directions.
+    var onChooseDirection: (NorthstarInsight.Direction) -> Void = { _ in }
 
     @State private var whyOpen = false
     @State private var removedPills: Set<NorthstarInsight.Heard> = []
@@ -81,6 +83,10 @@ struct NorthstarReplyView: View {
 
             if let visual = insight?.visual {
                 WireframeCard(visual: visual)
+            }
+
+            if let directions = insight?.directions, directions.count == 3 {
+                DirectionsView(directions: directions, onChoose: onChooseDirection)
             }
 
             if let insight = guiding {

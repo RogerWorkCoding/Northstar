@@ -25,11 +25,17 @@ struct WireframeCard: View {
                 }
                 .foregroundStyle(NorthstarChatStyle.label)
 
+                // The drawing sits centered on a panel of the same dark navy,
+                // so it fills the card evenly edge to edge.
                 SVGView(svg: visual.svg)
                     .aspectRatio(360.0 / 640.0, contentMode: .fit)
                     .frame(maxWidth: 240)
                     .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color(red: 0.078, green: 0.118, blue: 0.271))
+                    )
                     .allowsHitTesting(false)
 
                 HStack(spacing: 6) {

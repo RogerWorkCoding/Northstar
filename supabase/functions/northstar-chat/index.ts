@@ -5,7 +5,7 @@
 // secrets, never in the app.
 //
 // Response (always includes `reply`, so older app versions keep working):
-// { reply, stage, stage_reason, personal, crisis, destination, heard[], proposed_saves[], visual }
+// { reply, stage, stage_reason, personal, crisis, destination, heard[], proposed_saves[], visual, directions[] }
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = Deno.env.get("NORTHSTAR_MODEL") ?? "claude-sonnet-5-5";
@@ -72,6 +72,12 @@ const ENGINE_RULES = `How you work:
   image areas are boxes with a thin diagonal cross and the word "Photo". Grey-box layout only:
   no colors beyond these, no <image>, no scripts, no links, no foreignObject, no styles, no event attributes.
   Keep it under 60 elements. In the reply, describe the layout in one line and ask one question about it.
+- Options instead of asking: when someone wants something made (a brand, website, poster, video, space, style)
+  but hasn't described the look, or says they're not sure, offer exactly 3 very different directions in
+  directions instead of asking open questions. Each: a short name, one mood line, 3–4 keywords,
+  4 colors as #RRGGBB, and a type style (serif, sans, rounded, mono or script). Keep the reply to one or two
+  lines, e.g. "Here are three directions. Which feels closest?" Never for personal conversations,
+  quick questions or crisis. If they already chose a direction, don't offer new ones.
 - What Northstar can't do yet: it can't create images, video, audio or files itself. If asked, say so in
   one short line, then help with what moves them forward (the goal, who it's for, a short plan or storyboard).
 - Always respond by calling the northstar_reply tool.`;
@@ -98,6 +104,22 @@ const REPLY_TOOL = {
             text: { type: "string" },
           },
           required: ["group", "text"],
+        },
+      },
+      directions: {
+        type: "array",
+        description: "Only when offering looks to choose from: exactly 3 very different directions.",
+        maxItems: 3,
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Short name, e.g. 'Warm Morning'." },
+            mood: { type: "string", description: "One line on how it feels." },
+            keywords: { type: "array", items: { type: "string" }, maxItems: 4 },
+            palette: { type: "array", items: { type: "string" }, description: "4 colors as #RRGGBB." },
+            type_style: { type: "string", enum: ["serif", "sans", "rounded", "mono", "script"] },
+          },
+          required: ["name", "mood", "keywords", "palette", "type_style"],
         },
       },
       visual: {
@@ -205,6 +227,26 @@ function correctionsBlock(c: unknown): string {
     : "";
 }
 
+// Mood-board directions: three looks to react to. Validated strictly.
+const TYPE_STYLES = ["serif", "sans", "rounded", "mono", "script"];
+function safeDirections(d: unknown) {
+  if (!Array.isArray(d)) return [];
+  const out = d.slice(0, 3).map((x) => {
+    const o = (x ?? {}) as Record<string, unknown>;
+    const palette = (Array.isArray(o.palette) ? o.palette : [])
+      .map((c) => str(c, 7))
+      .filter((c) => /^#[0-9A-Fa-f]{6}$/.test(c))
+      .slice(0, 4);
+    const keywords = (Array.isArray(o.keywords) ? o.keywords : [])
+      .map((k) => str(k, 20))
+      .filter(Boolean)
+      .slice(0, 4);
+    const type_style = TYPE_STYLES.includes(str(o.type_style)) ? str(o.type_style) : "sans";
+    return { name: str(o.name, 30), mood: str(o.mood, 90), keywords, palette, type_style };
+  }).filter((x) => x.name && x.palette.length >= 3);
+  return out.length === 3 ? out : [];
+}
+
 // Wireframes are drawing only. Anything that could run code or load from
 // the internet is refused, and the app shows them with JavaScript off.
 function safeVisual(v: unknown): { kind: "svg"; title: string; svg: string } | null {
@@ -295,6 +337,7 @@ Deno.serve(async (req) => {
     .filter((h) => GROUPS.includes(h.group) && h.text)
     .slice(0, 6);
   const memoryOff = (body.settings as Record<string, unknown> | undefined)?.memory_on === false;
+  const directions = crisis || personal ? [] : safeDirections(tool.directions);
   const visualsOff = (body.settings as Record<string, unknown> | undefined)?.show_visuals === false;
   const visual = crisis || visualsOff ? null : safeVisual(tool.visual);
   const proposed_saves = memoryOff || crisis ? [] : (Array.isArray(tool.proposed_saves) ? tool.proposed_saves : [])
@@ -312,5 +355,6 @@ Deno.serve(async (req) => {
     heard,
     proposed_saves,
     visual,
+    directions,
   });
 });
