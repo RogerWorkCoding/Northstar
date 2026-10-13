@@ -222,6 +222,26 @@ const NS_CASES = [
     ],
   },
 
+  {
+    id: "no-assumed-project", group: "precision",
+    say: "Can you build me a website for selling apps",
+    memory: [
+      { kind: "destination", text: "Build a landing page website called Northstar that sells apps" },
+      { kind: "open_question", text: "How many apps will Northstar sell at launch?" },
+    ],
+    check: (r) => [
+      ["doesn't decide it's the Northstar project on its own",
+        !has(r.reply, /northstar/i) || has(r.reply, /northstar[^.?!]*\?|(is this|is it|for)[^.?!]*northstar/i)],
+    ],
+  },
+  {
+    id: "general-no-design-rules", group: "precision",
+    say: "Help me plan my week so I can finish my taxes",
+    check: (r) => [
+      ["no wireframe or directions for general work", !r.visual && (r.directions ?? []).length === 0],
+    ],
+  },
+
   // ---- Notes (one-liners for Search) ----
   {
     id: "note-kept-for-plan", group: "notes",
