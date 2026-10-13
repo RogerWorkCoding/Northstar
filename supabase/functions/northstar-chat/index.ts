@@ -6,6 +6,12 @@
 //
 // Response (always includes `reply`, so older app versions keep working):
 // { reply, stage, stage_reason, personal, crisis, destination, heard[], proposed_saves[], visual, directions[] }
+//
+// Notes: after replying, the brain quietly keeps a one-line note of what the
+// person said (if it's worth finding later) so Search can find it. Never
+// feelings or health, never in a crisis, never when memory is off.
+
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = Deno.env.get("NORTHSTAR_MODEL") ?? "claude-sonnet-5-5";
@@ -80,6 +86,10 @@ const ENGINE_RULES = `How you work:
   quick questions or crisis. If they already chose a direction, don't offer new ones.
 - What Northstar can't do yet: it can't create images, video, audio or files itself. If asked, say so in
   one short line, then help with what moves them forward (the goal, who it's for, a short plan or storyboard).
+- Note: write one line worth finding later, in the person's own words (lightly trimmed, max ~20 words):
+  goals, plans, decisions, choices, names, ideas, preferences, things they're making. Include the subject
+  so it makes sense alone (e.g. "Bakery logo: going with Warm Morning"). Leave note empty for greetings,
+  small talk, quick factual questions, feelings, health, money, relationships or anything personal.
 - Always respond by calling the northstar_reply tool.`;
 
 const REPLY_TOOL = {
@@ -130,6 +140,10 @@ const REPLY_TOOL = {
           svg: { type: "string", description: "One <svg> element following the wireframe rules." },
         },
         required: ["title", "svg"],
+      },
+      note: {
+        type: "string",
+        description: "One line worth finding later, in their words; empty for small talk, quick questions or anything personal.",
       },
       proposed_saves: {
         type: "array",
@@ -253,6 +267,31 @@ const CRISIS_FALLBACK =
   "I'm really glad you told me. You don't have to go through this alone. " +
   "If you're in the U.S., you can call or text 988 to reach someone right now, any time. " +
   "If you're in danger, call 911 or your local emergency number. Are you safe right now?";
+
+// Keep a one-liner for Search. Runs as the signed-in person (row-level security);
+// without a real sign-in (e.g. tests with the public key) nothing is saved.
+// Meaning comes from Supabase's built-in gte-small model (no extra key).
+// deno-lint-ignore no-explicit-any
+const meaning = new (globalThis as any).Supabase.ai.Session("gte-small");
+async function keepNote(auth: string, text: string, context: string, subject: string | null) {
+  try {
+    const embedding = await meaning.run(text, { mean_pool: true, normalize: true });
+    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: auth } },
+      auth: { persistSession: false },
+    });
+    const { error } = await db.from("notes").insert({
+      text,
+      context: context.slice(0, 400),
+      subject,
+      embedding: JSON.stringify(embedding),
+    });
+    // 23505 = already kept (no duplicates). Anything else is logged, never shown.
+    if (error && error.code !== "23505") console.error("note not kept:", error.code, error.message.slice(0, 200));
+  } catch (e) {
+    console.error("note failed:", String(e).slice(0, 200));
+  }
+}
 
 // Mood-board directions: three looks to react to. Validated strictly.
 const TYPE_STYLES = ["serif", "sans", "rounded", "mono", "script"];
@@ -393,16 +432,31 @@ Deno.serve(async (req) => {
     .filter((p) => KINDS.includes(p.kind) && p.text)
     .slice(0, 3);
 
+  const reply = str(tool.reply, 8000) || "I'm here. Could you say that another way?";
+  const destination = str(tool.destination, 120) || null;
+
+  // Quietly keep a one-liner for Search, after the reply is on its way.
+  const note = str(tool.note, 300);
+  const auth = req.headers.get("Authorization") ?? "";
+  if (note && !personal && !crisis && !memoryOff && auth.startsWith("Bearer ")) {
+    const job = keepNote(auth, note, reply, destination);
+    // deno-lint-ignore no-explicit-any
+    const rt = (globalThis as any).EdgeRuntime;
+    if (rt?.waitUntil) rt.waitUntil(job); else await job;
+  }
+
   return json({
-    reply: str(tool.reply, 8000) || "I'm here. Could you say that another way?",
+    reply,
     stage,
     stage_reason: str(tool.stage_reason, 200),
     personal,
     crisis,
-    destination: str(tool.destination, 120) || null,
+    destination,
     heard,
     proposed_saves,
     visual,
     directions,
+    // The one-liner kept for Search (empty when nothing was kept). Not shown in chat.
+    note: note && !personal && !crisis && !memoryOff ? note : "",
   });
 });
