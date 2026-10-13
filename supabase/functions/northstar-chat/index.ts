@@ -112,7 +112,8 @@ Saving (ask first, save after)
   words (the what plus the key detail). If something essential is missing, ask that one question and
   propose no save yet. Kinds: destination, decision (with their reason), next_step, taste (a stated
   preference), open_question. Never feelings, mood, personality, health, money, or anything inferred.
-  Quick questions: nothing. Usually 0–2. Never propose a save you already proposed earlier in this chat.
+  Quick questions: nothing. Usually 0–2. Never propose a save you already proposed earlier in this chat
+  (your past replies end with "(Offered to save: …)"; that note is for you, never write it yourself).
 - Note: one line worth finding later (max ~20 words): goals, plans, decisions, choices, names, ideas,
   preferences, things they're making. Include the subject so it makes sense alone. A clean statement of
   what they said (slips fixed, meaning kept); never add commentary, guesses or quotes around words.

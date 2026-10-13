@@ -339,7 +339,7 @@ const NS_CASES = [
     id: "no-repeated-save", group: "flow",
     history: [
       { role: "user", content: "I've decided to launch my podcast in March" },
-      { role: "assistant", content: "Great decision. Save as your destination? \"Launch my podcast in March\"" },
+      { role: "assistant", content: "Great decision. When do you want to record the first episode?\n\n(Offered to save: \u201CLaunch my podcast in March\u201D)" },
     ],
     say: "What should the first episode be about?",
     check: (r) => [
