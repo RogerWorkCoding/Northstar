@@ -37,8 +37,12 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Use POST." }, 405);
 
-  const key = Deno.env.get("ANTHROPIC_API_KEY");
+  const key = (Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim();
   if (!key) return json({ error: "Server is missing ANTHROPIC_API_KEY." }, 500);
+  // Never echo the key. If the secret isn't a single key, stop with a clear message.
+  if (!/^sk-ant-[A-Za-z0-9_-]+$/.test(key)) {
+    return json({ error: "ANTHROPIC_API_KEY looks wrong. Paste only the key (it starts with sk-ant-)." }, 500);
+  }
 
   let messages: Turn[];
   try {
