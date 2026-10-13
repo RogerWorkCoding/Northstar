@@ -90,6 +90,10 @@ const ENGINE_RULES = `How you work:
   goals, plans, decisions, choices, names, ideas, preferences, things they're making. Include the subject
   so it makes sense alone (e.g. "Bakery logo: going with Warm Morning"). Leave note empty for greetings,
   small talk, quick factual questions, feelings, health, money, relationships or anything personal.
+  Write it as a clean statement of what they said: quietly fix obvious typos and slips (e.g. "and May" →
+  "in May") and keep their meaning. Never add commentary, guesses or notes about the wording
+  (no "maybe", "mentioned", "possibly", quotes around words). If something is truly unclear, keep their
+  words as typed and ask about it in the reply.
 - Always respond by calling the northstar_reply tool.`;
 
 const REPLY_TOOL = {
@@ -276,6 +280,9 @@ const CRISIS_FALLBACK =
 let meaningSession: any;
 // deno-lint-ignore no-explicit-any
 const meaning = () => (meaningSession ??= new (globalThis as any).Supabase.ai.Session("gte-small"));
+// How close two notes must be to count as the same thing said twice
+// (0 = identical). Small on purpose: "logo" and "website" stay separate notes.
+const NEAR_COPY = 0.06;
 async function keepNote(auth: string, text: string, context: string, subject: string | null) {
   try {
     const embedding = Array.from(await meaning().run(text, { mean_pool: true, normalize: true }) as number[]);
@@ -283,12 +290,27 @@ async function keepNote(auth: string, text: string, context: string, subject: st
       global: { headers: { Authorization: auth } },
       auth: { persistSession: false },
     });
-    const { error } = await db.from("notes").insert({
-      text,
-      context: context.slice(0, 400),
-      subject,
-      embedding: JSON.stringify(embedding),
+    const row = { text, context: context.slice(0, 400), subject, embedding: JSON.stringify(embedding) };
+
+    // Near-copy? If they already said almost exactly this, refresh that note
+    // (newest wording, today's date) instead of keeping a second one.
+    const { data: close } = await db.rpc("search_notes", {
+      query_text: "",
+      query_embedding: row.embedding,
+      match_count: 1,
+      max_distance: NEAR_COPY,
     });
+    const twin = Array.isArray(close) ? close[0] : null;
+    if (twin?.id) {
+      const { error: upErr } = await db.from("notes")
+        .update({ ...row, created_at: new Date().toISOString() })
+        .eq("id", twin.id);
+      // 23505: the new wording already exists as another note; keeping both is fine.
+      if (upErr && upErr.code !== "23505") console.error("note not refreshed:", upErr.code, upErr.message.slice(0, 200));
+      return;
+    }
+
+    const { error } = await db.from("notes").insert(row);
     // 23505 = already kept (no duplicates). Anything else is logged, never shown.
     if (error && error.code !== "23505") console.error("note not kept:", error.code, error.message.slice(0, 200));
   } catch (e) {
