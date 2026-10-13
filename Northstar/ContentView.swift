@@ -21,9 +21,9 @@ struct ContentView: View {
     private let memoryDetector = MemoryDetector()
     private let memoryService = MemoryService()
 
-    private let memoryIdentityId = UUID(
-        uuidString: "25bfa23f-efa6-45ff-ad16-1a2658e10d74"
-    )
+    private var memoryIdentityId: UUID? {
+        SupabaseManager.shared.currentUserId
+    }
     private let projectMemoryKey = "northstarCurrentProject"
 
     @State private var livePDFText = ""
@@ -134,6 +134,7 @@ struct ContentView: View {
             }
         }
         .task {
+            await SupabaseManager.shared.signInIfNeeded()
             loadProjectMemory()
             scheduleWelcomeMessageFade()
         }

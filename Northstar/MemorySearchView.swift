@@ -9,9 +9,9 @@ struct MemorySearchView: View {
 
     private let memoryService = MemoryService()
 
-    private let identityId = UUID(
-        uuidString: "25bfa23f-efa6-45ff-ad16-1a2658e10d74"
-    )!
+    private var identityId: UUID {
+        SupabaseManager.shared.identityId
+    }
 
     private var filteredMemories: [Memory] {
 

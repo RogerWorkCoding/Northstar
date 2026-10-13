@@ -42,10 +42,7 @@ struct MemoryTestView: View {
                         do {
 
                             try await memoryService.saveMemory(
-                                identityId: UUID(
-                                    uuidString:
-                                    "25bfa23f-efa6-45ff-ad16-1a2658e10d74"
-                                )!,
+                                identityId: SupabaseManager.shared.identityId,
                                 projectId: nil,
                                 content: memoryText,
                                 category: category

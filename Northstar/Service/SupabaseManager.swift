@@ -10,6 +10,48 @@ class SupabaseManager {
     )
     
     private init() {}
+
+    // MARK: - Who is using the app
+
+    /// The signed-in person's ID, or nil before sign-in finishes.
+    var currentUserId: UUID? {
+        client.auth.currentUser?.id
+    }
+
+    /// The person's identity ID. Each person's identity row uses their
+    /// sign-in ID, so the lock rules in Supabase can match them.
+    /// Before sign-in this is an empty ID that matches nothing.
+    var identityId: UUID {
+        currentUserId ?? UUID(uuid: (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0))
+    }
+
+    /// Quietly signs the person in (no password screen yet) and makes sure
+    /// they have an identity row. Safe to call every time the app opens.
+    func signInIfNeeded() async {
+        do {
+            let userId: UUID
+            if let existing = currentUserId {
+                userId = existing
+            } else {
+                let session = try await client.auth.signInAnonymously()
+                userId = session.user.id
+            }
+
+            struct IdentityRow: Encodable {
+                let id: UUID
+                let name: String
+            }
+
+            try await client
+                .from("identities")
+                .upsert(IdentityRow(id: userId, name: "Me"), ignoreDuplicates: true)
+                .execute()
+
+            print("✅ Signed in to Northstar.")
+        } catch {
+            print("❌ Sign-in failed:", error.localizedDescription)
+        }
+    }
     
     func testConnection() async {
         let testIdentity = AppIdentity(
