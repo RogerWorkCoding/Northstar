@@ -465,7 +465,8 @@ struct ContentView: View {
                 symbol: "book"
             )
         case .memory:
-            MemorySearchView()
+            // Search: find anything you've said (by words and meaning).
+            NotesSearchView()
 
         case .documents:
             DocumentsView()

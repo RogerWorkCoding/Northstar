@@ -11,6 +11,7 @@ enum NorthstarChatStyle {
     static let label = Color(red: 0.68, green: 0.73, blue: 0.90)     // #AEB9E6
     static let userBubble = Color(red: 0.17, green: 0.24, blue: 0.48) // #2B3C7A
     static let savedGreen = Color(red: 0.81, green: 0.96, blue: 0.89) // #CFF5E3
+    static let background = Color(red: 0.08, green: 0.12, blue: 0.25) // screens like Search
 }
 
 /// Your message: one soft blue bubble on the right.

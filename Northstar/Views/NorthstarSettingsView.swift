@@ -35,6 +35,7 @@ struct NorthstarSettingsView: View {
     @State private var statusMessage: String?
 
     private let memoryService = MemoryService()
+    private let notesService = NotesService()
 
     var body: some View {
         Form {
@@ -64,7 +65,7 @@ struct NorthstarSettingsView: View {
             } header: {
                 Text("Memory and privacy")
             } footer: {
-                Text("Northstar only remembers what you say or confirm. You can see, change or delete any of it. When memory is off, nothing is saved or used.")
+                Text("Northstar only remembers what you say or confirm, plus one-line notes you can find in Search (never feelings or health). You can see, change or delete any of it. When memory is off, nothing is saved or used.")
             }
 
             // 2. How Northstar talks to you
@@ -99,14 +100,19 @@ struct NorthstarSettingsView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes every destination, decision and preference Northstar remembers. It can't be undone.")
+            Text("This removes every destination, decision, preference and note Northstar remembers. It can't be undone.")
         }
     }
 
     private func loadExport() async {
         let id = SupabaseManager.shared.identityId
         guard let items = try? await memoryService.loadMemories(identityId: id) else { return }
-        let rows = items.map { ["kind": $0.category ?? "", "text": $0.content] }
+        let saved = items.map { ["kind": $0.category ?? "", "text": $0.content] }
+        let notes = ((try? await notesService.recent()) ?? []).map {
+            ["kind": "note", "text": $0.text, "subject": $0.subject ?? "",
+             "date": ISO8601DateFormatter().string(from: $0.createdAt)]
+        }
+        let rows = saved + notes
         if let data = try? JSONSerialization.data(withJSONObject: rows, options: [.prettyPrinted]),
            let text = String(data: data, encoding: .utf8) {
             exportText = text
@@ -116,15 +122,16 @@ struct NorthstarSettingsView: View {
     private func deleteAll() async {
         let id = SupabaseManager.shared.identityId
         do {
+            try await notesService.deleteAll()
             let items = try await memoryService.loadMemories(identityId: id)
             for item in items {
                 try await memoryService.deleteMemory(id: item.id)
             }
             statusMessage = "All memory deleted."
-            exportText = "[]"
         } catch {
             statusMessage = "Couldn't delete everything. Please try again."
         }
+        await loadExport()
     }
 }
 
