@@ -331,12 +331,19 @@ struct ContentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 16)
         .background {
+            // Frosted glass: the scene blurs through, with a soft white tint.
             ZStack {
-                Color.black.opacity(0.18)
-                Rectangle().fill(.regularMaterial)
+                Rectangle().fill(.ultraThinMaterial)
+                Color.white.opacity(0.10)
             }
+            .environment(\.colorScheme, .dark)
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
+        }
+        .shadow(color: Color(red: 0.45, green: 0.55, blue: 1.0).opacity(0.18), radius: 16)
         .padding(.horizontal, 6)
         .padding(.bottom, 46)
         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
