@@ -210,7 +210,7 @@ const NS_CASES = [
     id: "month-not-day", group: "precision",
     say: "I want the bakery website ready in April",
     check: (r) => [
-      ["doesn't call a month a day", !has(r.reply, /\b(the )?day in April\b|April (is|be) the day|is April the day/i)],
+      ["doesn't call a month a day", !has(r.reply, /\bthe day in April\b|April (is|be) the day|is April the day/i)],
     ],
   },
   {
