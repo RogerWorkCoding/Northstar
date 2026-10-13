@@ -66,7 +66,7 @@ struct ContentView: View {
     // added to the conversation history, just a small alert.
     @State private var microphoneErrorMessage: String?
 
-    private let gemini = GeminiProvider()
+    private let engine = NorthstarEngineClient()
     private let intelligence = NorthstarIntelligence()
     private let pdfService = PDFDocumentService()
 
@@ -750,7 +750,7 @@ struct ContentView: View {
     private func requestGeminiResponse() {
         isThinking = true
         responseTask = Task {
-            let answer = await gemini.getResponse(for: viewModel.messages)
+            let answer = await engine.getResponse(for: viewModel.messages)
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 appendAssistantMessage(answer)
@@ -819,7 +819,7 @@ struct ContentView: View {
         """
 
         responseTask = Task {
-            let sitemap = await gemini.getResponse(
+            let sitemap = await engine.getResponse(
                 for: [MessageModel(role: .user, content: prompt)]
             )
             guard !Task.isCancelled else { return }
