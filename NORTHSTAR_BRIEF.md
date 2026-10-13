@@ -149,6 +149,20 @@ Camera and photo library move to a **+** in the message bar.
 3. Reading and accessibility: easier-reading font (Atkinson Hyperlegible, extra spacing), read replies aloud, reduce motion.
 4. Check-ins: off by default; if on, quiet hours.
 
+### Chat screen (approved Oct 12)
+
+- **Northstar's reply has no bubble:** large, clear text (18pt) on the night sky. **Your messages:** one soft blue bubble on the right.
+- **Chat veil:** once a conversation starts, the landscape dims and blurs under a navy veil. Home stays clear.
+- **Frosted text field** that rises above the keyboard.
+- **When Northstar is guiding** (a destination or a save suggestion): a small **stage chip** (tap for why), **"What I heard" pills** in plain words with ✕ to remove, and **one-tap save cards** (Save / Not now, then "Saved · Undo").
+- **No pills for personal or emotional conversations.** Quick questions show just the answer.
+- **Wireframes** (show, don't tell): for visual requests, a grey-box wireframe card under the reply; tap to see it large. Drawing only, shown with JavaScript off.
+- **Safety path:** when someone may be in crisis, a help card with Call 988 / Text 988 / Call 911 appears above the reply.
+
+### App icon (approved Oct 12)
+
+The four-point star glowing over soft night mountains (`AppIcon-1024.png`).
+
 ### Design rules
 
 - Accessibility first: Dynamic Type, VoiceOver labels, contrast, Reduce Motion. The founder is dyslexic; design for easy reading.
@@ -234,4 +248,16 @@ Image and video generation (providers not yet verified for ownership and commerc
 
 ---
 
-**Next step:** Q1 Foundation and C1 Home screen.
+## 12. Status (updated Oct 12, 2026)
+
+**Built and live**
+- **Backend:** Supabase function `northstar-chat` calls Claude (key only in Supabase secrets). Prompt order: constitution, calm playbook v1 (with safety path), engine rules, settings, memory, corrections.
+- **Brain returns:** reply, stage + reason, personal, crisis, destination, heard pills, save suggestions, optional wireframe.
+- **Data locked:** quiet (anonymous) sign-in; every table has an owner; row-level security on all four tables; old test rows backed up in `backup_20261012`.
+- **App:** talks to the Engine (no AI keys in the app), approved chat design, chat veil, frosted field, keyboard fix, app icon.
+
+**Tested on the live brain:** the 3 test scenarios, memory pickup in a new chat, pill corrections, the safety path, and settings (name, short answers, memory off, visuals off).
+
+**Waiting for Roger's iPhone test (pull requests):** #9 pills rule, #10 wireframes, #11 memory + corrections + undo + help card + Settings screen.
+
+**Next step:** Roger tests #11 on iPhone → merge. Then Engine v1 item 6 (show options instead of asking: three mood-board directions), and build the Destinations screen (menu).

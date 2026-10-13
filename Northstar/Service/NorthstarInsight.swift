@@ -51,11 +51,20 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         }
     }
 
+    /// A simple wireframe (drawing only) for visual requests like a web page.
+    nonisolated struct Visual: Hashable, Sendable, Decodable {
+        let title: String
+        let svg: String
+    }
+
     let stage: String?
     let stageReason: String?
     let destination: String?
     let heard: [Heard]
     let proposedSaves: [Save]
+    let visual: Visual?
+    /// Safety path: the person may be in crisis. The app shows real help first.
+    let crisis: Bool
 
     /// Approved design rule: stage, pills and save cards only show when
     /// Northstar is guiding. Quick questions get just the answer.
@@ -69,6 +78,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case destination
         case heard
         case proposedSaves = "proposed_saves"
+        case visual
+        case crisis
     }
 
     init(from decoder: Decoder) throws {
@@ -78,5 +89,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         destination = try c.decodeIfPresent(String.self, forKey: .destination)
         heard = (try? c.decodeIfPresent([Heard].self, forKey: .heard)) ?? []
         proposedSaves = (try? c.decodeIfPresent([Save].self, forKey: .proposedSaves)) ?? []
+        visual = try? c.decodeIfPresent(Visual.self, forKey: .visual)
+        crisis = (try? c.decodeIfPresent(Bool.self, forKey: .crisis)) ?? false
     }
 }

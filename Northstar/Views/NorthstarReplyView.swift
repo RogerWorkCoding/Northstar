@@ -44,11 +44,16 @@ struct NorthstarReplyView: View {
     let text: String
     let insight: NorthstarInsight?
     /// Saves one suggestion; returns true when it worked.
-    var onSave: (NorthstarInsight.Save) async -> Bool = { _ in false }
+    var onSave: (NorthstarInsight.Save) async -> UUID? = { _ in nil }
+    /// Removes a just-saved item; returns true when it worked.
+    var onUndo: (UUID) async -> Bool = { _ in false }
+    /// Tells the chat a pill was wrong, so Northstar is corrected next time.
+    var onRemovePill: (String) -> Void = { _ in }
 
     @State private var whyOpen = false
     @State private var removedPills: Set<NorthstarInsight.Heard> = []
     @State private var cardStates: [NorthstarInsight.Save: CardState] = [:]
+    @State private var savedIds: [NorthstarInsight.Save: UUID] = [:]
 
     private enum CardState { case saving, saved, dismissed, failed }
 
@@ -59,16 +64,24 @@ struct NorthstarReplyView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            if insight?.crisis == true {
+                CrisisHelpCard()
+            }
+
             if let insight = guiding, let stage = insight.stage {
                 stageChip(stage: stage, reason: insight.stageReason)
             }
 
             Text(Self.formatted(text))
                 .font(.system(size: 18))
-                .lineSpacing(5)
                 .foregroundStyle(NorthstarChatStyle.text)
+                .northstarReadingStyle()
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let visual = insight?.visual {
+                WireframeCard(visual: visual)
+            }
 
             if let insight = guiding {
                 let pills = insight.heard.filter { !removedPills.contains($0) }
@@ -137,15 +150,14 @@ struct NorthstarReplyView: View {
             PillFlowLayout(spacing: 8) {
                 ForEach(pills, id: \.self) { pill in
                     HStack(spacing: 0) {
-                        Text(pill.label)
-                            .foregroundStyle(NorthstarChatStyle.label)
-                            .padding(.trailing, 6)
+                        // Plain words only (approved): no group labels on pills.
                         Text(pill.text)
                             .foregroundStyle(.white)
                         Button {
                             withAnimation(.easeOut(duration: 0.2)) {
                                 _ = removedPills.insert(pill)
                             }
+                            onRemovePill(pill.text)
                         } label: {
                             Image(systemName: "xmark")
                                 .font(.system(size: 11, weight: .bold))
@@ -154,7 +166,7 @@ struct NorthstarReplyView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Remove \(pill.label): \(pill.text)")
+                        .accessibilityLabel("Remove \(pill.text)")
                     }
                     .font(.system(size: 15))
                     .padding(.leading, 14)
@@ -181,13 +193,33 @@ struct NorthstarReplyView: View {
                 Text(save.savedLine)
                     .font(.system(size: 15))
                 Spacer()
+                Button {
+                    guard let id = savedIds[save] else { return }
+                    Task {
+                        let ok = await onUndo(id)
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            if ok {
+                                savedIds[save] = nil
+                                cardStates[save] = nil
+                            }
+                        }
+                    }
+                } label: {
+                    Text("Undo")
+                        .font(.system(size: 15, weight: .semibold))
+                        .underline()
+                        .foregroundStyle(.white)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Undo save")
             }
             .foregroundStyle(NorthstarChatStyle.savedGreen)
             .padding(.horizontal, 16)
             .frame(height: 48)
             .background(Capsule().fill(Color(red: 0.56, green: 0.90, blue: 0.75).opacity(0.12)))
             .overlay(Capsule().strokeBorder(Color(red: 0.56, green: 0.90, blue: 0.75).opacity(0.35), lineWidth: 1))
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .contain)
         default:
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
@@ -221,9 +253,10 @@ struct NorthstarReplyView: View {
                     Button {
                         cardStates[save] = .saving
                         Task {
-                            let ok = await onSave(save)
+                            let id = await onSave(save)
                             withAnimation(.easeOut(duration: 0.2)) {
-                                cardStates[save] = ok ? .saved : .failed
+                                savedIds[save] = id
+                                cardStates[save] = id != nil ? .saved : .failed
                             }
                         }
                     } label: {
@@ -264,6 +297,58 @@ struct NorthstarReplyView: View {
             markdown: text,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         )) ?? AttributedString(text)
+    }
+}
+
+/// Safety path: real help, one tap away. Shown above Northstar's reply
+/// whenever the brain says someone may be in crisis.
+struct CrisisHelpCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "heart")
+                    .font(.system(size: 13, weight: .semibold))
+                Text("YOU DON'T HAVE TO DO THIS ALONE")
+                    .font(.system(size: 12, weight: .semibold))
+                    .tracking(1.5)
+            }
+            .foregroundStyle(NorthstarChatStyle.label)
+
+            Text("Talk to someone now. It's free and confidential.")
+                .font(.system(size: 17))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                helpLink("Call 988", systemImage: "phone.fill", url: "tel:988")
+                helpLink("Text 988", systemImage: "message.fill", url: "sms:988")
+            }
+
+            Link(destination: URL(string: "tel:911")!) {
+                Text("In danger right now? Call 911")
+                    .font(.system(size: 15, weight: .semibold))
+                    .underline()
+                    .foregroundStyle(.white)
+                    .frame(minHeight: 44)
+            }
+
+            Text("Outside the US? Call your local emergency number.")
+                .font(.system(size: 14))
+                .foregroundStyle(NorthstarChatStyle.soft)
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.10)))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.30), lineWidth: 1))
+    }
+
+    private func helpLink(_ title: String, systemImage: String, url: String) -> some View {
+        Link(destination: URL(string: url)!) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .background(Capsule().fill(Color(red: 0.91, green: 0.93, blue: 1.0)))
+        }
     }
 }
 
