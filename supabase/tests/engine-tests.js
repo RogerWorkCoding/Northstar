@@ -321,6 +321,32 @@ const NS_CASES = [
     ],
   },
 
+  {
+    id: "no-repeated-question", group: "flow",
+    history: [
+      { role: "user", content: "Plan a birthday party for my daughter, she's turning 8" },
+      { role: "assistant", content: "Happy early birthday to her! About how many kids are you thinking of inviting?" },
+      { role: "user", content: "Budget is $200" },
+      { role: "assistant", content: "$200 is enough for a fun party. How many kids are you thinking of inviting?" },
+    ],
+    say: "Make it dinosaur themed",
+    check: (r) => [
+      ["doesn't ask how many kids again", !has(r.reply, /how many (kids|children|guests|people)/i)],
+      ["keeps the budget", has(r.reply, /\$?200|budget/i)],
+    ],
+  },
+  {
+    id: "no-repeated-save", group: "flow",
+    history: [
+      { role: "user", content: "I've decided to launch my podcast in March" },
+      { role: "assistant", content: "Great decision. Save as your destination? \"Launch my podcast in March\"" },
+    ],
+    say: "What should the first episode be about?",
+    check: (r) => [
+      ["doesn't offer the same save again", !(r.proposed_saves ?? []).some((p) => /launch.*podcast.*march/i.test(p.text))],
+    ],
+  },
+
   // ---- Long chats ----
   {
     id: "long-chat-remembers-start", group: "flow",
