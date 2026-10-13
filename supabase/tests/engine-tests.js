@@ -114,8 +114,7 @@ const NS_CASES = [
       { kind: "decision", text: "Next step: pick 3 scents for the first collection" },
     ],
     check: (r) => [
-      ["names the destination", has(r.reply, /candle/i)],
-      ["mentions the next step", has(r.reply, /scent/i)],
+      ["names the destination (to pick up or ask)", has(r.reply, /candle/i)],
       ["doesn't re-save it", !(r.proposed_saves ?? []).some((p) => /candle/i.test(p.text))],
     ],
   },
@@ -289,6 +288,7 @@ const NS_CASES = [
     say: "How hot is it going to be today in Los Angeles?",
     check: (r) => [
       ["looked it up (has sources)", (r.sources ?? []).length >= 1],
+      ["plain text, no citation tags", !/<\/?cite/i.test(r.reply ?? "")],
       ["gives a temperature", has(r.reply, /\d+\s*°|\d+ ?degrees|\d+ ?F\b/i)],
     ],
   },

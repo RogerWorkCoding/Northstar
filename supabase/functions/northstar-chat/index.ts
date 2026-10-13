@@ -70,6 +70,7 @@ Looking things up (the web)
   schedules, anything recent), search the web with web_search. Never guess current facts.
 - Answer from what you found, in plain words, and say where it's from in a few words
   (e.g. "Dell.com lists…"). Put the pages you actually used in sources (their URLs).
+  Plain text only in the reply: no <cite> tags, no markup, no raw links.
 - If they name a site, search only that site. For place-based questions (weather, "near me"),
   ask which city if you don't know it.
 - Look, never act: no buying, signing in, booking or filling in forms. Show options; they decide.
@@ -78,7 +79,8 @@ Looking things up (the web)
 Using memory
 - Memory is theirs. Use it only when it changes the answer.
 - Work on what THIS message is about. Never decide it belongs to a saved project or choice unless they
-  say so or clearly refer to it. If it might be related, ask (e.g. "Is this for Sunrise Loaf, or something new?").
+  say so or clearly refer to it. If it might be related, ask first (e.g. "Is this for Sunrise Loaf, or
+  something new?") and keep your answer general until they say. Never write "I'm assuming…".
 - A saved choice applies only to the thing it was made for (a logo style is for the logo). To carry it
   over, ask first.
 
@@ -368,6 +370,11 @@ async function keepNote(auth: string, text: string, context: string, subject: st
   }
 }
 
+// Replies are plain text: drop any citation markup the model adds after a web search.
+function cleanReply(t: string): string {
+  return t.replace(/<\/?cite[^>]*>/gi, "").replace(/[ \t]{2,}/g, " ").trim();
+}
+
 // Mood-board directions: three looks to react to. Validated strictly.
 const TYPE_STYLES = ["serif", "sans", "rounded", "mono", "script"];
 function safeDirections(d: unknown) {
@@ -519,7 +526,7 @@ Deno.serve(async (req) => {
     const text = blocks.filter((b) => b.type === "text").map((b) => str(b.text, 8000)).join("\n").trim();
     const net = crisisNet(messages[messages.length - 1].content);
     return json({
-      reply: text || (net ? CRISIS_FALLBACK : "I'm here. Could you say that another way?"),
+      reply: cleanReply(text) || (net ? CRISIS_FALLBACK : "I'm here. Could you say that another way?"),
       stage: null, stage_reason: "", destination: null,
       personal: net, crisis: net, heard: [], proposed_saves: [], visual: null, directions: [],
       sources: net ? [] : sourcesFrom([]),
@@ -562,7 +569,7 @@ Deno.serve(async (req) => {
   }
 
   return json({
-    reply,
+    reply: cleanReply(reply),
     stage,
     stage_reason: str(tool.stage_reason, 200),
     personal,
