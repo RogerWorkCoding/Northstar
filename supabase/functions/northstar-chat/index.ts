@@ -767,6 +767,13 @@ Deno.serve(async (req) => {
   // Drawn on the server from the layout list, then checked like any wireframe.
   const drawn = renderWireframe(tool.visual);
   const visual = crisis || visualsOff || !design || !drawn ? null : safeVisual(drawn);
+  if (tool.visual && !visual) {
+    // Layout shape only (block types), never the person's words.
+    const kinds = Array.isArray((tool.visual as Record<string, unknown>).blocks)
+      ? ((tool.visual as Record<string, unknown>).blocks as Array<Record<string, unknown>>).map((b) => String(b?.type)).join(",")
+      : typeof tool.visual;
+    console.log("wireframe dropped", JSON.stringify({ design, visualsOff, drawn: !!drawn, kinds }));
+  }
   const proposed_saves = memoryOff || crisis ? [] : (Array.isArray(tool.proposed_saves) ? tool.proposed_saves : [])
     .map((p: Record<string, unknown>) => ({ kind: str(p?.kind, 20), text: str(p?.text, 200), reason: str(p?.reason, 200) }))
     .filter((p) => KINDS.includes(p.kind) && p.text)
