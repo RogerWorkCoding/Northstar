@@ -62,9 +62,10 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         let title: String
         let url: URL
 
-        /// Short site name for the link, e.g. "dell.com".
+        /// Site name for the link, written like a name: "Dell.com", "Weather.gov".
         var site: String {
-            (url.host() ?? title).replacingOccurrences(of: "www.", with: "")
+            let host = (url.host() ?? title).replacingOccurrences(of: "www.", with: "")
+            return host.prefix(1).uppercased() + host.dropFirst()
         }
     }
 
@@ -124,7 +125,9 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         crisis = (try? c.decodeIfPresent(Bool.self, forKey: .crisis)) ?? false
         directions = (try? c.decodeIfPresent([Direction].self, forKey: .directions)) ?? []
         // Only https links are shown.
+        // Only https links, and one per site (the brain also does this).
+        var seenSites = Set<String>()
         sources = ((try? c.decodeIfPresent([Source].self, forKey: .sources)) ?? [])
-            .filter { $0.url.scheme == "https" }
+            .filter { $0.url.scheme == "https" && seenSites.insert($0.site).inserted }
     }
 }
