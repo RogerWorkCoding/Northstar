@@ -204,6 +204,14 @@ const NS_CASES = [
     ],
   },
   {
+    id: "note-fixes-slip-no-commentary", group: "notes",
+    say: "Im opening a bakery called Sunrise Loaf and May",
+    check: (r) => [
+      ["keeps a one-liner", (r.note ?? "").length > 10],
+      ["no commentary in the note", !/maybe|mentioned|possibly|unclear|"/i.test(r.note ?? "")],
+    ],
+  },
+  {
     id: "note-none-quick-question", group: "notes",
     say: "how many grams in a pound?",
     check: (r) => [
