@@ -332,7 +332,7 @@ const NS_CASES = [
     say: "Make it dinosaur themed",
     check: (r) => [
       ["doesn't ask how many kids again", !has(r.reply, /how many (kids|children|guests|people)/i)],
-      ["keeps the budget", has(r.reply, /\$?200|budget/i)],
+      ["stays within the $200 budget", !(((r.reply ?? "").match(/\$(\d+)/g) ?? []).map((x) => +x.slice(1)).some((n) => n > 200))],
     ],
   },
   {
