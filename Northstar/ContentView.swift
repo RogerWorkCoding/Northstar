@@ -274,7 +274,9 @@ struct ContentView: View {
                                 onSave: saveSuggestion,
                                 onUndo: undoSave,
                                 onRemovePill: { pendingCorrections.append($0) },
-                                onChooseDirection: chooseDirection
+                                onChooseDirection: chooseDirection,
+                                chosenDirection: chosenDirection(after: message),
+                                canChooseDirection: !isThinking && message.id == viewModel.messages.last?.id
                             )
                         }
                     }
@@ -810,10 +812,23 @@ struct ContentView: View {
     }
 
     /// The person picked a direction: say it in their words and continue.
+    /// Keeps any half-typed text in the field.
     private func chooseDirection(_ direction: NorthstarInsight.Direction) {
         guard !isThinking else { return }
-        appendUserMessage("Let's go with \u{201C}\(direction.name)\u{201D}.")
+        viewModel.messages.append(MessageModel(role: .user, content: Self.choicePrefix + direction.name + "\u{201D}."))
         requestGeminiResponse()
+    }
+
+    private static let choicePrefix = "Let's go with \u{201C}"
+
+    /// Which direction was chosen, read from the chat itself (the next message),
+    /// so it stays right after scrolling.
+    private func chosenDirection(after message: MessageModel) -> String? {
+        let all = viewModel.messages
+        guard let i = all.firstIndex(where: { $0.id == message.id }), i + 1 < all.count else { return nil }
+        let next = all[i + 1]
+        guard next.role == .user, next.content.hasPrefix(Self.choicePrefix) else { return nil }
+        return String(next.content.dropFirst(Self.choicePrefix.count).dropLast(2))
     }
 
     /// Undo from the "Saved" line: removes the item that was just saved.

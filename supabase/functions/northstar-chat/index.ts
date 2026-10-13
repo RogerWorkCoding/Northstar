@@ -230,18 +230,23 @@ function correctionsBlock(c: unknown): string {
 // Safety net: clear first-person crisis phrases always get the help card,
 // even if the model missed it or the reply fell back to plain text.
 // Narrow on purpose ("this deadline is killing me" doesn't match).
+// First person only: "my phone is going to die" or "Suicide Squad poster" don't match.
 const CRISIS_PHRASES = [
   /\bkill(ing)? myself\b/i,
-  /\bend(ing)? (my life|it all)\b/i,
-  /\b(want|going|plan(ning)?) to die\b/i,
-  /\bsuicid(e|al)\b/i,
-  /\b(hurt|harm|cut)(ing)? myself\b/i,
-  /\bdon'?t want to (be here|live|wake up)( anymore)?\b/i,
+  /\bend(ing)? my life\b/i,
+  /\bend(ing)? it all\b/i,
+  /\bi (want|wanna|plan) to die\b/i,
+  /\bi('?m| am)? (feeling |being )?suicidal\b/i,
+  /\b(thinking about|thoughts of|considering) suicide\b/i,
+  /\bi('ve| have| keep| want to| wanna)? (been )?(hurt|harm|cutt?)(ing)? myself\b(?! (shaving|cooking|by accident|accidentally))/i,
+  /\bself[- ]harm(ing)?\b/i,
+  /\bi (just |really |honestly )?(don'?t|do not) want to (be here|live|wake up|exist)( anymore)?\s*([.!?,;]|$)/im,
   /\bbetter off without me\b/i,
   /\bno reason to live\b/i,
 ];
 function crisisNet(text: unknown): boolean {
-  const t = str(text, 4000);
+  // iPhone keyboards type curly apostrophes (’); match them like straight ones.
+  const t = str(text, 4000).replace(/[\u2018\u2019\u02BC]/g, "'");
   return CRISIS_PHRASES.some((re) => re.test(t));
 }
 const CRISIS_FALLBACK =
@@ -256,7 +261,7 @@ function safeDirections(d: unknown) {
   const out = d.slice(0, 3).map((x) => {
     const o = (x ?? {}) as Record<string, unknown>;
     const palette = (Array.isArray(o.palette) ? o.palette : [])
-      .map((c) => str(c, 7))
+      .map((c) => str(c, 20))
       .filter((c) => /^#[0-9A-Fa-f]{6}$/.test(c))
       .slice(0, 4);
     const keywords = (Array.isArray(o.keywords) ? o.keywords : [])
