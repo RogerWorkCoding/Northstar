@@ -231,11 +231,15 @@ struct ContentView: View {
             ScrollView {
                 LazyVStack(spacing: 20) {
                     ForEach(viewModel.messages) { message in
-                        ChatBubbleView(
-                            id: message.id,
-                            text: message.content,
-                            isUser: message.role == .user
-                        )
+                        if message.role == .user {
+                            UserMessageView(text: message.content)
+                        } else {
+                            NorthstarReplyView(
+                                text: message.content,
+                                insight: message.insight,
+                                onSave: saveSuggestion
+                            )
+                        }
                     }
 
                     // Sized to the composer's real measured footprint (+16pt
@@ -744,6 +748,23 @@ struct ContentView: View {
         promptText = ""
     }
 
+    /// One-tap save from a Northstar save card. Only what the person confirms is stored.
+    private func saveSuggestion(_ save: NorthstarInsight.Save) async -> Bool {
+        guard let identityId = memoryIdentityId else { return false }
+        do {
+            try await memoryService.saveMemory(
+                identityId: identityId,
+                projectId: nil,
+                content: save.text,
+                category: save.kind
+            )
+            return true
+        } catch {
+            print("Save suggestion failed:", error.localizedDescription)
+            return false
+        }
+    }
+
     private func appendAssistantMessage(_ content: String) {
         viewModel.messages.append(MessageModel(role: .assistant, content: content))
     }
@@ -751,10 +772,12 @@ struct ContentView: View {
     private func requestGeminiResponse() {
         isThinking = true
         responseTask = Task {
-            let answer = await engine.getResponse(for: viewModel.messages)
+            let answer = await engine.getReply(for: viewModel.messages)
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                appendAssistantMessage(answer)
+                viewModel.messages.append(
+                    MessageModel(role: .assistant, content: answer.text, insight: answer.insight)
+                )
                 isThinking = false
                 responseTask = nil
             }
