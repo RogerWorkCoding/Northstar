@@ -172,7 +172,7 @@ function settingsRules(s: unknown): string {
   const name = str(o.preferred_name, 40);
   if (name) lines.push(`- Call the person ${name}.`);
   if (o.memory_on === false) lines.push("- Memory is off: propose no saves.");
-  if (o.show_visuals === false) lines.push("- Visuals are off: don't include a wireframe unless they ask for one directly.");
+  if (o.show_visuals === false) lines.push("- Visuals are off: never include a wireframe; describe any layout in a few words instead.");
   return lines.length ? "Person's settings:\n" + lines.join("\n") : "";
 }
 
@@ -293,7 +293,8 @@ Deno.serve(async (req) => {
     .filter((h) => GROUPS.includes(h.group) && h.text)
     .slice(0, 6);
   const memoryOff = (body.settings as Record<string, unknown> | undefined)?.memory_on === false;
-  const visual = crisis ? null : safeVisual(tool.visual);
+  const visualsOff = (body.settings as Record<string, unknown> | undefined)?.show_visuals === false;
+  const visual = crisis || visualsOff ? null : safeVisual(tool.visual);
   const proposed_saves = memoryOff || crisis ? [] : (Array.isArray(tool.proposed_saves) ? tool.proposed_saves : [])
     .map((p: Record<string, unknown>) => ({ kind: str(p?.kind, 20), text: str(p?.text, 200), reason: str(p?.reason, 200) }))
     .filter((p) => KINDS.includes(p.kind) && p.text)
