@@ -260,4 +260,4 @@ Image and video generation (providers not yet verified for ownership and commerc
 
 **Waiting for Roger's iPhone test (pull requests):** #9 pills rule, #10 wireframes, #11 memory + corrections + undo + help card + Settings screen.
 
-**Next step:** Roger tests #11 on iPhone → merge. Then Engine v1 item 6 (show options instead of asking: three mood-board directions), and lock the Destinations screen (menu).
+**Next step:** Roger tests #11 on iPhone → merge. Then Engine v1 item 6 (show options instead of asking: three mood-board directions), and build the Destinations screen (menu).
