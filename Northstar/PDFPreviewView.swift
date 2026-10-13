@@ -1,18 +1,44 @@
-//
-//  PDFPreviewView.swift
-//  Northstar
-//
-//  Created by Roger Ward on 10/7/26.
-//
-
 import SwiftUI
+import PDFKit
 
-struct PDFPreviewView: View {
-    var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+struct PDFPreviewView: UIViewRepresentable {
+
+    let pdfURL: URL
+
+    func makeUIView(
+        context: Context
+    ) -> PDFView {
+
+        let pdfView = PDFView()
+
+        pdfView.autoScales = true
+
+        pdfView.displayMode =
+            .singlePageContinuous
+
+        pdfView.displayDirection =
+            .vertical
+
+        pdfView.document =
+            PDFDocument(
+                url: pdfURL
+            )
+
+        return pdfView
     }
-}
 
-#Preview {
-    PDFPreviewView()
+    func updateUIView(
+        _ pdfView: PDFView,
+        context: Context
+    ) {
+
+        if pdfView.document?
+            .documentURL != pdfURL {
+
+            pdfView.document =
+                PDFDocument(
+                    url: pdfURL
+                )
+        }
+    }
 }

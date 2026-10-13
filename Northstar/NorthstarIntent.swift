@@ -1,8 +1,11 @@
-//
-//  NorthstarIntent.swift
-//  Northstar
-//
-//  Created by Roger Ward on 9/29/26.
-//
-
 import Foundation
+
+enum NorthstarIntent {
+    case conversation
+    case imageGeneration
+    case videoGeneration
+    case imageAnalysis
+    case documentCreation
+    case projectGuidance
+    case webDesign
+}

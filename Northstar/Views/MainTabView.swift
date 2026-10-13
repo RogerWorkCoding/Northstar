@@ -1,18 +1,30 @@
-//
-//  MainTabView.swift
-//  Northstar
-//
-//  Created by Roger Ward on 10/2/26.
-//
-
 import SwiftUI
 
 struct MainTabView: View {
     var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
-    }
-}
+        TabView {
+            // 1. Your new AI Chat Canvas (Loads First)
+            HomeView()
+                .tabItem {
+                    Image(systemName: "sparkles")
+                    Text("Northstar")
+                }
 
-#Preview {
-    MainTabView()
+            // 2. Your Projects Database
+            ProjectsView()
+                .tabItem {
+                    Image(systemName: "folder.fill")
+                    Text("Projects")
+                }
+            
+            // 3. Your Rules/Memory Database
+            DecisionsView()
+                .tabItem {
+                    Image(systemName: "text.book.closed.fill")
+                    Text("Rules")
+                }
+        }
+        .tint(.white)
+        .preferredColorScheme(.dark)
+    }
 }

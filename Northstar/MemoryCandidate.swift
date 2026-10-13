@@ -1,8 +1,10 @@
-//
-//  MemoryCandidate.swift
-//  Northstar
-//
-//  Created by Roger Ward on 10/9/26.
-//
-
 import Foundation
+
+struct MemoryCandidate: Identifiable, Equatable {
+
+    let id = UUID()
+    let content: String
+    let suggestedSubject: String
+    let reason: String
+}
+

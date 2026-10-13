@@ -51,6 +51,21 @@ struct ContentView: View {
     @State private var responseTask: Task<Void, Never>?
     @FocusState private var isPromptFocused: Bool
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isWelcomeMessageVisible = true
+
+    // The composer's real, measured footprint (bar + its own bottom margin),
+    // used to pad the scroll content directly instead of trusting
+    // .safeAreaInset's automatic content-inset propagation — that mechanism
+    // isn't reliable in this view hierarchy (see NorthstarVisionLandscapeBackground's
+    // .ignoresSafeArea() sibling), so the clearance is computed explicitly here.
+    @State private var composerHeight: CGFloat = 0
+
+    // Minimal, unobtrusive feedback for microphone failures (permission
+    // denied, recognizer unavailable, audio session/engine failure) — never
+    // added to the conversation history, just a small alert.
+    @State private var microphoneErrorMessage: String?
+
     private let gemini = GeminiProvider()
     private let intelligence = NorthstarIntelligence()
     private let pdfService = PDFDocumentService()
@@ -62,14 +77,14 @@ struct ContentView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             ZStack {
-                Color(red: 0.08, green: 0.12, blue: 0.25)
-                    .ignoresSafeArea()
+                NorthstarVisionLandscapeBackground()
 
                 VStack(spacing: 0) {
-                    header
+                    adaptiveHeader
                     conversationArea
                     promptArea
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 if isStarMenuPresented {
                     starMenu
@@ -98,6 +113,19 @@ struct ContentView: View {
         .sheet(isPresented: $isPDFSharePresented) {
             pdfShareView
         }
+        .alert(
+            "Voice Input",
+            isPresented: Binding(
+                get: { microphoneErrorMessage != nil },
+                set: { isPresented in
+                    if !isPresented { microphoneErrorMessage = nil }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(microphoneErrorMessage ?? "")
+        }
         .onChange(of: speechRecognizer.transcript) {
             if isLivePDFDraftPresented {
                 livePDFText = speechRecognizer.transcript
@@ -107,22 +135,94 @@ struct ContentView: View {
         }
         .task {
             loadProjectMemory()
+            scheduleWelcomeMessageFade()
         }
     }
 
-    private var header: some View {
-        VStack(spacing: 5) {
-            Image(systemName: "sparkle")
-                .font(.system(size: 30, weight: .ultraLight))
-                .foregroundStyle(.white)
+    /// Empty conversation gets the full lockup + welcome message; an active
+    /// conversation gets a small permanent header instead, so the scrolling
+    /// area actually has room for tall structured-response cards. Branding
+    /// lives here, as a sibling of conversationArea — never inside its
+    /// ScrollView content.
+    @ViewBuilder
+    private var adaptiveHeader: some View {
+        if viewModel.messages.isEmpty {
+            heroHeader
+        } else {
+            compactHeader
+        }
+    }
+
+    private var compactHeader: some View {
+        HStack(spacing: 6) {
+            NorthstarVisionStarMark(size: 16)
+                .accessibilityHidden(true)
 
             Text("Northstar")
-                .font(.system(size: 25, weight: .light))
+                .font(.system(size: 14, weight: .medium))
                 .tracking(2)
-                .foregroundStyle(.white)
+                .foregroundStyle(.white.opacity(0.8))
+                .accessibilityAddTraits(.isHeader)
         }
-        .padding(.top, 14)
-        .padding(.bottom, 10)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
+    }
+
+    /// The large star + wordmark + welcome-message lockup, used only for the
+    /// empty conversation state now (see adaptiveHeader).
+    private var heroHeader: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
+            // Star + wordmark as one grouped lockup, tightly spaced so they
+            // read as a single logo rather than two separate elements.
+            VStack(spacing: 6) {
+                NorthstarVisionStarMark(size: 48)
+                    .accessibilityHidden(true)
+
+                Text("Northstar")
+                    .font(.system(size: 30, weight: .light))
+                    .tracking(6)
+                    .foregroundStyle(.white)
+                    .accessibilityAddTraits(.isHeader)
+            }
+
+            Spacer(minLength: 10)
+
+            VStack(spacing: 3) {
+                Text("One clear destination.")
+                Text("An intelligent path forward.")
+            }
+            .font(.system(size: 13, weight: .regular))
+            .tracking(0.4)
+            .foregroundStyle(.white.opacity(0.65))
+            .multilineTextAlignment(.center)
+            .opacity(showWelcomeMessage ? 1 : 0)
+            .accessibilityElement(children: .combine)
+            .accessibilityHidden(!showWelcomeMessage)
+
+            Spacer(minLength: 16)
+        }
+    }
+
+    /// Visible only while truly empty — hides immediately once a message
+    /// exists (not just after the fade timer), and the timer independently
+    /// hides it if the user leaves the screen untouched.
+    private var showWelcomeMessage: Bool {
+        isWelcomeMessageVisible && viewModel.messages.isEmpty
+    }
+
+    /// Re-armed on every fresh empty state (initial launch and after New Chat)
+    /// so the welcome message replays instead of staying permanently faded.
+    private func scheduleWelcomeMessageFade() {
+        isWelcomeMessageVisible = true
+        Task {
+            try? await Task.sleep(for: .seconds(2.75))
+            guard viewModel.messages.isEmpty else { return }
+            withAnimation(.easeOut(duration: reduceMotion ? 0.15 : 0.6)) {
+                isWelcomeMessageVisible = false
+            }
+        }
     }
 
     private var conversationArea: some View {
@@ -137,18 +237,24 @@ struct ContentView: View {
                         )
                     }
 
+                    // Sized to the composer's real measured footprint (+16pt
+                    // breathing room) rather than a fixed 1pt marker — this is
+                    // what actually guarantees the last message clears the
+                    // composer when scrolled to bottom, regardless of whether
+                    // .safeAreaInset is correctly shrinking this ScrollView's
+                    // own viewport in this hierarchy.
                     Color.clear
-                        .frame(height: 1)
+                        .frame(height: composerHeight + 16)
                         .id("CHAT_BOTTOM")
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
-                .padding(.vertical, 24)
+                .padding(.top, 24)
             }
             .scrollDismissesKeyboard(.interactively)
             .contentShape(Rectangle())
             .onTapGesture { isPromptFocused = false }
             .onChange(of: viewModel.messages.count) {
-                scrollToBottom(proxy)
+                scrollToLatestMessage(proxy)
             }
         }
     }
@@ -170,7 +276,7 @@ struct ContentView: View {
             TextField("Ask Northstar...", text: $promptText, axis: .vertical)
                 .focused($isPromptFocused)
                 .foregroundStyle(.white)
-                .lineLimit(1...4)
+                .lineLimit(1...6)
                 .disabled(isThinking)
                 .submitLabel(.send)
                 .onSubmit { sendMessage() }
@@ -192,12 +298,20 @@ struct ContentView: View {
                     .background { Circle().fill(.white.opacity(0.20)) }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 16)
+        .background {
+            ZStack {
+                Color.black.opacity(0.18)
+                Rectangle().fill(.regularMaterial)
+            }
+        }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .padding(.horizontal, 20)
-        .padding(.bottom, 12)
+        .padding(.horizontal, 6)
+        .padding(.bottom, 46)
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
+            composerHeight = newHeight
+        }
     }
 
     private var starMenu: some View {
@@ -344,7 +458,10 @@ struct ContentView: View {
         Task {
             let permissionGranted = await speechRecognizer.requestPermissions()
             guard permissionGranted else {
-                print("Speech permission denied")
+                microphoneErrorMessage = """
+                Northstar needs microphone and speech-recognition access for voice input. \
+                You can enable these in Settings > Privacy & Security.
+                """
                 return
             }
 
@@ -352,8 +469,21 @@ struct ContentView: View {
                 try speechRecognizer.startRecording()
             } catch {
                 print("Speech recording failed:", error.localizedDescription)
+                microphoneErrorMessage = microphoneUnavailableMessage
             }
         }
+    }
+
+    /// Simulator audio input depends on the host Mac's own microphone being
+    /// forwarded in, which is a separate, unreliable permission from anything
+    /// in-app — confirmed working correctly on a physical iPhone, so this
+    /// wording only ever appears in Simulator builds.
+    private var microphoneUnavailableMessage: String {
+        #if targetEnvironment(simulator)
+        return "Voice input is unavailable in this environment. Try Northstar on your iPhone or check the Mac microphone permission for Simulator."
+        #else
+        return "Northstar couldn't start voice input. Please try again."
+        #endif
     }
 
     private func wantsSitemap(_ question: String) -> Bool {
@@ -734,6 +864,7 @@ struct ContentView: View {
         websiteServices = ""
         viewModel.messages.removeAll()
         isThinking = false
+        scheduleWelcomeMessageFade()
     }
 
     private func saveProjectMemory() {
@@ -757,10 +888,23 @@ struct ContentView: View {
         websiteServices = project.websiteServices
     }
 
-    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+    /// The user's own message is always short, so bottom-anchoring its arrival
+    /// is correct and expected. An assistant reply can be taller than the
+    /// visible viewport (an expanded structured-response card) — scrolling
+    /// that to its own top shows the beginning first and lets the user scroll
+    /// down through the rest normally, rather than bottom-anchoring and
+    /// pushing the card's opening content off-screen above the viewport.
+    /// Fires once per new message, never re-triggered on a timer, so it never
+    /// fights a manual scroll the user makes afterward.
+    private func scrollToLatestMessage(_ proxy: ScrollViewProxy) {
+        guard let latestMessage = viewModel.messages.last else { return }
         DispatchQueue.main.async {
             withAnimation(.easeOut(duration: 0.25)) {
-                proxy.scrollTo("CHAT_BOTTOM", anchor: .bottom)
+                if latestMessage.role == .user {
+                    proxy.scrollTo("CHAT_BOTTOM", anchor: .bottom)
+                } else {
+                    proxy.scrollTo(latestMessage.id, anchor: .top)
+                }
             }
         }
     }

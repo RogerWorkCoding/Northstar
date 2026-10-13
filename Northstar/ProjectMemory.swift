@@ -1,8 +1,7 @@
-//
-//  ProjectMemory.swift
-//  Northstar
-//
-//  Created by Roger Ward on 9/29/26.
-//
-
 import Foundation
+
+struct ProjectMemory: Codable {
+    var websiteType: String
+    var websiteName: String
+    var websiteServices: String
+}

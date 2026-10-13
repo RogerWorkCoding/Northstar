@@ -1,8 +1,6 @@
-//
-//  NorthstarOption.swift
-//  Northstar
-//
-//  Created by Roger Ward on 9/28/26.
-//
-
 import Foundation
+
+struct NorthstarOption: Identifiable, Hashable {
+    let id = UUID()
+    let title: String
+}

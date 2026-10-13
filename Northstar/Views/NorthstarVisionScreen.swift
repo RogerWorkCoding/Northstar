@@ -9,6 +9,20 @@ struct NorthstarVisionScreen: View {
     let onSelectStar: () -> Void
     let onSelectMicrophone: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isWelcomeMessageVisible = true
+
+    /// A single message today; kept as an array (not a plain String) so rotating
+    /// through several welcome messages later only means picking a different
+    /// index here, not changing how the view displays or fades the text.
+    private static let welcomeMessages: [String] = [
+        "One clear destination.\nAn intelligent path forward."
+    ]
+
+    private var welcomeMessageLines: [String] {
+        (Self.welcomeMessages.first ?? "").components(separatedBy: "\n")
+    }
+
     var body: some View {
         ZStack {
             NorthstarVisionLandscapeBackground()
@@ -30,14 +44,17 @@ struct NorthstarVisionScreen: View {
                 Spacer(minLength: 12)
 
                 VStack(spacing: 3) {
-                    Text("One clear destination.")
-                    Text("An intelligent path forward.")
+                    ForEach(welcomeMessageLines, id: \.self) { line in
+                        Text(line)
+                    }
                 }
                 .font(.system(size: 13, weight: .regular))
                 .tracking(0.4)
                 .foregroundStyle(NorthstarResponseTheme.warmWhite.opacity(0.65))
                 .multilineTextAlignment(.center)
+                .opacity(isWelcomeMessageVisible ? 1 : 0)
                 .accessibilityElement(children: .combine)
+                .accessibilityHidden(!isWelcomeMessageVisible)
 
                 Spacer()
 
@@ -52,6 +69,12 @@ struct NorthstarVisionScreen: View {
             }
             .padding(.horizontal, 28)
         }
+        .task {
+            try? await Task.sleep(for: .seconds(2.75))
+            withAnimation(.easeOut(duration: reduceMotion ? 0.15 : 0.6)) {
+                isWelcomeMessageVisible = false
+            }
+        }
     }
 }
 
@@ -62,7 +85,7 @@ struct NorthstarVisionScreen: View {
 /// so a restrained brightness/contrast lift plus a small, localized cool-blue radial
 /// glow centered on the valley make the layered ridges read clearly without washing
 /// out the rest of the sky.
-private struct NorthstarVisionLandscapeBackground: View {
+struct NorthstarVisionLandscapeBackground: View {
     var body: some View {
         ZStack {
             Image("NorthstarVisionLandscape")
@@ -90,21 +113,25 @@ private struct NorthstarVisionLandscapeBackground: View {
 /// deliberately not gold, so it harmonizes with the photographed night sky
 /// instead of competing with it. Purely decorative (the functional star control
 /// lives in the composer below, mirroring ContentView's sparkle menu button).
-private struct NorthstarVisionStarMark: View {
+/// `size` parametrizes the crisp star's diameter so this same mark can be
+/// reused at different scales (e.g. ContentView's empty-state hero).
+struct NorthstarVisionStarMark: View {
+    var size: CGFloat = 56
+
     var body: some View {
         ZStack {
             Image(systemName: "sparkle")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 96, height: 96)
+                .frame(width: size * 1.714, height: size * 1.714)
                 .foregroundStyle(Color(red: 0.62, green: 0.74, blue: 0.92))
-                .blur(radius: 22)
+                .blur(radius: size * 0.393)
                 .opacity(0.4)
 
             Image(systemName: "sparkle")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 56, height: 56)
+                .frame(width: size, height: size)
                 .foregroundStyle(
                     LinearGradient(
                         colors: [NorthstarResponseTheme.warmWhite, Color(red: 0.72, green: 0.82, blue: 0.96)],
@@ -112,7 +139,7 @@ private struct NorthstarVisionStarMark: View {
                         endPoint: .bottom
                     )
                 )
-                .shadow(color: Color(red: 0.6, green: 0.72, blue: 0.9).opacity(0.5), radius: 12)
+                .shadow(color: Color(red: 0.6, green: 0.72, blue: 0.9).opacity(0.5), radius: size * 0.214)
         }
     }
 }

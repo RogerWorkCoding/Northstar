@@ -37,16 +37,17 @@ struct NorthstarRootView: View {
                     arrive(with: .sendPrompt(text))
                 },
                 onSelectStar: {
-                    // Wired in a later integration step; the button exists now so
-                    // the composer's full control set (star/text/mic/send) is in
-                    // place, but selecting it does nothing yet.
+                    arrive(with: .openStarMenu)
                 },
                 onSelectMicrophone: {
-                    // Wired in a later integration step; see onSelectStar above.
+                    arrive(with: .beginVoice)
                 }
             )
         case .chat:
-            ContentView(pendingAction: $pendingAction)
+            // Abandoned direction: ContentView no longer accepts a pendingAction
+            // binding (the mountain-landscape empty state replaced this two-screen
+            // handoff). Kept compiling, unused, as a visual/component reference.
+            ContentView()
         }
     }
 
