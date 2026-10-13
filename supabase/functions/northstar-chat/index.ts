@@ -276,6 +276,23 @@ function cleanTurns(input: unknown): Turn[] {
   return turns;
 }
 
+// The clock: Claude has no clock of its own, so every message says what time it is
+// for the person (their phone's time zone; UTC if unknown or invalid).
+function nowLine(settings: unknown): string {
+  const tzRaw = str((settings as Record<string, unknown> | undefined)?.timezone, 60);
+  const now = new Date();
+  const fmt = (tz: string) =>
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit",
+    }).format(now);
+  let local = "", tz = "UTC";
+  try {
+    if (tzRaw) { local = fmt(tzRaw); tz = tzRaw; }
+  } catch { /* unknown time zone: fall back to UTC */ }
+  return `Right now it is ${local || fmt("UTC")} (${tz}). It is ${now.toISOString().slice(0, 16).replace("T", " ")} UTC. ` +
+    "Use this for today's date, the time, and times in other places; don't search the web for them.";
+}
+
 // Long chats: the last 14 turns are read in full; older ones become one short
 // line each, so Northstar remembers how the chat started without slowing down.
 const RECENT_TURNS = 14;
@@ -653,6 +670,7 @@ Deno.serve(async (req) => {
     ...skills.map((name) => SKILLS[name].rules),
   ].join("\n\n");
   const personPart = [
+    nowLine(body.settings),
     earlier,
     settingsRules(body.settings),
     memoryBlock(body.memory),

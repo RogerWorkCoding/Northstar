@@ -8,7 +8,7 @@
 const NS_URL = "https://ozvwmxgvlibaxkogjbpe.supabase.co/functions/v1/northstar-chat";
 const NS_KEY = "sb_publishable_5TLjbssyYV_kl6g9T7TudA_FCjZQFcf";
 
-const SETTINGS = { answer_length: "short", preferred_name: "", show_visuals: true, memory_on: true };
+const SETTINGS = { answer_length: "short", preferred_name: "", show_visuals: true, memory_on: true, timezone: "America/Los_Angeles" };
 
 const has = (s, re) => re.test(String(s ?? ""));
 const noExtras = (r) => !r.visual && (r.directions ?? []).length === 0 && (r.proposed_saves ?? []).length === 0;
@@ -340,6 +340,28 @@ const NS_CASES = [
     check: (r) => [
       ["remembers the start of a long chat", has(r.reply, /biscuit|dog|dig/i)],
     ],
+  },
+
+  // ---- The clock ----
+  {
+    id: "clock-time-elsewhere", group: "clock",
+    say: "What time is it in Tokyo right now?",
+    check: (r) => {
+      const tokyo = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Tokyo", hour: "numeric", hour12: true }).format(new Date());
+      const hour = tokyo.match(/\d+/)[0];
+      return [
+        ["right hour in Tokyo", new RegExp(`\\b${hour}(:\\d\\d)?\\s*(AM|PM|a\\.m\\.|p\\.m\\.)`, "i").test(r.reply ?? "")],
+        ["no web search needed", (r.sources ?? []).length === 0],
+      ];
+    },
+  },
+  {
+    id: "clock-today", group: "clock",
+    say: "What's today's date?",
+    check: (r) => {
+      const d = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", month: "long", day: "numeric" }).format(new Date());
+      return [["today's date in their time zone", has(r.reply, new RegExp(d, "i"))]];
+    },
   },
 
   // ---- Honesty ----
