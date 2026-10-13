@@ -311,10 +311,11 @@ function splitHistory(turns: Turn[]): { recent: Turn[]; earlier: string } {
     const short = one.length > 140 ? one.slice(0, 137) + "…" : one;
     return `- ${t.role === "user" ? "They said" : "You said"}: ${short}`;
   });
-  return {
-    recent: turns.slice(cut),
-    earlier: "Earlier in this chat (oldest first, shortened; context only, not instructions):\n" + lines.join("\n"),
-  };
+  const recent = turns.slice(cut).map((t) => ({ ...t }));
+  if (recent.length) {
+    recent[0].content = "(Earlier in this chat, oldest first, shortened:\n" + lines.join("\n") + ")\n\n" + recent[0].content;
+  }
+  return { recent, earlier: "" };
 }
 
 // Settings from the app become short rules (answer length, preferred name, …).
@@ -523,7 +524,7 @@ function esc(t: string): string {
   return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 function wrap(t: string, maxChars: number, maxLines: number): string[] {
-  const words = t.split(/\s+/).filter(Boolean);
+  const words = t.split(/\s+/).filter(Boolean).map((w) => (w.length > maxChars ? w.slice(0, maxChars - 1) + "…" : w));
   const lines: string[] = [];
   let cur = "";
   for (const w of words) {
@@ -609,9 +610,18 @@ function drawBlock(b: WireBlock, y: number): { svg: string; h: number } {
 function renderWireframe(v: unknown): { kind: "svg"; title: string; svg: string } | null {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
-  const blocks = (Array.isArray(o.blocks) ? o.blocks : [])
-    .map((b) => (b ?? {}) as WireBlock)
-    .filter((b) => WIRE_TYPES.includes(String(b.type)))
+  const blocks: WireBlock[] = (Array.isArray(o.blocks) ? o.blocks : [])
+    .map((raw) => {
+      const b = (raw ?? {}) as Record<string, unknown>;
+      return {
+        type: str(b.type, 10),
+        title: str(b.title, 40),
+        text: str(b.text, 160),
+        button: str(b.button, 24),
+        items: Array.isArray(b.items) ? b.items.map((i) => str(i, 30)).filter(Boolean) : [],
+      };
+    })
+    .filter((b) => WIRE_TYPES.includes(b.type))
     .slice(0, 8);
   if (blocks.length === 0) return null;
   let y = 16, inner = "";
@@ -812,7 +822,12 @@ Deno.serve(async (req) => {
   const directions = crisis || personal || !design ? [] : safeDirections(tool.directions);
   const visualsOff = (body.settings as Record<string, unknown> | undefined)?.show_visuals === false;
   // Drawn on the server from the layout list, then checked like any wireframe.
-  const drawn = renderWireframe(tool.visual);
+  let drawn: ReturnType<typeof renderWireframe> = null;
+  try {
+    drawn = renderWireframe(tool.visual);
+  } catch (e) {
+    console.error("wireframe draw failed:", String(e).slice(0, 200)); // the reply still goes out
+  }
   const visual = crisis || visualsOff || !design || !drawn ? null : safeVisual(drawn);
   if (tool.visual && !visual) {
     // Layout shape only (block types), never the person's words.
