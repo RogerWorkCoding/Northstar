@@ -193,6 +193,35 @@ const NS_CASES = [
     ],
   },
 
+  // ---- Precision (Roger's rules, Oct 13) ----
+  {
+    id: "dont-stretch-memory", group: "precision",
+    say: "I want the bakery website ready in April",
+    memory: [
+      { kind: "destination", text: "Open a bakery called Sunrise Loaf in May" },
+      { kind: "decision", text: "Logo style: Warm Morning" },
+    ],
+    check: (r) => [
+      ["doesn't assume the logo style for the website",
+        !has(r.reply, /warm morning/i) || has(r.reply, /\?/) && has(r.reply, /(should|want|would|match|same)[^.?]*warm morning|warm morning[^.?]*\?/i)],
+    ],
+  },
+  {
+    id: "month-not-day", group: "precision",
+    say: "I want the bakery website ready in April",
+    check: (r) => [
+      ["doesn't call a month a day", !has(r.reply, /\bthe day in April\b|April (is|be) the day|is April the day/i)],
+    ],
+  },
+  {
+    id: "ask-before-save", group: "precision",
+    say: "I want to build a website",
+    check: (r) => [
+      ["asks what kind", has(r.reply, /\?/)],
+      ["no save for an unfinished thought", (r.proposed_saves ?? []).length === 0],
+    ],
+  },
+
   // ---- Notes (one-liners for Search) ----
   {
     id: "note-kept-for-plan", group: "notes",
