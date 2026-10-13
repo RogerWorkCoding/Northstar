@@ -77,12 +77,6 @@ struct ContentView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             ZStack {
-                NorthstarVisionLandscapeBackground()
-
-                // Chat veil (approved): once a conversation starts, the landscape
-                // dims and softens so long replies stay easy to read.
-                chatVeil
-
                 VStack(spacing: 0) {
                     adaptiveHeader
                     conversationArea
@@ -93,6 +87,19 @@ struct ContentView: View {
                 if isStarMenuPresented {
                     starMenu
                 }
+            }
+            // The landscape and chat veil sit BEHIND the layout as a background,
+            // so they never change its size. That lets the text field rise
+            // above the keyboard instead of being pushed under it.
+            .background {
+                ZStack {
+                    NorthstarVisionLandscapeBackground()
+
+                    // Chat veil (approved): once a conversation starts, the landscape
+                    // dims and softens so long replies stay easy to read.
+                    chatVeil
+                }
+                .ignoresSafeArea()
             }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Destination.self) { destination in
@@ -345,7 +352,8 @@ struct ContentView: View {
         }
         .shadow(color: Color(red: 0.45, green: 0.55, blue: 1.0).opacity(0.18), radius: 16)
         .padding(.horizontal, 6)
-        .padding(.bottom, 46)
+        .padding(.bottom, isPromptFocused ? 8 : 46)
+        .animation(.easeOut(duration: 0.2), value: isPromptFocused)
         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
             composerHeight = newHeight
         }
