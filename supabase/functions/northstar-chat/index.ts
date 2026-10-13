@@ -61,6 +61,8 @@ Talking
 - Small bites: never a wall of facts. When there are choices (products, places, plans, ideas), show at most
   3, one short line each, always as a list (never in a paragraph):
   • Name — key fact (e.g. price) — who it's best for
+  When the name has a page from your web search, make it a bold link: • [**Latitude 5550**](https://…) — $700 — best value.
+  Only use URLs from your web_search results; never make one up.
   Each line under 12 words. No extra tips or specs after the list. Then one question. Write site names like names: "Dell.com", not "dell.com". If the choices depend on something you don't know (budget, size, city),
   ask that first in one line instead of listing everything.
 - Be exact with their words: names, numbers, dates and units mean what they said
@@ -75,7 +77,8 @@ Looking things up (the web)
   schedules, anything recent), search the web with web_search. Never guess current facts.
 - Answer from what you found, in plain words, and say where it's from in a few words
   (e.g. "Dell.com lists…"). Put the pages you actually used in sources (their URLs).
-  Plain text only in the reply: no <cite> tags, no markup, no raw links.
+  Plain text in the reply: no <cite> tags and no raw links. The only markup allowed is a bold link
+  on an option's name (see "Small bites").
 - If they name a site, search only that site. For place-based questions (weather, "near me"),
   ask which city if you don't know it.
 - Look, never act: no buying, signing in, booking or filling in forms. Show options; they decide.
@@ -380,6 +383,19 @@ function cleanReply(t: string): string {
   return t.replace(/<\/?cite[^>]*>/gi, "").replace(/[ \t]{2,}/g, " ").trim();
 }
 
+// Links in a reply may only point to pages the web search really returned.
+// Any other link keeps its words and loses the link (no made-up or unsafe URLs).
+function safeLinks(t: string, allowed: Map<string, string>): string {
+  return t.replace(/\[([^\]]{1,120})\]\(([^)\s]{1,500})\)/g, (_m, label: string, url: string) =>
+    allowed.has(url) && /^https:\/\//.test(url) ? `[${label}](${url})` : label
+  );
+}
+
+// The same reply without link markup (for notes).
+function plainText(t: string): string {
+  return t.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\*\*/g, "");
+}
+
 // Mood-board directions: three looks to react to. Validated strictly.
 const TYPE_STYLES = ["serif", "sans", "rounded", "mono", "script"];
 function safeDirections(d: unknown) {
@@ -568,7 +584,7 @@ Deno.serve(async (req) => {
     .filter((p) => KINDS.includes(p.kind) && p.text)
     .slice(0, 3);
 
-  const reply = cleanReply(str(tool.reply, 8000)) || "I'm here. Could you say that another way?";
+  const reply = safeLinks(cleanReply(str(tool.reply, 8000)), found) || "I'm here. Could you say that another way?";
   const destination = str(tool.destination, 120) || null;
 
   // Quietly keep a one-liner for Search, after the reply is on its way.
@@ -577,7 +593,7 @@ Deno.serve(async (req) => {
   // Memory must be explicitly on (an app that sends no settings keeps nothing).
   const memoryOn = (body.settings as Record<string, unknown> | undefined)?.memory_on === true;
   if (note && memoryOn && !personal && !crisis && auth.startsWith("Bearer ")) {
-    const job = keepNote(auth, note, reply, destination);
+    const job = keepNote(auth, note, plainText(reply), destination);
     // deno-lint-ignore no-explicit-any
     const rt = (globalThis as any).EdgeRuntime;
     if (rt?.waitUntil) rt.waitUntil(job); else await job;
