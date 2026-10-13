@@ -117,8 +117,7 @@ struct NotesSearchView: View {
         }
         .padding(.horizontal, 16)
         .frame(minHeight: 52)
-        .background(Capsule().fill(Color.white.opacity(0.10)))
-        .overlay(Capsule().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+        .frostedCapsule()
     }
 
     @ViewBuilder
@@ -170,17 +169,23 @@ struct NotesSearchView: View {
                     .font(.caption.weight(.semibold))
                     .tracking(2)
                     .foregroundStyle(NorthstarChatStyle.label)
-                PillFlowLayout(spacing: 8) {
+                VStack(spacing: 10) {
                     ForEach(recent) { note in
                         Button { opened = note } label: {
-                            Text(Self.pillLabel(note))
-                                .font(.subheadline)
-                                .foregroundStyle(NorthstarChatStyle.soft)
-                                .lineLimit(1)
-                                .padding(.horizontal, 14)
-                                .frame(minHeight: 40)
-                                .background(Capsule().fill(Color.white.opacity(0.08)))
-                                .overlay(Capsule().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+                            HStack(spacing: 10) {
+                                Text(Self.pillLabel(note))
+                                    .font(.body)
+                                    .foregroundStyle(NorthstarChatStyle.text)
+                                    .lineLimit(1)
+                                Spacer(minLength: 8)
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(NorthstarChatStyle.label)
+                            }
+                            .padding(.horizontal, 18)
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                            .frostedCapsule()
+                            .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
                         .accessibilityHint("Opens this note")
@@ -194,10 +199,9 @@ struct NotesSearchView: View {
         .padding(.top, 8)
     }
 
-    /// Short pill text: the subject if there is one, otherwise the start of the note.
+    /// Pill text: the subject if there is one, otherwise the note (cut to one line by width).
     private static func pillLabel(_ note: Note) -> String {
-        let base = (note.subject?.isEmpty == false ? note.subject! : note.text)
-        return base.count > 28 ? String(base.prefix(26)) + "…" : base
+        note.subject?.isEmpty == false ? note.subject! : note.text
     }
 
     private func loadRecent() async {
@@ -375,4 +379,22 @@ enum Highlight {
 
 #Preview {
     NavigationStack { NotesSearchView() }
+}
+
+// MARK: - Frosted glass (same look as the chat field)
+
+extension View {
+    /// Frosted capsule: blur with a soft white tint, a light edge and a faint blue glow.
+    func frostedCapsule() -> some View {
+        self
+            .background {
+                ZStack {
+                    Capsule().fill(.ultraThinMaterial)
+                    Capsule().fill(Color.white.opacity(0.10))
+                }
+                .environment(\.colorScheme, .dark)
+            }
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
+            .shadow(color: Color(red: 0.45, green: 0.55, blue: 1.0).opacity(0.15), radius: 12)
+    }
 }
