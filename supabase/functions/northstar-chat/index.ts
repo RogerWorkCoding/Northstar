@@ -5,7 +5,7 @@
 // secrets, never in the app.
 //
 // Response (always includes `reply`, so older app versions keep working):
-// { reply, stage, stage_reason, personal, destination, heard[], proposed_saves[] }
+// { reply, stage, stage_reason, personal, destination, heard[], proposed_saves[], visual }
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = Deno.env.get("NORTHSTAR_MODEL") ?? "claude-sonnet-5-5";
@@ -50,6 +50,14 @@ const ENGINE_RULES = `How you work:
   Never propose saving feelings, mood, personality, health, money, or anything inferred.
   For quick factual questions, propose nothing. Usually 0–2 saves.
 - Reply: answer first, in plain words. Keep it short unless they asked for detail.
+- Visual (show, don't tell): ONLY when the person asks for something visual (a web page, website,
+  app screen, landing page, flyer, layout), include a simple wireframe in visual.svg. Otherwise omit visual.
+  Wireframe rules: one <svg> with viewBox="0 0 360 640" and no width/height; background rect fill #141E45;
+  section boxes fill #24306A with stroke #8EA0E6 (1px) and rx 8; text fill #FFFFFF, font-family system-ui,
+  font-size 13–18, short real labels from their request (e.g. "Fresh bread daily", "Order now");
+  image areas are boxes with a thin diagonal cross and the word "Photo". Grey-box layout only:
+  no colors beyond these, no <image>, no scripts, no links, no foreignObject, no styles, no event attributes.
+  Keep it under 60 elements. In the reply, describe the layout in one line and ask one question about it.
 - Always respond by calling the northstar_reply tool.`;
 
 const REPLY_TOOL = {
@@ -74,6 +82,15 @@ const REPLY_TOOL = {
           },
           required: ["group", "text"],
         },
+      },
+      visual: {
+        type: "object",
+        description: "Only for visual requests: a simple wireframe.",
+        properties: {
+          title: { type: "string", description: "Short name, e.g. 'Bakery home page'." },
+          svg: { type: "string", description: "One <svg> element following the wireframe rules." },
+        },
+        required: ["title", "svg"],
       },
       proposed_saves: {
         type: "array",
@@ -156,6 +173,19 @@ function memoryBlock(m: unknown): string {
     : "";
 }
 
+// Wireframes are drawing only. Anything that could run code or load from
+// the internet is refused, and the app shows them with JavaScript off.
+function safeVisual(v: unknown): { kind: "svg"; title: string; svg: string } | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const svg = str(o.svg, 40000);
+  const title = str(o.title, 80) || "Wireframe";
+  if (!/^<svg[\s>]/i.test(svg) || !/<\/svg>\s*$/i.test(svg)) return null;
+  const banned = /<script|<foreignObject|<image|<iframe|<object|<embed|<use\b|<style|<a[\s>]|\bon[a-z]+\s*=|javascript:|href\s*=|url\(|@import|<!ENTITY|<!DOCTYPE/i;
+  if (banned.test(svg)) return null;
+  return { kind: "svg", title, svg };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Use POST." }, 405);
@@ -199,7 +229,7 @@ Deno.serve(async (req) => {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 1500,
+      max_tokens: 4000,
       system,
       messages,
       tools: [REPLY_TOOL],
@@ -231,6 +261,7 @@ Deno.serve(async (req) => {
     .filter((h) => GROUPS.includes(h.group) && h.text)
     .slice(0, 6);
   const memoryOff = (body.settings as Record<string, unknown> | undefined)?.memory_on === false;
+  const visual = safeVisual(tool.visual);
   const proposed_saves = memoryOff ? [] : (Array.isArray(tool.proposed_saves) ? tool.proposed_saves : [])
     .map((p: Record<string, unknown>) => ({ kind: str(p?.kind, 20), text: str(p?.text, 200), reason: str(p?.reason, 200) }))
     .filter((p) => KINDS.includes(p.kind) && p.text)
@@ -244,5 +275,6 @@ Deno.serve(async (req) => {
     destination: str(tool.destination, 120) || null,
     heard,
     proposed_saves,
+    visual,
   });
 });

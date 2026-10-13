@@ -70,6 +70,10 @@ struct NorthstarReplyView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+            if let visual = insight?.visual {
+                WireframeCard(visual: visual)
+            }
+
             if let insight = guiding {
                 let pills = insight.heard.filter { !removedPills.contains($0) }
                 if !pills.isEmpty {
