@@ -248,16 +248,19 @@ Image and video generation (providers not yet verified for ownership and commerc
 
 ---
 
-## 12. Status (updated Oct 12, 2026)
+## 12. Status (updated Oct 13, 2026)
 
 **Built and live**
 - **Backend:** Supabase function `northstar-chat` calls Claude (key only in Supabase secrets). Prompt order: constitution, calm playbook v1 (with safety path), engine rules, settings, memory, corrections.
-- **Brain returns:** reply, stage + reason, personal, crisis, destination, heard pills, save suggestions, optional wireframe.
+- **Brain returns:** reply, stage + reason, personal, crisis, destination, heard pills, save suggestions, optional wireframe, and three directions when someone isn't sure of a style.
+- **Brain safety:** one retry when Claude is busy; a crisis safety net (first-person phrases always get the help card, even if Claude can't be reached).
 - **Data locked:** quiet (anonymous) sign-in; every table has an owner; row-level security on all four tables; old test rows backed up in `backup_20261012`.
 - **App:** talks to the Engine (no AI keys in the app), approved chat design, chat veil, frosted field, keyboard fix, app icon.
 
-**Tested on the live brain:** the 3 test scenarios, memory pickup in a new chat, pill corrections, the safety path, and settings (name, short answers, memory off, visuals off).
+**Engine v1: all 6 items built.** (1) stage, (2) heard pills, (3) memory + saves, (4) safety path, (5) settings, (6) show options instead of asking.
 
-**Waiting for Roger's iPhone test (pull requests):** #9 pills rule, #10 wireframes, #11 memory + corrections + undo + help card + Settings screen.
+**Brain tests:** `supabase/tests/engine-tests.js` (22 live cases, run in a browser) and `supabase/tests/crisis-net-test.js` (29 phrase checks, `node`). Run both after every brain change. Last run: 22/22 and 29/29.
 
-**Next step:** Roger tests #11 on iPhone → merge. Then Engine v1 item 6 (show options instead of asking: three mood-board directions), and build the Destinations screen (menu).
+**Waiting for Roger:** PR #13 (three directions) and PR #14 (brain safety, tests, review fixes). Merge #13 first, then #14, then test once on iPhone.
+
+**Next step:** Roger merges #13 → #14 and tests on iPhone. Then build the Destinations screen (menu).

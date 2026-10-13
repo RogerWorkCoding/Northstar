@@ -6,17 +6,20 @@ import SwiftUI
 
 struct DirectionsView: View {
     let directions: [NorthstarInsight.Direction]
+    /// Read from the chat, so it's always true to what was sent.
+    var chosenName: String? = nil
+    var canChoose: Bool = true
     var onChoose: (NorthstarInsight.Direction) -> Void = { _ in }
 
-    @State private var chosen: NorthstarInsight.Direction?
+    private var locked: Bool { chosenName != nil || !canChoose }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "square.grid.2x2")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                 Text("THREE DIRECTIONS")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .tracking(2)
             }
             .foregroundStyle(NorthstarChatStyle.label)
@@ -28,10 +31,11 @@ struct DirectionsView: View {
     }
 
     private func card(_ d: NorthstarInsight.Direction) -> some View {
-        let isChosen = chosen == d
+        let isChosen = chosenName == d.name
+        let dimmed = locked && !isChosen
         return VStack(alignment: .leading, spacing: 12) {
             Text(d.name)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.headline)
                 .foregroundStyle(.white)
 
             HStack(spacing: 8) {
@@ -45,7 +49,8 @@ struct DirectionsView: View {
                         )
                 }
             }
-            .accessibilityHidden(true)
+            .accessibilityElement()
+            .accessibilityLabel("Colors: " + d.palette.map(Color.spokenName(hex:)).joined(separator: ", "))
 
             Text("Aa  \(d.name)")
                 .font(d.sampleFont)
@@ -55,23 +60,22 @@ struct DirectionsView: View {
                 .accessibilityHidden(true)
 
             Text(d.mood)
-                .font(.system(size: 15))
+                .font(.subheadline)
                 .foregroundStyle(NorthstarChatStyle.soft)
                 .fixedSize(horizontal: false, vertical: true)
 
             if !d.keywords.isEmpty {
                 Text(d.keywords.joined(separator: " · "))
-                    .font(.system(size: 14))
+                    .font(.footnote)
                     .foregroundStyle(NorthstarChatStyle.label)
             }
 
             Button {
-                guard chosen == nil else { return }
-                withAnimation(.easeOut(duration: 0.2)) { chosen = d }
+                guard !locked else { return }
                 onChoose(d)
             } label: {
                 Text(isChosen ? "Chosen ✓" : "Choose this")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(isChosen ? .white : Color(red: 0.05, green: 0.09, blue: 0.21))
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .background(
@@ -81,8 +85,8 @@ struct DirectionsView: View {
                     )
             }
             .buttonStyle(.plain)
-            .disabled(chosen != nil && !isChosen)
-            .opacity(chosen != nil && !isChosen ? 0.4 : 1)
+            .disabled(locked)
+            .opacity(dimmed ? 0.4 : 1)
             .accessibilityLabel(isChosen ? "\(d.name), chosen" : "Choose \(d.name)")
         }
         .padding(16)
@@ -109,6 +113,21 @@ extension NorthstarInsight.Direction {
 }
 
 extension Color {
+    /// A plain spoken name for a color, for VoiceOver ("dark blue", "light gold").
+    static func spokenName(hex: String) -> String {
+        let v = UInt64(hex.trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0
+        let r = Double((v >> 16) & 0xFF) / 255, g = Double((v >> 8) & 0xFF) / 255, b = Double(v & 0xFF) / 255
+        let maxC = max(r, g, b), minC = min(r, g, b), light = (maxC + minC) / 2
+        let tone = light > 0.8 ? "light " : light < 0.25 ? "dark " : ""
+        if maxC - minC < 0.12 { return light > 0.9 ? "white" : light < 0.1 ? "black" : tone + "gray" }
+        var hue: Double
+        if maxC == r { hue = (g - b) / (maxC - minC) } else if maxC == g { hue = 2 + (b - r) / (maxC - minC) } else { hue = 4 + (r - g) / (maxC - minC) }
+        hue = (hue * 60).truncatingRemainder(dividingBy: 360); if hue < 0 { hue += 360 }
+        let names: [(Double, String)] = [(15, "red"), (45, "orange"), (65, "gold"), (160, "green"), (200, "teal"), (255, "blue"), (290, "purple"), (335, "pink"), (360, "red")]
+        let name = names.first { hue < $0.0 }?.1 ?? "red"
+        return tone + name
+    }
+
     /// Color from "#RRGGBB" (the brain only sends this format).
     init(hex: String) {
         let clean = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))

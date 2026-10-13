@@ -51,6 +51,10 @@ struct NorthstarReplyView: View {
     var onRemovePill: (String) -> Void = { _ in }
     /// The person picked one of the three directions.
     var onChooseDirection: (NorthstarInsight.Direction) -> Void = { _ in }
+    /// The direction already chosen (from the chat), if any.
+    var chosenDirection: String? = nil
+    /// Only the newest reply can be chosen from, and not while Northstar is thinking.
+    var canChooseDirection: Bool = true
 
     @State private var whyOpen = false
     @State private var removedPills: Set<NorthstarInsight.Heard> = []
@@ -86,7 +90,12 @@ struct NorthstarReplyView: View {
             }
 
             if let directions = insight?.directions, directions.count == 3 {
-                DirectionsView(directions: directions, onChoose: onChooseDirection)
+                DirectionsView(
+                    directions: directions,
+                    chosenName: chosenDirection,
+                    canChoose: canChooseDirection,
+                    onChoose: onChooseDirection
+                )
             }
 
             if let insight = guiding {

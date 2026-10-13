@@ -227,6 +227,33 @@ function correctionsBlock(c: unknown): string {
     : "";
 }
 
+// Safety net: clear first-person crisis phrases always get the help card,
+// even if the model missed it or the reply fell back to plain text.
+// Narrow on purpose ("this deadline is killing me" doesn't match).
+// First person only: "my phone is going to die" or "Suicide Squad poster" don't match.
+const CRISIS_PHRASES = [
+  /\bkill(ing)? myself\b/i,
+  /\bend(ing)? my life\b/i,
+  /\bend(ing)? it all\b/i,
+  /\bi (want|wanna|plan) to die\b/i,
+  /\bi('?m| am)? (feeling |being )?suicidal\b/i,
+  /\b(thinking about|thoughts of|considering) suicide\b/i,
+  /\b(hurt|harm|cutt?)(ing)? myself\b(?!\s+(shaving|cooking|by accident|accidentally|at|on|while|during|playing|a |some ))/i,
+  /\bself[- ]harm(ing)?\b/i,
+  /\bi (just |really |honestly )?(don'?t|do not) want to (be here|live|wake up|exist)( like this)?\b(?!\s+(in|for|at|with|on|there|near|by|until|through|during)\b)/i,
+  /\bbetter off without me\b/i,
+  /\bno reason to live\b/i,
+];
+function crisisNet(text: unknown): boolean {
+  // iPhone keyboards type curly apostrophes (’); match them like straight ones.
+  const t = str(text, 4000).replace(/[\u2018\u2019\u02BC]/g, "'");
+  return CRISIS_PHRASES.some((re) => re.test(t));
+}
+const CRISIS_FALLBACK =
+  "I'm really glad you told me. You don't have to go through this alone. " +
+  "If you're in the U.S., you can call or text 988 to reach someone right now, any time. " +
+  "If you're in danger, call 911 or your local emergency number. Are you safe right now?";
+
 // Mood-board directions: three looks to react to. Validated strictly.
 const TYPE_STYLES = ["serif", "sans", "rounded", "mono", "script"];
 function safeDirections(d: unknown) {
@@ -234,7 +261,7 @@ function safeDirections(d: unknown) {
   const out = d.slice(0, 3).map((x) => {
     const o = (x ?? {}) as Record<string, unknown>;
     const palette = (Array.isArray(o.palette) ? o.palette : [])
-      .map((c) => str(c, 7))
+      .map((c) => str(c, 20))
       .filter((c) => /^#[0-9A-Fa-f]{6}$/.test(c))
       .slice(0, 4);
     const keywords = (Array.isArray(o.keywords) ? o.keywords : [])
@@ -295,42 +322,63 @@ Deno.serve(async (req) => {
     correctionsBlock(body.corrections),
   ].filter(Boolean).join("\n\n");
 
-  const res = await fetch(ANTHROPIC_URL, {
-    method: "POST",
-    headers: {
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 4000,
-      system,
-      messages,
-      tools: [REPLY_TOOL],
-      tool_choice: { type: "auto" },
-    }),
+  const request = JSON.stringify({
+    model: MODEL,
+    max_tokens: 4000,
+    system,
+    messages,
+    tools: [REPLY_TOOL],
+    tool_choice: { type: "auto" },
   });
 
-  if (!res.ok) {
-    console.error("Claude error", res.status, (await res.text()).slice(0, 500));
-    return json({ error: "Northstar couldn't reach Claude. Try again." }, 502);
+  // One retry when Claude is busy (429, 5xx, 529 overloaded) or the network blips.
+  let data: Record<string, unknown> | null = null;
+  for (let attempt = 1; attempt <= 2 && !data; attempt++) {
+    try {
+      const res = await fetch(ANTHROPIC_URL, {
+        method: "POST",
+        headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: request,
+      });
+      if (res.ok) {
+        data = await res.json();
+      } else {
+        console.error("Claude error", res.status, "attempt", attempt, (await res.text()).slice(0, 300));
+        const busy = res.status === 429 || res.status >= 500;
+        if (!busy) break;
+      }
+    } catch (e) {
+      console.error("Claude fetch failed, attempt", attempt, String(e).slice(0, 200));
+    }
+    if (!data && attempt === 1) await new Promise((r) => setTimeout(r, 1200));
+  }
+  if (!data) {
+    // Even when the brain can't answer, someone in crisis still gets help.
+    const help = crisisNet(messages[messages.length - 1].content);
+    return json(help
+      ? { reply: CRISIS_FALLBACK, crisis: true, personal: true, stage: null, stage_reason: "", destination: null, heard: [], proposed_saves: [], visual: null, directions: [] }
+      : { error: "Northstar couldn't reach Claude. Try again." }, help ? 200 : 502);
   }
 
-  const data = await res.json();
   const blocks = (data.content ?? []) as Array<Record<string, unknown>>;
   const tool = blocks.find((b) => b.type === "tool_use")?.input as Record<string, unknown> | undefined;
 
   // Fallback: plain text if the tool wasn't used.
   if (!tool) {
     const text = blocks.filter((b) => b.type === "text").map((b) => str(b.text, 8000)).join("\n").trim();
-    return json({ reply: text || "I'm here. Could you say that another way?", stage: null, stage_reason: "", destination: null, heard: [], proposed_saves: [] });
+    const net = crisisNet(messages[messages.length - 1].content);
+    return json({
+      reply: text || (net ? CRISIS_FALLBACK : "I'm here. Could you say that another way?"),
+      stage: null, stage_reason: "", destination: null,
+      personal: net, crisis: net, heard: [], proposed_saves: [], visual: null, directions: [],
+    });
   }
 
   // Validate everything before it reaches the app.
   const stage = STAGES.includes(str(tool.stage)) ? str(tool.stage) : null;
   // Approved rule: personal conversations get no "What I heard" pills.
-  const crisis = tool.crisis === true;
+  // The model decides; the safety net only adds care, never removes it.
+  const crisis = tool.crisis === true || crisisNet(messages[messages.length - 1].content);
   const personal = tool.personal === true || crisis;
   const heard = personal ? [] : (Array.isArray(tool.heard) ? tool.heard : [])
     .map((h: Record<string, unknown>) => ({ group: str(h?.group, 10), text: str(h?.text, 60) }))
