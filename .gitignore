@@ -1,3 +1,16 @@
-Northstar/Secrets.swift
-Northstar/Secrets.swift
-Northstar/Secrets.swift
+# Secrets: never upload
+**/Secrets.swift
+*.env
+.env*
+
+# Mac clutter
+.DS_Store
+
+# Xcode personal settings (each person's own)
+xcuserdata/
+*.xcuserstate
+*.xcdebugger
+
+# Build output
+build/
+DerivedData/
