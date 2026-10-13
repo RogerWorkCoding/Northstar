@@ -238,9 +238,9 @@ const CRISIS_PHRASES = [
   /\bi (want|wanna|plan) to die\b/i,
   /\bi('?m| am)? (feeling |being )?suicidal\b/i,
   /\b(thinking about|thoughts of|considering) suicide\b/i,
-  /\bi('ve| have| keep| want to| wanna)? (been )?(hurt|harm|cutt?)(ing)? myself\b(?! (shaving|cooking|by accident|accidentally))/i,
+  /\b(hurt|harm|cutt?)(ing)? myself\b(?!\s+(shaving|cooking|by accident|accidentally|at|on|while|during|playing|a |some ))/i,
   /\bself[- ]harm(ing)?\b/i,
-  /\bi (just |really |honestly )?(don'?t|do not) want to (be here|live|wake up|exist)( anymore)?\s*([.!?,;]|$)/im,
+  /\bi (just |really |honestly )?(don'?t|do not) want to (be here|live|wake up|exist)( like this)?\b(?!\s+(in|for|at|with|on|there|near|by|until|through|during)\b)/i,
   /\bbetter off without me\b/i,
   /\bno reason to live\b/i,
 ];

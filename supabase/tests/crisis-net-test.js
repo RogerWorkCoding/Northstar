@@ -22,6 +22,9 @@ const SHOULD_MATCH = [
   "I self harm",
   "everyone would be better off without me",
   "there's no reason to live",
+  "I dont want to live anymore lol",
+  "I don't want to live like this anymore",
+  "hurting myself again",
 ];
 const SHOULD_NOT_MATCH = [
   "my phone is going to die",
@@ -33,6 +36,9 @@ const SHOULD_NOT_MATCH = [
   "I want to end the meeting early",
   "I don’t want to be here for the whole meeting",
   "I don’t want to live in Ohio",
+  "I cut myself a slice of cake",
+  "I hurt myself at the gym",
+  "I don’t want to be here until midnight",
 ];
 
 let fails = 0;
