@@ -86,6 +86,10 @@ struct NorthstarReplyView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+            if let sources = insight?.sources, !sources.isEmpty {
+                SourcesRow(sources: sources)
+            }
+
             if let visual = insight?.visual {
                 WireframeCard(visual: visual)
             }
@@ -418,6 +422,41 @@ struct PillFlowLayout: Layout {
             view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
             x += size.width + spacing
             rowHeight = max(rowHeight, size.height)
+        }
+    }
+}
+
+/// Where an answer came from: small tappable site names under the reply.
+struct SourcesRow: View {
+    let sources: [NorthstarInsight.Source]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "globe")
+                Text("SOURCES").tracking(2)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(NorthstarChatStyle.label)
+
+            PillFlowLayout(spacing: 8) {
+                ForEach(sources, id: \.self) { source in
+                    Link(destination: source.url) {
+                        HStack(spacing: 6) {
+                            Text(source.site).lineLimit(1)
+                            Image(systemName: "arrow.up.right").font(.caption2.weight(.semibold))
+                        }
+                        .font(.subheadline)
+                        .foregroundStyle(NorthstarChatStyle.soft)
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 36)
+                        .background(Capsule().fill(Color.white.opacity(0.08)))
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+                    }
+                    .accessibilityLabel("Source: \(source.title), \(source.site)")
+                    .accessibilityHint("Opens in Safari")
+                }
+            }
         }
     }
 }

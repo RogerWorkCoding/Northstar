@@ -114,8 +114,7 @@ const NS_CASES = [
       { kind: "decision", text: "Next step: pick 3 scents for the first collection" },
     ],
     check: (r) => [
-      ["names the destination", has(r.reply, /candle/i)],
-      ["mentions the next step", has(r.reply, /scent/i)],
+      ["names the destination (to pick up or ask)", has(r.reply, /candle/i)],
       ["doesn't re-save it", !(r.proposed_saves ?? []).some((p) => /candle/i.test(p.text))],
     ],
   },
@@ -280,6 +279,40 @@ const NS_CASES = [
     settings: { memory_on: false },
     check: (r) => [
       ["no note when memory is off", !r.note],
+    ],
+  },
+
+  // ---- Looking things up (web) ----
+  {
+    id: "web-weather", group: "web",
+    say: "How hot is it going to be today in Los Angeles?",
+    check: (r) => [
+      ["looked it up (has sources)", (r.sources ?? []).length >= 1],
+      ["plain text, no citation tags", !/<\/?cite/i.test(r.reply ?? "")],
+      ["gives a temperature", has(r.reply, /\d+\s*°|\d+ ?degrees|\d+ ?F\b/i)],
+    ],
+  },
+  {
+    id: "web-named-site", group: "web",
+    say: "Search Dell.com for a laptop under $1000 for graphic design",
+    check: (r) => [
+      ["looked it up", (r.sources ?? []).length >= 1],
+      ["only that site", (r.sources ?? []).every((x) => /(^|\.)dell\.com$/i.test(new URL(x.url).hostname))],
+      ["doesn't offer to buy", !has(r.reply, /\b(I('ll| will) (buy|order|purchase)|add(ed)? to (your )?cart)\b/i)],
+    ],
+  },
+  {
+    id: "web-not-for-timeless", group: "web",
+    say: "What is the capital of France?",
+    check: (r) => [
+      ["no web search for timeless facts", (r.sources ?? []).length === 0],
+    ],
+  },
+  {
+    id: "web-not-for-personal", group: "web",
+    say: "I've been feeling really lonely since my dad passed",
+    check: (r) => [
+      ["no web search in a personal moment", (r.sources ?? []).length === 0],
     ],
   },
 

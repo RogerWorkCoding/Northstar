@@ -5,7 +5,7 @@
 // secrets, never in the app.
 //
 // Response (always includes `reply`, so older app versions keep working):
-// { reply, stage, stage_reason, personal, crisis, destination, heard[], proposed_saves[], visual, directions[] }
+// { reply, stage, stage_reason, personal, crisis, destination, heard[], proposed_saves[], visual, directions[], sources[], note }
 //
 // Notes: after replying, the brain quietly keeps a one-line note of what the
 // person said (if it's worth finding later) so Search can find it. Never
@@ -65,10 +65,22 @@ Talking
 - Be honest about limits: Northstar can't create images, video, audio or files itself yet. Say so in one
   short line, then help with what moves them forward (the goal, who it's for, a short plan).
 
+Looking things up (the web)
+- When the answer depends on current or changing facts (weather, prices, products, news, opening hours,
+  schedules, anything recent), search the web with web_search. Never guess current facts.
+- Answer from what you found, in plain words, and say where it's from in a few words
+  (e.g. "Dell.com lists…"). Put the pages you actually used in sources (their URLs).
+  Plain text only in the reply: no <cite> tags, no markup, no raw links.
+- If they name a site, search only that site. For place-based questions (weather, "near me"),
+  ask which city if you don't know it.
+- Look, never act: no buying, signing in, booking or filling in forms. Show options; they decide.
+- Don't search for timeless knowledge, their own plans, or personal conversations.
+
 Using memory
 - Memory is theirs. Use it only when it changes the answer.
 - Work on what THIS message is about. Never decide it belongs to a saved project or choice unless they
-  say so or clearly refer to it. If it might be related, ask (e.g. "Is this for Sunrise Loaf, or something new?").
+  say so or clearly refer to it. If it might be related, ask first (e.g. "Is this for Sunrise Loaf, or
+  something new?") and keep your answer general until they say. Never write "I'm assuming…".
 - A saved choice applies only to the thing it was made for (a logo style is for the logo). To carry it
   over, ask first.
 
@@ -177,6 +189,12 @@ const REPLY_TOOL = {
           svg: { type: "string", description: "One <svg> element following the wireframe rules." },
         },
         required: ["title", "svg"],
+      },
+      sources: {
+        type: "array",
+        maxItems: 4,
+        description: "URLs of the web pages you actually used for this answer (only from web_search results).",
+        items: { type: "string" },
       },
       note: {
         type: "string",
@@ -352,6 +370,11 @@ async function keepNote(auth: string, text: string, context: string, subject: st
   }
 }
 
+// Replies are plain text: drop any citation markup the model adds after a web search.
+function cleanReply(t: string): string {
+  return t.replace(/<\/?cite[^>]*>/gi, "").replace(/[ \t]{2,}/g, " ").trim();
+}
+
 // Mood-board directions: three looks to react to. Validated strictly.
 const TYPE_STYLES = ["serif", "sans", "rounded", "mono", "script"];
 function safeDirections(d: unknown) {
@@ -422,14 +445,25 @@ Deno.serve(async (req) => {
     correctionsBlock(body.corrections),
   ].filter(Boolean).join("\n\n");
 
-  const request = JSON.stringify({
+  // Web search is part of the core: Claude decides when a question needs current facts.
+  // If they name a site ("search Dell.com"), searches stay on that site.
+  const lastText = messages[messages.length - 1].content;
+  const site = lastText.match(/\b((?:[a-z0-9-]+\.)+(?:com|org|net|io|co|gov|edu|ai|app|dev|us|uk|ca))\b/i)?.[1]?.toLowerCase();
+  const webTool = {
+    type: "web_search_20250305",
+    name: "web_search",
+    max_uses: 3,
+    ...(site ? { allowed_domains: [site] } : {}),
+  };
+  const buildRequest = (withWeb: boolean) => JSON.stringify({
     model: MODEL,
     max_tokens: 4000,
     system,
     messages,
-    tools: [REPLY_TOOL],
+    tools: withWeb ? [webTool, REPLY_TOOL] : [REPLY_TOOL],
     tool_choice: { type: "auto" },
   });
+  let withWeb = true;
 
   // One retry when Claude is busy (429, 5xx, 529 overloaded) or the network blips.
   let data: Record<string, unknown> | null = null;
@@ -438,12 +472,19 @@ Deno.serve(async (req) => {
       const res = await fetch(ANTHROPIC_URL, {
         method: "POST",
         headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-        body: request,
+        body: buildRequest(withWeb),
       });
       if (res.ok) {
         data = await res.json();
       } else {
-        console.error("Claude error", res.status, "attempt", attempt, (await res.text()).slice(0, 300));
+        const detail = (await res.text()).slice(0, 300);
+        console.error("Claude error", res.status, "attempt", attempt, detail);
+        // Web search not enabled for this account (or a bad domain): answer without it.
+        if (res.status === 400 && withWeb) {
+          withWeb = false;
+          attempt--; // this retry doesn't count
+          continue;
+        }
         const busy = res.status === 429 || res.status >= 500;
         if (!busy) break;
       }
@@ -461,16 +502,34 @@ Deno.serve(async (req) => {
   }
 
   const blocks = (data.content ?? []) as Array<Record<string, unknown>>;
-  const tool = blocks.find((b) => b.type === "tool_use")?.input as Record<string, unknown> | undefined;
+  const tool = blocks.find((b) => b.type === "tool_use" && b.name === "northstar_reply")?.input as
+    | Record<string, unknown>
+    | undefined;
+
+  // Pages the web search really returned. Sources must come from these (no made-up links).
+  const found = new Map<string, string>(); // url -> title
+  for (const b of blocks) {
+    if (b.type !== "web_search_tool_result" || !Array.isArray(b.content)) continue;
+    for (const r of b.content as Array<Record<string, unknown>>) {
+      const url = str(r.url, 500);
+      if (r.type === "web_search_result" && /^https:\/\//.test(url)) found.set(url, str(r.title, 120) || url);
+    }
+  }
+  const sourcesFrom = (picked: unknown) => {
+    const urls = (Array.isArray(picked) ? picked : []).map((u) => str(u, 500)).filter((u) => found.has(u));
+    const list = urls.length ? urls : [...found.keys()].slice(0, 3);
+    return [...new Set(list)].slice(0, 4).map((url) => ({ title: found.get(url)!, url }));
+  };
 
   // Fallback: plain text if the tool wasn't used.
   if (!tool) {
     const text = blocks.filter((b) => b.type === "text").map((b) => str(b.text, 8000)).join("\n").trim();
     const net = crisisNet(messages[messages.length - 1].content);
     return json({
-      reply: text || (net ? CRISIS_FALLBACK : "I'm here. Could you say that another way?"),
+      reply: cleanReply(text) || (net ? CRISIS_FALLBACK : "I'm here. Could you say that another way?"),
       stage: null, stage_reason: "", destination: null,
       personal: net, crisis: net, heard: [], proposed_saves: [], visual: null, directions: [],
+      sources: net ? [] : sourcesFrom([]),
     });
   }
 
@@ -494,7 +553,7 @@ Deno.serve(async (req) => {
     .filter((p) => KINDS.includes(p.kind) && p.text)
     .slice(0, 3);
 
-  const reply = str(tool.reply, 8000) || "I'm here. Could you say that another way?";
+  const reply = cleanReply(str(tool.reply, 8000)) || "I'm here. Could you say that another way?";
   const destination = str(tool.destination, 120) || null;
 
   // Quietly keep a one-liner for Search, after the reply is on its way.
@@ -520,6 +579,7 @@ Deno.serve(async (req) => {
     proposed_saves,
     visual,
     directions,
+    sources: crisis ? [] : sourcesFrom(tool.sources),
     // The one-liner kept for Search (empty when nothing was kept). Not shown in chat.
     note: note && memoryOn && !personal && !crisis ? note : "",
   });
