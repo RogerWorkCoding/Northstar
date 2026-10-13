@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
       system,
       messages,
       tools: [REPLY_TOOL],
-      tool_choice: { type: "tool", name: "northstar_reply" },
+      tool_choice: { type: "auto" },
     }),
   });
 
