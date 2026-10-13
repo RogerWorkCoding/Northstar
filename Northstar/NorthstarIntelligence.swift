@@ -8,63 +8,22 @@ struct NorthstarIntelligence {
 
         let text = prompt.lowercased()
 
-        // PDF + Documents
+        // Engine first: everything goes to Northstar's brain, which decides
+        // how to help (guidance, wireframes, honest "I can't do that yet").
+        // Only clear, explicit commands for app features are caught here.
 
-        if text.contains("pdf") ||
-           text.contains("document") ||
-           text.contains("create document") ||
-           text.contains("make document") ||
-           text.contains("generate document") ||
-           text.contains("create pdf") ||
-           text.contains("make pdf") ||
-           text.contains("generate pdf") ||
-           text.contains("save pdf") ||
-           text.contains("brief") {
-
+        // PDF (explicit command only)
+        let pdfCommands = ["create pdf", "make pdf", "make a pdf", "create a pdf",
+                           "generate pdf", "save pdf", "save as pdf", "export pdf"]
+        if pdfCommands.contains(where: { text.contains($0) }) {
             return .documentCreation
         }
 
-        // Images
-
-        if text.contains("create image") ||
-           text.contains("generate image") ||
-           text.contains("logo") ||
-           text.contains("illustration") {
-
-            return .imageGeneration
-        }
-
-        // Video
-
-        if text.contains("video") {
-
-            return .videoGeneration
-        }
-
-        // Website
-
-        if text.contains("website") ||
-           text.contains("web design") ||
-           text.contains("landing page") ||
-           text.contains("web page") {
-
-            return .webDesign
-        }
-
-        // Image Analysis
-
-        if text.contains("photo") ||
-           text.contains("picture") ||
-           text.contains("analyze image") {
-
+        // Look at a photo (explicit command only)
+        let analysisCommands = ["analyze image", "analyze photo", "analyze picture",
+                                "look at this photo", "look at this picture"]
+        if analysisCommands.contains(where: { text.contains($0) }) {
             return .imageAnalysis
-        }
-
-        // Projects
-
-        if text.contains("project") {
-
-            return .projectGuidance
         }
 
         return .conversation
