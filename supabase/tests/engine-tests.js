@@ -298,6 +298,8 @@ const NS_CASES = [
     check: (r) => [
       ["looked it up", (r.sources ?? []).length >= 1],
       ["only that site", (r.sources ?? []).every((x) => /(^|\.)dell\.com$/i.test(new URL(x.url).hostname))],
+      ["one source per site", new Set((r.sources ?? []).map((x) => new URL(x.url).hostname.replace(/^www\./, ""))).size === (r.sources ?? []).length],
+      ["small bites (3 options max, short)", (r.reply ?? "").length < 600 && ((r.reply ?? "").match(/\$\d/g) ?? []).length <= 3],
       ["doesn't offer to buy", !has(r.reply, /\b(I('ll| will) (buy|order|purchase)|add(ed)? to (your )?cart)\b/i)],
     ],
   },

@@ -124,7 +124,9 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         crisis = (try? c.decodeIfPresent(Bool.self, forKey: .crisis)) ?? false
         directions = (try? c.decodeIfPresent([Direction].self, forKey: .directions)) ?? []
         // Only https links are shown.
+        // Only https links, and one per site (the brain also does this).
+        var seenSites = Set<String>()
         sources = ((try? c.decodeIfPresent([Source].self, forKey: .sources)) ?? [])
-            .filter { $0.url.scheme == "https" }
+            .filter { $0.url.scheme == "https" && seenSites.insert($0.site).inserted }
     }
 }

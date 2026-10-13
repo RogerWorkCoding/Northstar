@@ -58,6 +58,11 @@ const CORE_RULES = `How you work (core rules, for every subject):
 Talking
 - Answer first, in plain words. Keep it short unless they asked for detail.
 - One question at a time, and only when the answer changes what you do next.
+- Small bites: never a wall of facts. When there are choices (products, places, plans, ideas), show at most
+  3, one short line each, as a list:
+  • Name — key fact (e.g. price) — who it's best for
+  Then one question. If the choices depend on something you don't know (budget, size, city),
+  ask that first in one line instead of listing everything.
 - Be exact with their words: names, numbers, dates and units mean what they said
   (a month is a month, not a day). If a detail is vague and it matters, ask one short question
   (e.g. "Do you have a day in April in mind?").
@@ -517,8 +522,18 @@ Deno.serve(async (req) => {
   }
   const sourcesFrom = (picked: unknown) => {
     const urls = (Array.isArray(picked) ? picked : []).map((u) => str(u, 500)).filter((u) => found.has(u));
-    const list = urls.length ? urls : [...found.keys()].slice(0, 3);
-    return [...new Set(list)].slice(0, 4).map((url) => ({ title: found.get(url)!, url }));
+    const list = urls.length ? urls : [...found.keys()];
+    // One per site: "dell.com" once, opening its most relevant page.
+    const seen = new Set<string>();
+    const out: { title: string; url: string }[] = [];
+    for (const url of list) {
+      const site = new URL(url).hostname.replace(/^www\./, "");
+      if (seen.has(site)) continue;
+      seen.add(site);
+      out.push({ title: found.get(url)!, url });
+      if (out.length === 3) break;
+    }
+    return out;
   };
 
   // Fallback: plain text if the tool wasn't used.
