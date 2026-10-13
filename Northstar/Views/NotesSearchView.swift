@@ -12,7 +12,17 @@ struct NotesSearchView: View {
     @State private var searched = ""          // the query the results belong to
     @State private var opened: Note?
     @State private var deleteFailed = false
+    @State private var recent: [Note] = []      // newest notes, shown as pills when not searching
+    @State private var hintIndex = 0            // which rotating hint is showing
     @FocusState private var fieldFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The search field's hint rotates slowly (still with Reduce Motion, stops when typing).
+    private static let hints = [
+        "Find anything you've said",
+        "Type a word or a sentence",
+        "Finds it by words and meaning",
+    ]
 
     private let notes = NotesService()
 
@@ -32,6 +42,18 @@ struct NotesSearchView: View {
         .navigationTitle("Search")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { fieldFocused = true }
+        .task { await loadRecent() }
+        // Rotate the hint every 4 seconds while the field is empty.
+        .task(id: query.isEmpty) {
+            guard query.isEmpty, !reduceMotion else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(4))
+                guard !Task.isCancelled, query.isEmpty else { return }
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    hintIndex = (hintIndex + 1) % Self.hints.count
+                }
+            }
+        }
         // Search a moment after typing stops.
         .task(id: query) {
             let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -47,7 +69,7 @@ struct NotesSearchView: View {
         }
         .sheet(item: $opened) { note in
             NoteDetailSheet(note: note) {
-                Task { await delete(note) }
+                Task { await delete(note); await loadRecent() }
                 opened = nil
             }
             .presentationDetents([.medium, .large])
@@ -66,8 +88,22 @@ struct NotesSearchView: View {
             Image(systemName: "magnifyingglass")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(NorthstarChatStyle.label)
-            TextField("", text: $query, prompt: Text("A word or a sentence").foregroundStyle(NorthstarChatStyle.label))
+            TextField("", text: $query)
                 .focused($fieldFocused)
+                .accessibilityLabel("Search")
+                .accessibilityHint(Self.hints.joined(separator: ". "))
+                .background(alignment: .leading) {
+                    // The rotating hint (a soft fade, one line at a time).
+                    if query.isEmpty {
+                        Text(Self.hints[reduceMotion ? 0 : hintIndex])
+                            .foregroundStyle(NorthstarChatStyle.label)
+                            .lineLimit(1)
+                            .id(hintIndex)
+                            .transition(.opacity)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
                 .foregroundStyle(.white)
                 .font(.body)
                 .submitLabel(.search)
@@ -91,11 +127,7 @@ struct NotesSearchView: View {
             message(icon: "exclamationmark.triangle", title: errorMessage, detail: "Check your connection and try again.")
         } else if searched.isEmpty || (isSearching && results.isEmpty) {
             if isSearching { VStack { ProgressView().tint(.white).padding(.top, 48); Spacer() } }
-            else {
-                message(icon: "text.magnifyingglass",
-                        title: "Find anything you've said",
-                        detail: "Type a word or a sentence. Northstar finds it by words and by meaning.")
-            }
+            else { recentPills }
         } else if results.isEmpty && !isSearching {
             message(icon: "magnifyingglass", title: "Nothing found", detail: "Try other words, or say it a different way.")
         } else {
@@ -128,6 +160,51 @@ struct NotesSearchView: View {
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.immediately)
         .opacity(isSearching ? 0.6 : 1)
+    }
+
+    /// The newest notes as pills. Tap one to open it.
+    private var recentPills: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !recent.isEmpty {
+                Text("RECENT")
+                    .font(.caption.weight(.semibold))
+                    .tracking(2)
+                    .foregroundStyle(NorthstarChatStyle.label)
+                PillFlowLayout(spacing: 8) {
+                    ForEach(recent) { note in
+                        Button { opened = note } label: {
+                            Text(Self.pillLabel(note))
+                                .font(.subheadline)
+                                .foregroundStyle(NorthstarChatStyle.soft)
+                                .lineLimit(1)
+                                .padding(.horizontal, 14)
+                                .frame(minHeight: 40)
+                                .background(Capsule().fill(Color.white.opacity(0.08)))
+                                .overlay(Capsule().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Opens this note")
+                    }
+                }
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+    }
+
+    /// Short pill text: the subject if there is one, otherwise the start of the note.
+    private static func pillLabel(_ note: Note) -> String {
+        let base = (note.subject?.isEmpty == false ? note.subject! : note.text)
+        return base.count > 28 ? String(base.prefix(26)) + "…" : base
+    }
+
+    private func loadRecent() async {
+        guard let newest = try? await notes.recent(limit: 12) else { return }
+        // One pill per subject, newest first, at most 4.
+        var seen = Set<String>()
+        recent = Array(newest.filter { seen.insert(Self.pillLabel($0).lowercased()).inserted }.prefix(4))
     }
 
     private func message(icon: String, title: String, detail: String) -> some View {
