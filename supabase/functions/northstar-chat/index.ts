@@ -132,7 +132,7 @@ const SKILLS: Record<string, { when: RegExp; rules: string }> = {
   section boxes fill #24306A with stroke #8EA0E6 (1px) and rx 8; text fill #FFFFFF, font-family system-ui,
   font-size 13–18, short real labels from their request; image areas are boxes with a thin diagonal cross
   and the word "Photo". Grey-box layout only: no colors beyond these, no <image>, no scripts, no links,
-  no foreignObject, no styles, no event attributes. Under 60 elements. In the reply, describe the layout
+  no foreignObject, no styles, no event attributes. Under 40 elements; keep it simple. In the reply, describe the layout
   in one line and ask one question about it.
 - Options instead of asking: when they want something made (a brand, website, poster, space, style) but
   haven't described the look, or say they're not sure, offer exactly 3 very different directions in
@@ -494,15 +494,23 @@ Deno.serve(async (req) => {
   // Prompt order: constitution → playbook → core rules → skills → settings → memory.
   const skills = skillsFor(messages);
   const crew = str(body.crew, 20) || "calm";
-  const system = [
+  // Two parts: the rules (the same for everyone, cached by Claude so it's faster and
+  // cheaper) and this person's settings, memory and corrections (change each time).
+  const rulesPart = [
     CONSTITUTION,
     PLAYBOOKS[crew] ?? PLAYBOOKS.calm,
     CORE_RULES,
     ...skills.map((name) => SKILLS[name].rules),
+  ].join("\n\n");
+  const personPart = [
     settingsRules(body.settings),
     memoryBlock(body.memory),
     correctionsBlock(body.corrections),
   ].filter(Boolean).join("\n\n");
+  const system = [
+    { type: "text", text: rulesPart, cache_control: { type: "ephemeral" } },
+    ...(personPart ? [{ type: "text", text: personPart }] : []),
+  ];
 
   // Web search is part of the core: Claude decides when a question needs current facts.
   // If they name a site ("search Dell.com"), searches stay on that site.
@@ -527,6 +535,7 @@ Deno.serve(async (req) => {
     system,
     messages,
     tools: withWeb ? [webTool, REPLY_TOOL] : [REPLY_TOOL],
+    // (The tools are part of the cached prefix too: they come before the rules.)
     tool_choice: { type: "auto" },
   });
   let withWeb = true;
@@ -542,6 +551,8 @@ Deno.serve(async (req) => {
       });
       if (res.ok) {
         data = await res.json();
+        const u = (data?.usage ?? {}) as Record<string, number>;
+        console.log("usage", JSON.stringify({ in: u.input_tokens, out: u.output_tokens, cached: u.cache_read_input_tokens, wrote: u.cache_creation_input_tokens }));
       } else {
         const detail = (await res.text()).slice(0, 300);
         console.error("Claude error", res.status, "attempt", attempt, detail);
