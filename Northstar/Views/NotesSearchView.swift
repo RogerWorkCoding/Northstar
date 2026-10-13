@@ -228,7 +228,7 @@ private struct NoteDetailSheet: View {
                     .font(.footnote)
                     .foregroundStyle(NorthstarChatStyle.label)
 
-                    block(label: "YOU SAID", text: note.text, strong: true)
+                    block(label: "NOTED", text: note.text, strong: true)
 
                     if let context = note.context, !context.isEmpty {
                         block(label: "NORTHSTAR SAID", text: context, strong: false)

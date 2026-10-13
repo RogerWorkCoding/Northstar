@@ -57,6 +57,17 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         let svg: String
     }
 
+    /// A web page Northstar used for its answer (checked on the server: real search results only).
+    nonisolated struct Source: Hashable, Sendable, Decodable {
+        let title: String
+        let url: URL
+
+        /// Short site name for the link, e.g. "dell.com".
+        var site: String {
+            (url.host() ?? title).replacingOccurrences(of: "www.", with: "")
+        }
+    }
+
     /// One look to react to: name, mood, keywords, colors and a type style.
     nonisolated struct Direction: Hashable, Sendable, Decodable {
         let name: String
@@ -81,6 +92,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let crisis: Bool
     /// "Show options instead of asking": three directions, or none.
     let directions: [Direction]
+    /// Web pages used for this answer (empty when Northstar didn't look anything up).
+    let sources: [Source]
 
     /// Approved design rule: stage, pills and save cards only show when
     /// Northstar is guiding. Quick questions get just the answer.
@@ -97,6 +110,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case visual
         case crisis
         case directions
+        case sources
     }
 
     init(from decoder: Decoder) throws {
@@ -109,5 +123,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         visual = try? c.decodeIfPresent(Visual.self, forKey: .visual)
         crisis = (try? c.decodeIfPresent(Bool.self, forKey: .crisis)) ?? false
         directions = (try? c.decodeIfPresent([Direction].self, forKey: .directions)) ?? []
+        // Only https links are shown.
+        sources = ((try? c.decodeIfPresent([Source].self, forKey: .sources)) ?? [])
+            .filter { $0.url.scheme == "https" }
     }
 }
