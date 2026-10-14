@@ -28,6 +28,8 @@ struct NorthstarEngineClient {
         let preferred_name: String
         let show_visuals: Bool
         let memory_on: Bool
+        /// The phone's time zone (e.g. "America/Los_Angeles"), so "today" and "now" are right.
+        let timezone: String
     }
 
     nonisolated private struct Request: Encodable, Sendable {
@@ -64,7 +66,8 @@ struct NorthstarEngineClient {
                 answer_length: $0.answerLength.rawValue,
                 preferred_name: $0.preferredName,
                 show_visuals: $0.showVisuals,
-                memory_on: $0.memoryOn
+                memory_on: $0.memoryOn,
+                timezone: TimeZone.current.identifier
             )
         }
 
