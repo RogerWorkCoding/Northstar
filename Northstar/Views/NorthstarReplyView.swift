@@ -115,6 +115,10 @@ struct NorthstarReplyView: View {
                 PlacesMapCard(places: places)
             }
 
+            if let shots = insight?.shots, !shots.isEmpty {
+                ShotCardsView(shots: shots)
+            }
+
             if let sources = insight?.sources, !sources.isEmpty {
                 SourcesRow(sources: sources)
             }

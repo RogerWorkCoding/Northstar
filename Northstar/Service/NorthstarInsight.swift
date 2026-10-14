@@ -83,6 +83,14 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     }
 
     /// A web page Northstar used for its answer (checked on the server: real search results only).
+    /// A video shot card: paste the prompt into a video tool like Google Flow.
+    nonisolated struct Shot: Hashable, Sendable, Decodable {
+        let title: String
+        let seconds: Int
+        let framing: String
+        let prompt: String
+    }
+
     /// A real place Northstar recommends; the app finds it in Apple Maps.
     nonisolated struct Place: Hashable, Sendable, Decodable {
         let name: String
@@ -128,6 +136,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let sources: [Source]
     /// Real places to show on a map (empty for most replies).
     let places: [Place]
+    /// Video shot cards (empty unless they're making a video).
+    let shots: [Shot]
     /// A line from an earlier conversation that matches (shown as a "From before" card).
     let fromBefore: [Note]
     /// Subjects: a new one to keep, or a kept one that was just updated.
@@ -153,6 +163,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case directions
         case sources
         case places
+        case shots
         case fromBefore = "from_before"
         case subjectOffer = "subject_offer"
         case chatTitle = "chat_title"
@@ -175,6 +186,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         sources = ((try? c.decodeIfPresent([Source].self, forKey: .sources)) ?? [])
             .filter { $0.url.scheme == "https" && seenSites.insert($0.site).inserted }
         places = Array(((try? c.decodeIfPresent([Place].self, forKey: .places)) ?? []).prefix(5))
+        shots = Array(((try? c.decodeIfPresent([Shot].self, forKey: .shots)) ?? []).prefix(5))
         fromBefore = (try? c.decodeIfPresent([Note].self, forKey: .fromBefore)) ?? []
         subjectOffer = try? c.decodeIfPresent(SubjectOffer.self, forKey: .subjectOffer)
         chatTitle = try? c.decodeIfPresent(String.self, forKey: .chatTitle)
