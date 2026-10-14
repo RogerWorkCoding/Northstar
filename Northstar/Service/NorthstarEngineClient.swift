@@ -9,6 +9,8 @@ struct NorthstarEngineClient {
     struct EngineReply: Sendable {
         let text: String
         let insight: NorthstarInsight?
+        /// True when Northstar couldn't answer (the message is an error, not a reply to keep).
+        var failed: Bool = false
     }
 
     nonisolated private struct Turn: Encodable, Sendable {
@@ -37,6 +39,8 @@ struct NorthstarEngineClient {
         let memory: [MemoryItem]
         let corrections: [String]
         let settings: SettingsPayload?
+        /// The saved chat this message belongs to (so notes can open their chat).
+        let chat_id: String?
     }
 
     nonisolated private struct Reply: Decodable, Sendable {
@@ -59,7 +63,8 @@ struct NorthstarEngineClient {
         for messages: [MessageModel],
         memory: [MemoryItem] = [],
         corrections: [String] = [],
-        settings: EngineSettings? = nil
+        settings: EngineSettings? = nil,
+        chatId: UUID? = nil
     ) async -> EngineReply {
         let settingsPayload = settings.map {
             SettingsPayload(
@@ -95,7 +100,8 @@ struct NorthstarEngineClient {
                         messages: Array(turns),
                         memory: Array(memory.prefix(20)),
                         corrections: Array(corrections.prefix(10)),
-                        settings: settingsPayload
+                        settings: settingsPayload,
+                        chat_id: chatId?.uuidString
                     )
                 )
             )
@@ -105,13 +111,13 @@ struct NorthstarEngineClient {
                 return EngineReply(text: text, insight: result.insight)
             }
             print("Northstar Engine error:", result.error ?? "empty reply")
-            return EngineReply(text: "Northstar couldn't answer right now. Please try again.", insight: nil)
+            return EngineReply(text: "Northstar couldn't answer right now. Please try again.", insight: nil, failed: true)
 
         } catch is CancellationError {
-            return EngineReply(text: "", insight: nil)
+            return EngineReply(text: "", insight: nil, failed: true)
         } catch {
             print("Northstar Engine request failed:", error.localizedDescription)
-            return EngineReply(text: "I couldn't connect right now. Please try again.", insight: nil)
+            return EngineReply(text: "I couldn't connect right now. Please try again.", insight: nil, failed: true)
         }
     }
 

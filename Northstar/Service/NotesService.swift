@@ -12,9 +12,11 @@ nonisolated struct Note: Identifiable, Hashable, Sendable, Decodable {
     let context: String?      // what Northstar answered (short)
     let subject: String?      // the goal it belongs to, if any
     let createdAt: Date
+    let chatId: UUID?         // the chat it came from (newer notes)
 
     enum CodingKeys: String, CodingKey {
         case id, text, context, subject
+        case chatId = "chat_id"
         case createdAt = "created_at"
     }
 
@@ -24,6 +26,7 @@ nonisolated struct Note: Identifiable, Hashable, Sendable, Decodable {
         text = try c.decode(String.self, forKey: .text)
         context = try c.decodeIfPresent(String.self, forKey: .context)
         subject = try c.decodeIfPresent(String.self, forKey: .subject)
+        chatId = try? c.decodeIfPresent(UUID.self, forKey: .chatId)
         // Postgres sends dates with or without fractional seconds.
         let raw = try c.decode(String.self, forKey: .createdAt)
         createdAt = Note.parseDate(raw) ?? Date()
@@ -58,7 +61,7 @@ struct NotesService {
     /// The most recent notes (for Export).
     func recent(limit: Int = 500) async throws -> [Note] {
         try await client.from("notes")
-            .select("id, text, context, subject, created_at")
+            .select("id, text, context, subject, created_at, chat_id")
             .order("created_at", ascending: false)
             .limit(limit)
             .execute()

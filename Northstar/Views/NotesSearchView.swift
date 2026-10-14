@@ -5,6 +5,8 @@ import SwiftUI
 // Only the matching one-liners are shown, never the whole list.
 
 struct NotesSearchView: View {
+    /// Opens a saved chat (from a note's "Open the chat").
+    var onOpenChat: (UUID) -> Void = { _ in }
     @State private var query = ""
     @State private var results: [Note] = []
     @State private var isSearching = false
@@ -78,10 +80,13 @@ struct NotesSearchView: View {
             await run(q)
         }
         .sheet(item: $opened) { note in
-            NoteDetailSheet(note: note) {
+            NoteDetailSheet(note: note, onDelete: {
                 Task { await delete(note); await loadRecent() }
                 opened = nil
-            }
+            }, onOpenChat: { id in
+                opened = nil
+                onOpenChat(id)
+            })
             .presentationDetents([.medium, .large])
         }
         .alert("Couldn't change that subject", isPresented: $subjectFailed) {
@@ -351,6 +356,7 @@ private struct NoteRow: View {
 private struct NoteDetailSheet: View {
     let note: Note
     var onDelete: () -> Void
+    var onOpenChat: (UUID) -> Void = { _ in }
 
     var body: some View {
         ZStack {
@@ -371,6 +377,18 @@ private struct NoteDetailSheet: View {
 
                     if let context = note.context, !context.isEmpty {
                         block(label: "NORTHSTAR SAID", text: context, strong: false)
+                    }
+
+                    if let chatId = note.chatId {
+                        Button { onOpenChat(chatId) } label: {
+                            Label("Open the chat", systemImage: "bubble.left.and.bubble.right")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .background(Capsule().fill(Color(red: 0.91, green: 0.93, blue: 1.0)))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 8)
                     }
 
                     Button(role: .destructive, action: onDelete) {

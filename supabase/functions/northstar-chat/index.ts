@@ -238,6 +238,10 @@ const REPLY_TOOL = {
         description: "URLs of the web pages you actually used for this answer (only from web_search results).",
         items: { type: "string" },
       },
+      chat_title: {
+        type: "string",
+        description: "First reply of a chat only: a 2–5 word title for this conversation (e.g. 'Garden raised beds').",
+      },
       subject: {
         type: "object",
         description: "At most one subject action: start a new subject, update a kept one, or mark it done.",
@@ -504,7 +508,7 @@ function subjectsBlock(subjects: Subject[]): string {
 // How close two notes must be to count as the same thing said twice
 // (0 = identical). Small on purpose: "logo" and "website" stay separate notes.
 const NEAR_COPY = 0.06;
-async function keepNote(auth: string, text: string, context: string, subject: string | null, subjectId: string | null = null) {
+async function keepNote(auth: string, text: string, context: string, subject: string | null, subjectId: string | null = null, chatId: string | null = null) {
   try {
     const embedding = Array.from(await meaning().run(text, { mean_pool: true, normalize: true }) as number[]);
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
@@ -513,6 +517,7 @@ async function keepNote(auth: string, text: string, context: string, subject: st
     });
     const row: Record<string, unknown> = { text, context: context.slice(0, 400), subject, embedding: JSON.stringify(embedding) };
     if (subjectId) row.subject_id = subjectId;
+    if (chatId) row.chat_id = chatId;
 
     // Near-copy? If they already said almost exactly this, refresh that note
     // (newest wording, today's date) instead of keeping a second one.
@@ -532,7 +537,12 @@ async function keepNote(auth: string, text: string, context: string, subject: st
       return;
     }
 
-    const { error } = await db.from("notes").insert(row);
+    let { error } = await db.from("notes").insert(row);
+    if (error?.code === "23503" && row.chat_id) {
+      // The chat was deleted: keep the note anyway, without the link.
+      delete row.chat_id;
+      ({ error } = await db.from("notes").insert(row));
+    }
     // 23505 = already kept (no duplicates). Anything else is logged, never shown.
     if (error && error.code !== "23505") console.error("note not kept:", error.code, error.message.slice(0, 200));
   } catch (e) {
@@ -1016,7 +1026,8 @@ Deno.serve(async (req) => {
   // Quietly keep a one-liner for Search, after the reply is on its way.
   const note = str(tool.note, 300);
   if (note && memoryOn && !personal && !crisis && auth.startsWith("Bearer ")) {
-    const job = keepNote(auth, note, plainText(reply), destination, linkedSubjectId);
+    const chatId = /^[0-9a-f-]{36}$/i.test(str(body.chat_id, 40)) ? str(body.chat_id, 40) : null;
+    const job = keepNote(auth, note, plainText(reply), destination, linkedSubjectId, chatId);
     // deno-lint-ignore no-explicit-any
     const rt = (globalThis as any).EdgeRuntime;
     if (rt?.waitUntil) rt.waitUntil(job); else await job;
@@ -1033,6 +1044,8 @@ Deno.serve(async (req) => {
     proposed_saves,
     subject_offer,
     subject_update,
+    // A short name for a new chat (first reply only), for History.
+    chat_title: allTurns.length === 1 ? str(tool.chat_title, 60) || null : null,
     visual,
     directions,
     sources: crisis ? [] : sourcesFrom(tool.sources),

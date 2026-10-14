@@ -124,6 +124,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let fromBefore: [Note]
     /// Subjects: a new one to keep, or a kept one that was just updated.
     let subjectOffer: SubjectOffer?
+    /// First reply of a chat only: a short name for it (2–5 words), used in History.
+    let chatTitle: String?
     let subjectUpdate: SubjectUpdate?
 
     /// Approved design rule: stage, pills and save cards only show when
@@ -144,6 +146,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case sources
         case fromBefore = "from_before"
         case subjectOffer = "subject_offer"
+        case chatTitle = "chat_title"
         case subjectUpdate = "subject_update"
     }
 
@@ -164,6 +167,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
             .filter { $0.url.scheme == "https" && seenSites.insert($0.site).inserted }
         fromBefore = (try? c.decodeIfPresent([Note].self, forKey: .fromBefore)) ?? []
         subjectOffer = try? c.decodeIfPresent(SubjectOffer.self, forKey: .subjectOffer)
+        chatTitle = try? c.decodeIfPresent(String.self, forKey: .chatTitle)
         subjectUpdate = try? c.decodeIfPresent(SubjectUpdate.self, forKey: .subjectUpdate)
     }
 }
