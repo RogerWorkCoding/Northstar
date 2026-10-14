@@ -894,9 +894,41 @@ Deno.serve(async (req) => {
   const directions = crisis || personal || !design ? [] : safeDirections(tool.directions);
   const visualsOff = (body.settings as Record<string, unknown> | undefined)?.show_visuals === false;
   // Drawn on the server from the layout list, then checked like any wireframe.
+  // Safety net: the reply describes a layout but the picture is missing → ask once for just the layout.
+  let visualSource: unknown = tool.visual;
+  if (design && !visualsOff && !crisis && !personal && !tool.visual &&
+      /\b(layout|wireframe|top (menu|bar)|header|footer|hero|sections?)\b/i.test(str(tool.reply, 2000))) {
+    try {
+      const res = await fetch(ANTHROPIC_URL, {
+        method: "POST",
+        headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 1200,
+          system,
+          tools: [REPLY_TOOL],
+          tool_choice: { type: "auto" },
+          messages: [
+            ...messages,
+            { role: "assistant", content: str(tool.reply, 2000) },
+            { role: "user", content: "(App: the wireframe for the layout you just described is missing. Call northstar_reply again with the same reply and visual.blocks filled in.)" },
+          ],
+        }),
+      });
+      if (res.ok) {
+        const again = await res.json();
+        const t2 = ((again.content ?? []) as Array<Record<string, unknown>>)
+          .find((b) => b.type === "tool_use" && b.name === "northstar_reply")?.input as Record<string, unknown> | undefined;
+        if (t2?.visual) visualSource = t2.visual;
+      }
+      console.log("wireframe retry", JSON.stringify({ got: !!visualSource }));
+    } catch (e) {
+      console.error("wireframe retry failed:", String(e).slice(0, 200));
+    }
+  }
   let drawn: ReturnType<typeof renderWireframe> = null;
   try {
-    drawn = renderWireframe(tool.visual);
+    drawn = renderWireframe(visualSource);
   } catch (e) {
     console.error("wireframe draw failed:", String(e).slice(0, 200)); // the reply still goes out
   }
