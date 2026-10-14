@@ -16,6 +16,8 @@ struct PlacesMapCard: View {
 
     @State private var found: [Found] = []
     @State private var searched = false
+    /// For one place (like a city), frame the whole area instead of zooming in on a pin.
+    @State private var area: MKCoordinateRegion?
 
     private var pinned: [Found] { found.filter { $0.item != nil } }
 
@@ -29,20 +31,35 @@ struct PlacesMapCard: View {
             .foregroundStyle(NorthstarChatStyle.label)
 
             if !pinned.isEmpty {
-                Map(initialPosition: .automatic, interactionModes: []) {
+                Map(initialPosition: area.map { .region($0) } ?? .automatic, interactionModes: []) {
                     ForEach(pinned) { f in
                         if let item = f.item {
                             Marker(f.place.name, coordinate: item.location.coordinate)
                         }
                     }
                 }
-                .frame(height: 170)
+                .id(area?.center.latitude)  // redraw once the area is known
+                .frame(height: 220)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .accessibilityHidden(true)
+                .overlay(alignment: .bottomTrailing) {
+                    Label("Open in Maps", systemImage: "arrow.up.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(Color.black.opacity(0.55)))
+                        .padding(8)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { openAll() }
+                .accessibilityElement()
+                .accessibilityLabel("Map of \(pinned.map(\.place.name).joined(separator: ", "))")
+                .accessibilityHint("Opens in Apple Maps")
+                .accessibilityAddTraits(.isButton)
             } else if !searched {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(Color.white.opacity(0.05))
-                    .frame(height: 170)
+                    .frame(height: 220)
                     .overlay(ProgressView().tint(.white))
             }
 
@@ -96,16 +113,30 @@ struct PlacesMapCard: View {
     /// Finds each place in Apple Maps (one search each, at most 5).
     private func search() async {
         var results: [Found] = []
+        var firstRegion: MKCoordinateRegion?
         for place in places.prefix(5) {
             let request = MKLocalSearch.Request()
-            request.naturalLanguageQuery = "\(place.name), \(place.area)"
-            request.resultTypes = [.pointOfInterest, .address]
-            let item = try? await MKLocalSearch(request: request).start().mapItems.first
+            // A city's own name is its area ("Petaluma" in "Petaluma, CA"): search once, not twice.
+            let sameName = place.area.lowercased().hasPrefix(place.name.lowercased())
+            request.naturalLanguageQuery = sameName ? place.area : "\(place.name), \(place.area)"
+            request.resultTypes = [.pointOfInterest, .address, .physicalFeature]
+            let response = try? await MKLocalSearch(request: request).start()
             guard !Task.isCancelled else { return }
-            results.append(Found(place: place, item: item))
+            if firstRegion == nil { firstRegion = response?.boundingRegion }
+            results.append(Found(place: place, item: response?.mapItems.first))
         }
         found = results
+        // One place: show its whole area (a city fills the map). Several: fit all the pins.
+        if results.filter({ $0.item != nil }).count == 1, let region = firstRegion {
+            area = region
+        }
         searched = true
+    }
+
+    /// Tap the map: open every pin in Apple Maps.
+    private func openAll() {
+        let items = pinned.compactMap(\.item)
+        if items.count == 1 { items[0].openInMaps() } else if !items.isEmpty { _ = MKMapItem.openMaps(with: items) }
     }
 
     private func open(_ f: Found) {
