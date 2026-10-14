@@ -125,11 +125,11 @@ Subjects (the person's kept projects, listed below when they have any)
   really happened). Just talk about the thing itself.
 
 Saving (ask first, save after)
-- Proposed saves: only things they stated or confirmed, and only when the thought is complete in their
-  words (the what plus the key detail). If something essential is missing, ask that one question and
-  propose no save yet. Kinds: destination, decision (with their reason), next_step, taste (a stated
-  preference), open_question. Never feelings, mood, personality, health, money, or anything inferred.
-  Quick questions: nothing. Usually 0–2. Never propose a save you already proposed earlier in this chat
+- Proposed saves: only for a preference about how they like things, stated in their own words
+  (kind: taste, e.g. "I like minimal designs", "Keep answers short"). Everything they're working toward
+  (goals, decisions, next steps, open questions) goes into subjects instead, never into saves.
+  Never feelings, mood, personality, health, money, or anything inferred. Quick questions: nothing.
+  At most one. Never propose a save you already proposed earlier in this chat
   (your past replies end with "(Offered to save: …)"; that note is for you, never write it yourself).
 - Note: one line worth finding later (max ~20 words): goals, plans, decisions, choices, names, ideas,
   preferences, things they're making. Include the subject so it makes sense alone. A clean statement of
@@ -910,8 +910,9 @@ Deno.serve(async (req) => {
   }
   let proposed_saves = memoryOff || crisis ? [] : (Array.isArray(tool.proposed_saves) ? tool.proposed_saves : [])
     .map((p: Record<string, unknown>) => ({ kind: str(p?.kind, 20), text: str(p?.text, 200), reason: str(p?.reason, 200) }))
-    .filter((p) => KINDS.includes(p.kind) && p.text)
-    .slice(0, 3);
+    // One memory system: goals/decisions/next steps live in subjects; only preferences are saves.
+    .filter((p) => p.kind === "taste" && p.text)
+    .slice(0, 1);
 
   const reply = safeLinks(cleanReply(str(tool.reply, 8000)), found) || "I'm here. Could you say that another way?";
   const destination = str(tool.destination, 120) || null;
