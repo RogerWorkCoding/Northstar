@@ -37,6 +37,7 @@ struct NorthstarSettingsView: View {
     private let memoryService = MemoryService()
     private let notesService = NotesService()
     private let subjectsService = SubjectsService()
+    private let chatsService = ChatsService()
 
     var body: some View {
         Form {
@@ -101,7 +102,7 @@ struct NorthstarSettingsView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes every subject, destination, decision, preference and note Northstar remembers. It can't be undone.")
+            Text("This removes every saved chat, subject, preference and note Northstar remembers. It can't be undone.")
         }
     }
 
@@ -129,6 +130,7 @@ struct NorthstarSettingsView: View {
         do {
             try await notesService.deleteAll()
             try await subjectsService.deleteAll()
+            try await chatsService.deleteAll()
             let items = try await memoryService.loadMemories(identityId: id)
             for item in items {
                 try await memoryService.deleteMemory(id: item.id)

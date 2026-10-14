@@ -37,6 +37,8 @@ struct NorthstarEngineClient {
         let memory: [MemoryItem]
         let corrections: [String]
         let settings: SettingsPayload?
+        /// The saved chat this message belongs to (so notes can open their chat).
+        let chat_id: String?
     }
 
     nonisolated private struct Reply: Decodable, Sendable {
@@ -59,7 +61,8 @@ struct NorthstarEngineClient {
         for messages: [MessageModel],
         memory: [MemoryItem] = [],
         corrections: [String] = [],
-        settings: EngineSettings? = nil
+        settings: EngineSettings? = nil,
+        chatId: UUID? = nil
     ) async -> EngineReply {
         let settingsPayload = settings.map {
             SettingsPayload(
@@ -95,7 +98,8 @@ struct NorthstarEngineClient {
                         messages: Array(turns),
                         memory: Array(memory.prefix(20)),
                         corrections: Array(corrections.prefix(10)),
-                        settings: settingsPayload
+                        settings: settingsPayload,
+                        chat_id: chatId?.uuidString
                     )
                 )
             )

@@ -40,6 +40,9 @@ struct ContentView: View {
     @State private var currentWorkflow: NorthstarIntent?
 
     @State private var navigationPath: [Destination] = []
+    /// The saved chat this conversation belongs to (nil until the first message, or with memory off).
+    @State private var currentChatId: UUID?
+    private let chatsService = ChatsService()
     @State private var speechRecognizer = SpeechRecognizer()
     @State private var viewModel = ChatViewModel()
     @State private var isCameraPresented = false
@@ -481,12 +484,12 @@ struct ContentView: View {
             )
         case .memory:
             // Search: find anything you've said (by words and meaning).
-            NotesSearchView()
+            NotesSearchView(onOpenChat: openChat)
 
         case .documents:
             DocumentsView()
         case .history:
-            placeholderScreen(title: "History", symbol: "clock.arrow.circlepath")
+            HistoryView(onOpen: openChat)
         case .settings:
             NorthstarSettingsView()
         case .about:
@@ -510,6 +513,21 @@ struct ContentView: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// Opens a saved chat (from History or Search) and continues it.
+    private func openChat(_ id: UUID) {
+        Task {
+            guard let stored = try? await chatsService.messages(chatId: id), !stored.isEmpty else { return }
+            responseTask?.cancel()
+            responseTask = nil
+            isThinking = false
+            viewModel.messages = stored.map {
+                MessageModel(role: $0.role == "user" ? .user : .assistant, content: $0.content)
+            }
+            currentChatId = id
+            navigationPath.removeAll()
+        }
     }
 
     private func open(_ destination: Destination) {
@@ -923,11 +941,20 @@ struct ContentView: View {
             }
             let corrections = pendingCorrections
             pendingCorrections = []
+            let lastUser = viewModel.messages.last(where: { $0.role == .user })?.content ?? ""
+
+            // Saved chats (memory on only): start one on the first message.
+            if settings.memoryOn, currentChatId == nil, !lastUser.isEmpty {
+                currentChatId = try? await chatsService.create(firstMessage: lastUser)
+            }
+            let chatId = settings.memoryOn ? currentChatId : nil
+
             let answer = await engine.getReply(
                 for: viewModel.messages,
                 memory: memory,
                 corrections: corrections,
-                settings: settings
+                settings: settings,
+                chatId: chatId
             )
             guard !Task.isCancelled else { return }
             await MainActor.run {
@@ -936,6 +963,10 @@ struct ContentView: View {
                 )
                 isThinking = false
                 responseTask = nil
+            }
+            // Keep this exchange in the saved chat (never blocks the reply).
+            if let chatId, !lastUser.isEmpty {
+                try? await chatsService.append(chatId: chatId, user: lastUser, assistant: answer.text)
             }
         }
     }
@@ -1043,6 +1074,7 @@ struct ContentView: View {
         websiteName = ""
         websiteServices = ""
         viewModel.messages.removeAll()
+        currentChatId = nil
         isThinking = false
         scheduleWelcomeMessageFade()
     }
