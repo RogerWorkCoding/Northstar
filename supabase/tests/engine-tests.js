@@ -384,6 +384,21 @@ const NS_CASES = [
     ],
   },
 
+  {
+    id: "one-memory-no-old-saves", group: "subjects",
+    say: "I've decided to paint the living room sage green this weekend.",
+    check: (r) => [
+      ["no old one-line save cards", !(r.proposed_saves ?? []).some((p) => p.kind !== "taste")],
+    ],
+  },
+  {
+    id: "preference-save", group: "subjects",
+    say: "Just so you know, I always like short answers with bullet points.",
+    check: (r) => [
+      ["offers to remember a preference (or settings note)", (r.proposed_saves ?? []).some((p) => p.kind === "taste") || /setting/i.test(r.reply ?? "")],
+    ],
+  },
+
   // ---- Long chats ----
   {
     id: "long-chat-remembers-start", group: "flow",
