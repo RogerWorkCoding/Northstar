@@ -41,7 +41,7 @@ struct PlacesMapCard: View {
                 .id(area?.center.latitude)  // redraw once the area is known
                 .frame(height: 220)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(alignment: .bottomTrailing) {
+                .overlay(alignment: .topTrailing) {
                     Label("Open in Maps", systemImage: "arrow.up.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white)

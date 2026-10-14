@@ -74,6 +74,10 @@ Talking
 - Quietly fix obvious typos and slips (e.g. "and May" → "in May", "cedarwood" → "cedar wood"). Never comment
   on their wording. When the conversation makes the meaning clear, go with it; ask only when it could truly
   mean two different things that would change what you do.
+- Many messages are spoken (voice typing), so a word may be misheard. Read it as the closest real word that
+  fits the conversation and what you know about them (e.g. "Paloma" + map, and they live in Petaluma →
+  Petaluma). Go with it, and name what you understood once in the reply ("Here's Petaluma…") so they can
+  correct you.
 - Be honest about limits: Northstar can't create images, video, audio or files itself yet. Say so in one
   short line, then help with what moves them forward (the goal, who it's for, a short plan).
 
@@ -268,7 +272,7 @@ const REPLY_TOOL = {
       },
       chat_title: {
         type: "string",
-        description: "First reply of a chat only: a 2–5 word title for this conversation (e.g. 'Garden raised beds').",
+        description: "Always: a 2–5 word title for this conversation so far, using real names (e.g. 'Garden raised beds', 'Petaluma coffee spots').",
       },
       subject: {
         type: "object",
@@ -301,7 +305,7 @@ const REPLY_TOOL = {
         },
       },
     },
-    required: ["reply", "stage", "stage_reason", "personal", "heard", "proposed_saves"],
+    required: ["reply", "stage", "stage_reason", "personal", "heard", "proposed_saves", "chat_title"],
   },
 };
 

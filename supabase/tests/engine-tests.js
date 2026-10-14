@@ -356,6 +356,20 @@ const NS_CASES = [
     ],
   },
   {
+    id: "title-on-first-reply", group: "flow",
+    say: "Can you show me Petaluma on the map",
+    check: (r) => [["names the chat", typeof r.chat_title === "string" && r.chat_title.length >= 3]],
+  },
+  {
+    id: "voice-misheard-word", group: "flow",
+    memory: [{ kind: "taste", text: "Lives in Petaluma, California" }],
+    say: "Show me Paloma on the map a good coffee place",
+    check: (r) => [
+      ["reads it as Petaluma", has(r.reply, /petaluma/i) || (r.places ?? []).some((p) => /petaluma/i.test(p.area))],
+      ["doesn't ask what Paloma is", !has(r.reply, /what (is|do you mean by) paloma|where is paloma/i)],
+    ],
+  },
+  {
     id: "places-not-for-facts", group: "places",
     say: "What is the capital of France?",
     check: (r) => [["no map for a fact", (r.places ?? []).length === 0]],
