@@ -70,7 +70,7 @@ struct NorthstarEngineClient {
 
         let turns = messages
             .filter { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .suffix(20)
+            .suffix(60) // the brain reads the last 14 in full and keeps the rest as short lines
             .map { Turn(role: $0.role == .user ? "user" : "assistant", content: $0.content) }
 
         guard turns.last?.role == "user" else {

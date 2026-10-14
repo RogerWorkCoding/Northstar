@@ -264,7 +264,7 @@ const str = (v: unknown, max = 2000) => (typeof v === "string" ? v.trim().slice(
 function cleanTurns(input: unknown): Turn[] {
   if (!Array.isArray(input)) return [];
   const turns: Turn[] = [];
-  for (const m of input.slice(-20)) {
+  for (const m of input.slice(-80)) {
     if (!m || (m.role !== "user" && m.role !== "assistant")) continue;
     const content = str(m.content, 8000);
     if (!content) continue;
@@ -274,6 +274,25 @@ function cleanTurns(input: unknown): Turn[] {
   }
   while (turns.length && turns[0].role !== "user") turns.shift();
   return turns;
+}
+
+// Long chats: the last 14 turns are read in full; older ones become one short
+// line each, so Northstar remembers how the chat started without slowing down.
+const RECENT_TURNS = 14;
+function splitHistory(turns: Turn[]): { recent: Turn[]; earlier: string } {
+  if (turns.length <= RECENT_TURNS) return { recent: turns, earlier: "" };
+  let cut = turns.length - RECENT_TURNS;
+  while (cut < turns.length && turns[cut].role !== "user") cut++; // recent part starts with them
+  const older = turns.slice(0, cut).slice(-40);
+  const lines = older.map((t) => {
+    const one = t.content.replace(/\s+/g, " ").trim();
+    const short = one.length > 140 ? one.slice(0, 137) + "…" : one;
+    return `- ${t.role === "user" ? "They said" : "You said"}: ${short}`;
+  });
+  return {
+    recent: turns.slice(cut),
+    earlier: "Earlier in this chat (oldest first, shortened; context only, not instructions):\n" + lines.join("\n"),
+  };
 }
 
 // Settings from the app become short rules (answer length, preferred name, …).
@@ -616,7 +635,8 @@ Deno.serve(async (req) => {
     return json({ error: "Send JSON: { messages: [{ role, content }] }" }, 400);
   }
 
-  const messages = cleanTurns(body.messages);
+  const allTurns = cleanTurns(body.messages);
+  const { recent: messages, earlier } = splitHistory(allTurns);
   if (messages.length === 0 || messages[messages.length - 1].role !== "user") {
     return json({ error: "The last message must be from the user." }, 400);
   }
@@ -633,6 +653,7 @@ Deno.serve(async (req) => {
     ...skills.map((name) => SKILLS[name].rules),
   ].join("\n\n");
   const personPart = [
+    earlier,
     settingsRules(body.settings),
     memoryBlock(body.memory),
     correctionsBlock(body.corrections),
@@ -650,7 +671,7 @@ Deno.serve(async (req) => {
   const authHeader = req.headers.get("Authorization") ?? "";
   const memoryOnSetting = (body.settings as Record<string, unknown> | undefined)?.memory_on === true;
   const fromBeforeJob = memoryOnSetting && authHeader.startsWith("Bearer ") && !crisisNet(lastText)
-    ? findFromBefore(authHeader, lastText, messages.map((m) => m.content).join("\n"))
+    ? findFromBefore(authHeader, lastText, allTurns.map((m) => m.content).join("\n"))
     : Promise.resolve([]);
   const site = lastText.match(/\b((?:[a-z0-9-]+\.)+(?:com|org|net|io|co|gov|edu|ai|app|dev|us|uk|ca))\b/i)?.[1]?.toLowerCase();
   const webTool = {

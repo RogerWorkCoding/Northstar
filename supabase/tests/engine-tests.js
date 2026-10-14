@@ -321,6 +321,27 @@ const NS_CASES = [
     ],
   },
 
+  // ---- Long chats ----
+  {
+    id: "long-chat-remembers-start", group: "flow",
+    history: (() => {
+      const h = [
+        { role: "user", content: "I'm planning a small garden. My dog Biscuit digs everything up, so it needs a fence." },
+        { role: "assistant", content: "Got it: a small garden with a fence to keep Biscuit out. What do you want to grow?" },
+      ];
+      const topics = ["tomatoes", "basil", "watering", "soil", "sunlight", "pots", "compost", "mint", "lettuce", "peppers", "mulch", "seeds", "budget", "tools"];
+      for (const t of topics) {
+        h.push({ role: "user", content: `Quick question about ${t} for the garden.` });
+        h.push({ role: "assistant", content: `Here's a short tip about ${t}.` });
+      }
+      return h; // 30 messages
+    })(),
+    say: "Remind me, what was the problem I said the fence is for?",
+    check: (r) => [
+      ["remembers the start of a long chat", has(r.reply, /biscuit|dog|dig/i)],
+    ],
+  },
+
   // ---- Honesty ----
   {
     id: "cant-do-video", group: "honesty",
