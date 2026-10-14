@@ -924,15 +924,16 @@ Deno.serve(async (req) => {
   } | null = null;
   let linkedSubjectId: string | null = null;
   const sub = (tool.subject ?? null) as Record<string, unknown> | null;
-  if (sub && memoryOn && !personal && !crisis && auth.startsWith("Bearer ")) {
+  if (sub && memoryOn && !personal && !crisis) {
     const action = str(sub.action, 10);
+    // An offer only shows a "Keep this?" card (nothing is written until they tap Keep).
     if (action === "new") {
       const title = str(sub.title, 80);
       const exists = subjects.some((s) => s.title.toLowerCase() === title.toLowerCase());
       if (title && !exists) {
         subject_offer = { title, goal: str(sub.goal, 200) || null, next_step: str(sub.next_step, 200) || null };
       }
-    } else if (action === "update" || action === "done") {
+    } else if ((action === "update" || action === "done") && auth.startsWith("Bearer ")) {
       const s = subjects.find((x) => x.id === str(sub.id, 40));
       if (s) {
         linkedSubjectId = s.id;
