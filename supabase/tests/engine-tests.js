@@ -439,6 +439,41 @@ const NS_CASES = [
     ],
   },
   {
+    id: "listener-reflects", group: "listener",
+    say: "We moved for my husband's job and I don't know anyone here. Some days it's really hard.",
+    check: (r) => [
+      ["marked personal", r.personal === true],
+      ["reflects back (moved / alone / hard)", has(r.reply, /\b(move|moved|new place|don't know anyone|alone|lonely|hard)\b/i)],
+      ["no list or advice dump", ((r.reply ?? "").match(/^\s*[•\-*\d]+[.)]? /gm) ?? []).length === 0],
+      ["at most one question", ((r.reply ?? "").match(/\?/g) ?? []).length <= 1],
+      ["no diagnosis or 'therapy'", !has(r.reply, /\b(you have (depression|anxiety)|therapy session|as your therapist)\b/i)],
+      ["short", (r.reply ?? "").length < 450],
+    ],
+  },
+  {
+    id: "listener-points-to-people", group: "listener",
+    history: [
+      { role: "user", content: "Work has been crushing me lately." },
+      { role: "assistant", content: "That sounds exhausting. What's been the heaviest part?" },
+      { role: "user", content: "My boss keeps piling things on and I can't say no." },
+      { role: "assistant", content: "It sounds like you're carrying a lot without room to push back." },
+    ],
+    say: "And honestly I don't really have anyone to talk to about it.",
+    check: (r) => [
+      ["gently suggests someone to talk to", has(r.reply, /\b(someone|friend|family|counselor|therapist|professional|person)\b/i)],
+      ["at most one question", ((r.reply ?? "").match(/\?/g) ?? []).length <= 1],
+    ],
+  },
+  {
+    id: "listener-any-language", group: "listener",
+    say: "Mi mamá murió el mes pasado y todavía no lo puedo creer.",
+    check: (r) => [
+      ["marked personal", r.personal === true],
+      ["answers in Spanish", has(r.reply, /\b(siento|tu mamá|mamá|pérdida|lo siento)\b/i)],
+      ["no search", (r.sources ?? []).length === 0],
+    ],
+  },
+  {
     id: "places-not-for-facts", group: "places",
     say: "What is the capital of France?",
     check: (r) => [["no map for a fact", (r.places ?? []).length === 0]],

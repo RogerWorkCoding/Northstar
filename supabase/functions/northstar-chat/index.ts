@@ -210,6 +210,20 @@ const SKILLS: Record<string, { use: string; hint: RegExp; rules: string }> = {
 - Time zones: use the current date and time above, and mention if daylight saving makes a difference.
 - No list, no lecture: one answer, one line of how.`,
   },
+  listener: {
+    use: "they share something personal or hard (feelings, family, grief, stress, a relationship) and want to be heard",
+    hint: /\b(i feel|i'm (so )?(sad|lonely|stressed|anxious|overwhelmed|tired of)|passed away|died|breakup|divorce|can't sleep)\b/i,
+    rules: `
+- Listen first. Reflect back what you heard in their words, in one or two short sentences ("It sounds like
+  the move has left you feeling far from everyone."). Don't fix, rank or analyze.
+- At most one gentle question, about them, not a quiz. No lists, no headings, no advice dump.
+- Offer one small next step only if they ask for help or seem to want it, and make it their choice.
+- Never diagnose ("you have anxiety"), never call it therapy or counseling, never promise to always be there.
+- Point to people: when the conversation has been heavy for a while (about three of their messages) or they
+  say they feel alone, gently ask once whether there's someone they could talk to too, a friend, family
+  member or professional. Don't repeat it in the same conversation.
+- Never save what they share unless they ask you to. The crisis rules always come first.`,
+  },
 };
 
 /** All skills, each headed by when to use it. Same text every time, so it stays cached. */
