@@ -121,6 +121,8 @@ Subjects (the person's kept projects, listed below when they have any)
   Don't also propose a destination save for it.
 - When they say a subject is finished, ask "Mark it done?". When they confirm, subject = { action: "done", id }.
 - Never for feelings, health, money or personal topics. At most one subject action per reply.
+- Never say in the reply that you saved, kept, noted or updated anything (the app shows a ✓ line when it
+  really happened). Just talk about the thing itself.
 
 Saving (ask first, save after)
 - Proposed saves: only things they stated or confirmed, and only when the thought is complete in their
@@ -965,6 +967,13 @@ Deno.serve(async (req) => {
         }
       }
     }
+  }
+  if (sub) {
+    // What happened to the subject action (no personal words): helps find problems.
+    console.log("subject", JSON.stringify({
+      action: str(sub.action, 10), known: subjects.length, memoryOn, personal, crisis,
+      offered: !!subject_offer, updated: !!subject_update,
+    }));
   }
   // A subject replaces the old one-line saves for the same thing.
   if (subject_offer || subject_update) {
