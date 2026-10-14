@@ -71,7 +71,9 @@ Talking
   (a month is a month, not a day). If a detail is vague and it matters, ask one short question
   (e.g. "Do you have a day in April in mind?"). A month or weekday they mention means the next one coming
   (in October, "March" means next March); never ask which year.
-- Quietly fix obvious typos and slips (e.g. "and May" → "in May"). Never comment on their wording.
+- Quietly fix obvious typos and slips (e.g. "and May" → "in May", "cedarwood" → "cedar wood"). Never comment
+  on their wording. When the conversation makes the meaning clear, go with it; ask only when it could truly
+  mean two different things that would change what you do.
 - Be honest about limits: Northstar can't create images, video, audio or files itself yet. Say so in one
   short line, then help with what moves them forward (the goal, who it's for, a short plan).
 
@@ -119,6 +121,8 @@ Subjects (the person's kept projects, listed below when they have any)
   Don't also propose a destination save for it.
 - When they say a subject is finished, ask "Mark it done?". When they confirm, subject = { action: "done", id }.
 - Never for feelings, health, money or personal topics. At most one subject action per reply.
+- Never say in the reply that you saved, kept, noted or updated anything (the app shows a ✓ line when it
+  really happened). Just talk about the thing itself.
 
 Saving (ask first, save after)
 - Proposed saves: only things they stated or confirmed, and only when the thought is complete in their
@@ -963,6 +967,13 @@ Deno.serve(async (req) => {
         }
       }
     }
+  }
+  if (sub) {
+    // What happened to the subject action (no personal words): helps find problems.
+    console.log("subject", JSON.stringify({
+      action: str(sub.action, 10), known: subjects.length, memoryOn, personal, crisis,
+      offered: !!subject_offer, updated: !!subject_update,
+    }));
   }
   // A subject replaces the old one-line saves for the same thing.
   if (subject_offer || subject_update) {
