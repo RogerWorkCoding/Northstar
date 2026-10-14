@@ -79,7 +79,8 @@ Talking
   Petaluma). Go with it, and name what you understood once in the reply ("Here's Petaluma…") so they can
   correct you.
 - Be honest about limits: Northstar can't create images, video, audio or files itself yet. Say so in one
-  short line, then help with what moves them forward (the goal, who it's for, a short plan).
+  short line, then help with what moves them forward (the goal, who it's for, a short plan). For video,
+  that means shot cards they can paste into a video tool (see the video skill).
 
 Looking things up (the web)
 - When the answer depends on current or changing facts (weather, prices, products, news, opening hours,
@@ -210,6 +211,19 @@ const SKILLS: Record<string, { use: string; hint: RegExp; rules: string }> = {
 - Time zones: use the current date and time above, and mention if daylight saving makes a difference.
 - No list, no lecture: one answer, one line of how.`,
   },
+  video: {
+    use: "they want to make a video (a promo, reel, ad, short film, scene) or a prompt for an AI video tool",
+    hint: /\b(video|reel|tiktok|youtube short|promo|commercial|ad spot|storyboard|shot list|veo|flow|sora|runway|kling|scene)\b/i,
+    rules: `
+- Act like an art director. If you don't know what it's for and the mood, ask one short question first.
+  Otherwise write shot cards in shots (2–5 shots, about 15–40 seconds in total).
+- Each shot: a short title, seconds (4, 6 or 8), the framing (wide, medium, close-up…), and one prompt for an
+  AI video tool written as: subject, action, camera move, light, mood, sound. Concrete and visual, 1–3
+  sentences, no brand names or real people unless they're the person's own.
+- Keep the look consistent across shots (same light, palette, characters).
+- In the reply, one line on the idea, then ask which shot to try first. Don't repeat the prompts in the reply.
+- Northstar can't make the video itself; the cards are for pasting into a tool like Google Flow.`,
+  },
   listener: {
     use: "they share something personal or hard (feelings, family, grief, stress, a relationship) and want to be heard",
     hint: /\b(i feel|i'm (so )?(sad|lonely|stressed|anxious|overwhelmed|tired of)|passed away|died|breakup|divorce|can't sleep)\b/i,
@@ -315,6 +329,21 @@ const REPLY_TOOL = {
         enum: ["none", ...Object.keys(SKILLS)],
         description: "Which skill (expert) you used for this reply, or none.",
       },
+      shots: {
+        type: "array",
+        maxItems: 5,
+        description: "Video shot cards (only when helping make a video). Empty otherwise.",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "2–5 words, e.g. 'Sunrise over the bakery'." },
+            seconds: { type: "integer", enum: [4, 6, 8] },
+            framing: { type: "string", description: "e.g. wide, medium, close-up, overhead." },
+            prompt: { type: "string", description: "Prompt for an AI video tool: subject, action, camera, light, mood, sound." },
+          },
+          required: ["title", "seconds", "framing", "prompt"],
+        },
+      },
       places: {
         type: "array",
         maxItems: 5,
@@ -387,6 +416,21 @@ function json(body: unknown, status = 200) {
 }
 
 const str = (v: unknown, max = 2000) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
+/** Video shot cards: up to 5, each with a short title, length, framing and a prompt. */
+function shotsFrom(raw: unknown): { title: string; seconds: number; framing: string; prompt: string }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 5).map((x) => {
+    const o = (x ?? {}) as Record<string, unknown>;
+    const sec = Number(o.seconds);
+    return {
+      title: str(o.title, 60),
+      seconds: [4, 6, 8].includes(sec) ? sec : 8,
+      framing: str(o.framing, 30),
+      prompt: str(o.prompt, 600),
+    };
+  }).filter((s) => s.title && s.prompt);
+}
 
 /** Places for the map card: up to 5, each a name and an area, no repeats. */
 function placesFrom(raw: unknown): { name: string; area: string }[] {
@@ -1165,6 +1209,8 @@ Deno.serve(async (req) => {
     directions,
     // Real places to show on a map (the app finds them in Apple Maps).
     places: personal || crisis ? [] : placesFrom(tool.places),
+    // Video shot cards to paste into a video tool (never in personal or crisis moments).
+    shots: personal || crisis ? [] : shotsFrom(tool.shots),
     sources: crisis ? [] : sourcesFrom(tool.sources),
     // A line from an earlier conversation that matches (never in personal or crisis moments).
     from_before: personal || crisis ? [] : await fromBeforeJob,

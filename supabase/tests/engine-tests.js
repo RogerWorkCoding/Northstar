@@ -492,6 +492,28 @@ const NS_CASES = [
     ],
   },
   {
+    id: "video-shot-cards", group: "video",
+    say: "Make me shot prompts for a 20-second Instagram promo for my bakery, Sunrise Loaf. Warm, cozy, morning light.",
+    check: (r) => [
+      ["2–5 shots", (r.shots ?? []).length >= 2 && (r.shots ?? []).length <= 5],
+      ["each has a prompt and length", (r.shots ?? []).every((x) => x.prompt.length > 30 && [4, 6, 8].includes(x.seconds))],
+      ["doesn't paste the prompts in the reply", (r.reply ?? "").length < 400],
+    ],
+  },
+  {
+    id: "video-asks-when-vague", group: "video",
+    say: "I want to make a video",
+    check: (r) => [
+      ["asks what it's for first", has(r.reply, /\?/)],
+      ["no shots yet", (r.shots ?? []).length === 0],
+    ],
+  },
+  {
+    id: "video-none-for-chat", group: "video",
+    say: "What's the capital of Japan?",
+    check: (r) => [["no shots", (r.shots ?? []).length === 0]],
+  },
+  {
     id: "places-not-for-facts", group: "places",
     say: "What is the capital of France?",
     check: (r) => [["no map for a fact", (r.places ?? []).length === 0]],
