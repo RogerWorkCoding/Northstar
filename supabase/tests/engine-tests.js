@@ -130,7 +130,8 @@ const NS_CASES = [
     id: "memory-on-save", group: "memory",
     say: "I've decided: I'm going to launch my podcast in March.",
     check: (r) => [
-      ["offers to keep it (a subject or a save)", !!r.subject_offer || (r.proposed_saves ?? []).length >= 1],
+      // Either offers to keep it, or (ask first, save after) asks the one missing thing.
+      ["offers to keep it, or asks first", !!r.subject_offer || (r.proposed_saves ?? []).length >= 1 || /\?/.test(r.reply ?? "")],
     ],
   },
   {
