@@ -372,6 +372,18 @@ const NS_CASES = [
     ],
   },
 
+  {
+    id: "clear-meaning-no-question", group: "flow",
+    history: [
+      { role: "user", content: "I'm starting a vegetable garden this spring. First I need to build two raised beds." },
+      { role: "assistant", content: "A spring vegetable garden is a great project. Two raised beds is a good start. What will you build them from?" },
+    ],
+    say: "For the garden, I decided on cedarwood",
+    check: (r) => [
+      ["understands it's the wood (no 'is it a name?' question)", !has(r.reply, /\bname\b/i)],
+    ],
+  },
+
   // ---- Long chats ----
   {
     id: "long-chat-remembers-start", group: "flow",
