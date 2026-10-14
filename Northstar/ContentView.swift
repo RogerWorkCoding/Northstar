@@ -44,6 +44,7 @@ struct ContentView: View {
     @State private var currentChatId: UUID?
     private let chatsService = ChatsService()
     @State private var speechRecognizer = SpeechRecognizer()
+    @State private var appleAccount = AppleAccount.shared
     @State private var viewModel = ChatViewModel()
     @State private var isCameraPresented = false
     @State private var isPhotoLibraryPresented = false
@@ -158,6 +159,11 @@ struct ContentView: View {
             await SupabaseManager.shared.signInIfNeeded()
             loadProjectMemory()
             scheduleWelcomeMessageFade()
+        }
+        .onChange(of: appleAccount.accountChanges) {
+            // Signed in to a different account (or out): start fresh so nothing mixes.
+            startNewChat()
+            loadProjectMemory()
         }
     }
 
