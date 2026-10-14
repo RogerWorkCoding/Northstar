@@ -13,6 +13,8 @@ struct NotesSearchView: View {
     @State private var opened: Note?
     @State private var deleteFailed = false
     @State private var recent: [Note] = []      // newest notes, shown as pills when not searching
+    @State private var subjects: [Subject] = []  // kept projects, shown above Recent
+    @State private var openedSubject: Subject?
     @State private var hintIndex = 0            // which rotating hint is showing
     @FocusState private var fieldFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -25,6 +27,7 @@ struct NotesSearchView: View {
     ]
 
     private let notes = NotesService()
+    private let subjectsService = SubjectsService()
 
     var body: some View {
         ZStack {
@@ -42,7 +45,13 @@ struct NotesSearchView: View {
         .navigationTitle("Search")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { fieldFocused = true }
-        .task { await loadRecent() }
+        .task { await loadRecent(); await loadSubjects() }
+        .sheet(item: $openedSubject) { subject in
+            SubjectDetailSheet(subject: subject,
+                onDone: { Task { try? await subjectsService.markDone(id: subject.id); await loadSubjects() }; openedSubject = nil },
+                onDelete: { Task { try? await subjectsService.delete(id: subject.id); await loadSubjects() }; openedSubject = nil })
+            .presentationDetents([.medium, .large])
+        }
         // Rotate the hint every 4 seconds while the field is empty.
         .task(id: query.isEmpty) {
             guard query.isEmpty, !reduceMotion else { return }
@@ -164,6 +173,45 @@ struct NotesSearchView: View {
     /// The newest notes as pills. Tap one to open it.
     private var recentPills: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if !subjects.isEmpty {
+                Text("SUBJECTS")
+                    .font(.caption.weight(.semibold))
+                    .tracking(2)
+                    .foregroundStyle(NorthstarChatStyle.label)
+                VStack(spacing: 10) {
+                    ForEach(subjects) { subject in
+                        Button { openedSubject = subject } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "scope").foregroundStyle(NorthstarChatStyle.label)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(subject.title)
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(NorthstarChatStyle.text)
+                                        .lineLimit(1)
+                                    if let next = subject.nextStep, !next.isEmpty {
+                                        Text("Next: \(next)")
+                                            .font(.footnote)
+                                            .foregroundStyle(NorthstarChatStyle.soft)
+                                            .lineLimit(1)
+                                    }
+                                }
+                                Spacer(minLength: 8)
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(NorthstarChatStyle.label)
+                            }
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity, minHeight: 56)
+                            .frostedCapsule()
+                            .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Opens this subject")
+                    }
+                }
+                .padding(.bottom, 8)
+            }
             if !recent.isEmpty {
                 Text("RECENT")
                     .font(.caption.weight(.semibold))
@@ -202,6 +250,10 @@ struct NotesSearchView: View {
     /// Pill text: the subject if there is one, otherwise the note (cut to one line by width).
     private static func pillLabel(_ note: Note) -> String {
         note.subject?.isEmpty == false ? note.subject! : note.text
+    }
+
+    private func loadSubjects() async {
+        subjects = (try? await subjectsService.active()) ?? []
     }
 
     private func loadRecent() async {
@@ -397,5 +449,97 @@ extension View {
             }
             .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
             .shadow(color: Color(red: 0.45, green: 0.55, blue: 1.0).opacity(0.15), radius: 12)
+    }
+}
+
+// MARK: - A subject: goal, decisions and next step
+
+private struct SubjectDetailSheet: View {
+    let subject: Subject
+    var onDone: () -> Void
+    var onDelete: () -> Void
+
+    @State private var confirmDelete = false
+
+    var body: some View {
+        ZStack {
+            NorthstarChatStyle.background.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "scope")
+                        Text(subject.title)
+                    }
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+
+                    if let goal = subject.goal, !goal.isEmpty { block("GOAL", goal) }
+                    if !subject.decisions.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            label("DECISIONS")
+                            ForEach(subject.decisions, id: \.self) { d in
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    Text("•").foregroundStyle(NorthstarChatStyle.label)
+                                    Text(d.text).foregroundStyle(NorthstarChatStyle.text)
+                                    Spacer(minLength: 4)
+                                    Text(Self.day(d.at)).font(.footnote).foregroundStyle(NorthstarChatStyle.label)
+                                }
+                                .font(.body)
+                                .northstarReadingStyle()
+                            }
+                        }
+                    }
+                    if let next = subject.nextStep, !next.isEmpty { block("NEXT STEP", next) }
+
+                    HStack(spacing: 10) {
+                        Button(action: onDone) {
+                            Label("Mark done", systemImage: "checkmark")
+                                .font(.body.weight(.semibold))
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.white)
+                        Button(role: .destructive) { confirmDelete = true } label: {
+                            Label("Delete", systemImage: "trash")
+                                .font(.body.weight(.semibold))
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.red)
+                    }
+                    .padding(.top, 8)
+                }
+                .padding(24)
+            }
+        }
+        .confirmationDialog("Delete \(subject.title)?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete", role: .destructive, action: onDelete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the card. Your notes stay in Search.")
+        }
+    }
+
+    private func label(_ t: String) -> some View {
+        Text(t).font(.caption.weight(.semibold)).tracking(2).foregroundStyle(NorthstarChatStyle.label)
+    }
+
+    private func block(_ title: String, _ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            label(title)
+            Text(text)
+                .font(.body)
+                .foregroundStyle(NorthstarChatStyle.text)
+                .northstarReadingStyle()
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// "2026-10-13" → "Oct 13"
+    private static func day(_ iso: String) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        guard let d = f.date(from: iso) else { return iso }
+        return d.formatted(.dateTime.month(.abbreviated).day())
     }
 }

@@ -1,5 +1,5 @@
--- DRAFT — NOT RUN. Waiting for Roger's OK. (Kept as .txt so nothing runs it by accident.)
 -- Subject cards (memory step 4): one card per subject that grows over time.
+-- Approved by Roger (Oct 13, 2026): updates to a kept subject happen on their own, with Undo.
 -- Purely additive: one new table, one new nullable column on notes.
 
 create table if not exists public.subjects (

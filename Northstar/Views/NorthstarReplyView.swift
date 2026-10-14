@@ -62,6 +62,11 @@ struct NorthstarReplyView: View {
     /// Card already used or set aside (kept by the chat, so it survives scrolling).
     var fromBeforeDone: Bool = false
     var onDismissFromBefore: () -> Void = {}
+    /// Subjects: what happened to this reply's subject card ("kept", "dismissed", "undone"), kept by the chat.
+    var subjectState: String? = nil
+    var onKeepSubject: (NorthstarInsight.SubjectOffer) -> Void = { _ in }
+    var onDismissSubject: () -> Void = {}
+    var onUndoSubject: (NorthstarInsight.SubjectUpdate) -> Void = { _ in }
 
     @State private var whyOpen = false
     @State private var removedPills: Set<NorthstarInsight.Heard> = []
@@ -93,6 +98,14 @@ struct NorthstarReplyView: View {
                 .northstarReadingStyle()
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let offer = insight?.subjectOffer {
+                SubjectOfferCard(offer: offer, state: subjectState, onKeep: onKeepSubject, onDismiss: onDismissSubject)
+            }
+
+            if let update = insight?.subjectUpdate {
+                SubjectUpdatedLine(update: update, undone: subjectState == "undone", onUndo: onUndoSubject)
+            }
 
             if let earlier = insight?.fromBefore.first, !fromBeforeDone {
                 FromBeforeCard(note: earlier, canUse: canChooseDirection, onUse: onUseFromBefore, onDismiss: onDismissFromBefore)
@@ -526,5 +539,96 @@ struct FromBeforeCard: View {
             .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.06)))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
             .accessibilityElement(children: .contain)
+    }
+}
+
+/// 🎯 "Keep this?" — Northstar offers to keep a new subject as one card that grows.
+struct SubjectOfferCard: View {
+    let offer: NorthstarInsight.SubjectOffer
+    var state: String? = nil            // nil, "kept" or "dismissed" (kept by the chat)
+    var onKeep: (NorthstarInsight.SubjectOffer) -> Void = { _ in }
+    var onDismiss: () -> Void = {}
+
+    var body: some View {
+        if state != "dismissed" {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "scope")
+                    Text("KEEP AS A SUBJECT?").tracking(2)
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(NorthstarChatStyle.label)
+
+                Text(offer.title)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.white)
+                if let goal = offer.goal, !goal.isEmpty {
+                    Text(goal).font(.body).foregroundStyle(NorthstarChatStyle.soft)
+                }
+                if let next = offer.nextStep, !next.isEmpty {
+                    Text("Next: \(next)").font(.subheadline).foregroundStyle(NorthstarChatStyle.label)
+                }
+
+                if state == "kept" {
+                    Label("Kept. It will grow as you go.", systemImage: "checkmark")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(NorthstarChatStyle.savedGreen)
+                } else {
+                    HStack(spacing: 10) {
+                        Button { onKeep(offer) } label: {
+                            Text("Keep")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .background(Capsule().fill(Color(red: 0.91, green: 0.93, blue: 1.0)))
+                        }
+                        Button { withAnimation(.easeOut(duration: 0.2)) { onDismiss() } } label: {
+                            Text("Not now")
+                                .font(.body)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .overlay(Capsule().strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.06)))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+            .accessibilityElement(children: .contain)
+        }
+    }
+}
+
+/// "✓ Sunrise Loaf updated · Next: pick the name font · Undo"
+struct SubjectUpdatedLine: View {
+    let update: NorthstarInsight.SubjectUpdate
+    var undone: Bool = false
+    var onUndo: (NorthstarInsight.SubjectUpdate) -> Void = { _ in }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: undone ? "arrow.uturn.backward" : "checkmark")
+                Text(undone ? "\(update.title): change undone" : "\(update.title) updated")
+                    .font(.subheadline.weight(.semibold))
+                Spacer(minLength: 8)
+                if !undone {
+                    Button("Undo") { onUndo(update) }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(NorthstarChatStyle.linkBlue)
+                        .frame(minHeight: 44)
+                        .accessibilityLabel("Undo the change to \(update.title)")
+                }
+            }
+            .foregroundStyle(undone ? NorthstarChatStyle.label : NorthstarChatStyle.savedGreen)
+            if !undone {
+                ForEach(update.changes, id: \.self) { change in
+                    Text(change).font(.footnote).foregroundStyle(NorthstarChatStyle.soft)
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
     }
 }

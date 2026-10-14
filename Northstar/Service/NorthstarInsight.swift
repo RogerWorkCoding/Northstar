@@ -51,6 +51,29 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         }
     }
 
+    /// A new subject Northstar offers to keep ("Keep this?").
+    nonisolated struct SubjectOffer: Hashable, Sendable, Decodable {
+        let title: String
+        let goal: String?
+        let nextStep: String?
+        enum CodingKeys: String, CodingKey { case title, goal; case nextStep = "next_step" }
+    }
+
+    /// A kept subject Northstar just updated, with what it was before (for Undo).
+    nonisolated struct SubjectUpdate: Hashable, Sendable, Decodable {
+        nonisolated struct Snapshot: Hashable, Sendable, Decodable {
+            let goal: String?
+            let nextStep: String?
+            let decisions: [SubjectDecision]
+            let status: String
+            enum CodingKeys: String, CodingKey { case goal, decisions, status; case nextStep = "next_step" }
+        }
+        let id: UUID
+        let title: String
+        let changes: [String]
+        let undo: Snapshot
+    }
+
     /// A simple wireframe (drawing only) for visual requests like a web page.
     nonisolated struct Visual: Hashable, Sendable, Decodable {
         let title: String
@@ -97,11 +120,14 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let sources: [Source]
     /// A line from an earlier conversation that matches (shown as a "From before" card).
     let fromBefore: [Note]
+    /// Subjects: a new one to keep, or a kept one that was just updated.
+    let subjectOffer: SubjectOffer?
+    let subjectUpdate: SubjectUpdate?
 
     /// Approved design rule: stage, pills and save cards only show when
     /// Northstar is guiding. Quick questions get just the answer.
     var isGuiding: Bool {
-        destination != nil || !proposedSaves.isEmpty
+        destination != nil || !proposedSaves.isEmpty || subjectOffer != nil || subjectUpdate != nil
     }
 
     enum CodingKeys: String, CodingKey {
@@ -115,6 +141,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case directions
         case sources
         case fromBefore = "from_before"
+        case subjectOffer = "subject_offer"
+        case subjectUpdate = "subject_update"
     }
 
     init(from decoder: Decoder) throws {
@@ -133,5 +161,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         sources = ((try? c.decodeIfPresent([Source].self, forKey: .sources)) ?? [])
             .filter { $0.url.scheme == "https" && seenSites.insert($0.site).inserted }
         fromBefore = (try? c.decodeIfPresent([Note].self, forKey: .fromBefore)) ?? []
+        subjectOffer = try? c.decodeIfPresent(SubjectOffer.self, forKey: .subjectOffer)
+        subjectUpdate = try? c.decodeIfPresent(SubjectUpdate.self, forKey: .subjectUpdate)
     }
 }
