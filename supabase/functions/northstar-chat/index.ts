@@ -537,7 +537,12 @@ async function keepNote(auth: string, text: string, context: string, subject: st
       return;
     }
 
-    const { error } = await db.from("notes").insert(row);
+    let { error } = await db.from("notes").insert(row);
+    if (error?.code === "23503" && row.chat_id) {
+      // The chat was deleted: keep the note anyway, without the link.
+      delete row.chat_id;
+      ({ error } = await db.from("notes").insert(row));
+    }
     // 23505 = already kept (no duplicates). Anything else is logged, never shown.
     if (error && error.code !== "23505") console.error("note not kept:", error.code, error.message.slice(0, 200));
   } catch (e) {

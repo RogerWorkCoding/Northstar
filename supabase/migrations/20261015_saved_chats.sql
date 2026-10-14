@@ -9,16 +9,18 @@ create table if not exists public.chats (
   user_id     uuid not null default auth.uid() references auth.users(id) on delete cascade,
   title       text not null check (char_length(title) between 1 and 80),
   created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
+  updated_at  timestamptz not null default now(),
+  unique (id, user_id)  -- lets messages and notes point only at their owner's own chat
 );
 
 create table if not exists public.chat_messages (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  chat_id     uuid not null references public.chats(id) on delete cascade,
+  chat_id     uuid not null,
   role        text not null check (role in ('user', 'assistant')),
   content     text not null check (char_length(content) between 1 and 8000),
-  created_at  timestamptz not null default now()
+  created_at  timestamptz not null default now(),
+  foreign key (chat_id, user_id) references public.chats(id, user_id) on delete cascade
 );
 
 alter table public.chats enable row level security;
@@ -40,7 +42,10 @@ create index if not exists chats_recent on public.chats (user_id, updated_at des
 create index if not exists chat_messages_in_order on public.chat_messages (chat_id, created_at);
 
 -- Each note remembers the chat it came from (empty for older notes).
-alter table public.notes add column if not exists chat_id uuid references public.chats(id) on delete set null;
+alter table public.notes add column if not exists chat_id uuid;
+alter table public.notes drop constraint if exists notes_chat_owner;
+alter table public.notes add constraint notes_chat_owner
+  foreign key (chat_id, user_id) references public.chats(id, user_id) on delete set null (chat_id);
 
 -- Search now also returns chat_id, so a result can open its chat.
 -- (The return type changes, so the old function is replaced.)

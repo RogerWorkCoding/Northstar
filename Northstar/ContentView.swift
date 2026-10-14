@@ -489,7 +489,9 @@ struct ContentView: View {
         case .documents:
             DocumentsView()
         case .history:
-            HistoryView(onOpen: openChat)
+            HistoryView(onOpen: openChat, onDeleted: { id in
+                if id == currentChatId { currentChatId = nil }  // the next message starts a new saved chat
+            })
         case .settings:
             NorthstarSettingsView()
         case .about:
@@ -944,8 +946,16 @@ struct ContentView: View {
             let lastUser = viewModel.messages.last(where: { $0.role == .user })?.content ?? ""
 
             // Saved chats (memory on only): start one on the first message.
+            var createdNow: UUID?
             if settings.memoryOn, currentChatId == nil, !lastUser.isEmpty {
-                currentChatId = try? await chatsService.create(firstMessage: lastUser)
+                let id = try? await chatsService.create(firstMessage: lastUser)
+                // They may have opened another chat or started a new one meanwhile.
+                guard !Task.isCancelled else {
+                    if let id { try? await chatsService.delete(id: id) }
+                    return
+                }
+                currentChatId = id
+                createdNow = id
             }
             let chatId = settings.memoryOn ? currentChatId : nil
 
@@ -956,7 +966,11 @@ struct ContentView: View {
                 settings: settings,
                 chatId: chatId
             )
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                // Stopped before any reply: don't leave an empty chat in History.
+                if let createdNow { try? await chatsService.delete(id: createdNow) }
+                return
+            }
             await MainActor.run {
                 viewModel.messages.append(
                     MessageModel(role: .assistant, content: answer.text, insight: answer.insight)
@@ -965,7 +979,7 @@ struct ContentView: View {
                 responseTask = nil
             }
             // Keep this exchange in the saved chat (never blocks the reply).
-            if let chatId, !lastUser.isEmpty {
+            if let chatId, !lastUser.isEmpty, !answer.failed {
                 try? await chatsService.append(chatId: chatId, user: lastUser, assistant: answer.text)
                 if let title = answer.insight?.chatTitle {
                     try? await chatsService.rename(chatId: chatId, to: title)

@@ -5,6 +5,7 @@ import SwiftUI
 
 struct HistoryView: View {
     var onOpen: (UUID) -> Void = { _ in }
+    var onDeleted: (UUID) -> Void = { _ in }
 
     @State private var chats: [ChatSummary] = []
     @State private var loaded = false
@@ -74,7 +75,9 @@ struct HistoryView: View {
                 .foregroundStyle(NorthstarChatStyle.text)
                 .lineLimit(1)
             Spacer(minLength: 8)
-            Text(chat.updatedAt, format: .dateTime.hour().minute())
+            Text(Calendar.current.isDateInToday(chat.updatedAt) || Calendar.current.isDateInYesterday(chat.updatedAt)
+                 ? chat.updatedAt.formatted(.dateTime.hour().minute())
+                 : chat.updatedAt.formatted(.dateTime.month(.abbreviated).day()))
                 .font(.footnote)
                 .foregroundStyle(NorthstarChatStyle.label)
             Image(systemName: "chevron.right")
@@ -120,6 +123,7 @@ struct HistoryView: View {
         do {
             try await service.delete(id: chat.id)
             chats.removeAll { $0.id == chat.id }
+            onDeleted(chat.id)
         } catch {
             deleteFailed = true
         }

@@ -9,6 +9,8 @@ struct NorthstarEngineClient {
     struct EngineReply: Sendable {
         let text: String
         let insight: NorthstarInsight?
+        /// True when Northstar couldn't answer (the message is an error, not a reply to keep).
+        var failed: Bool = false
     }
 
     nonisolated private struct Turn: Encodable, Sendable {
@@ -109,13 +111,13 @@ struct NorthstarEngineClient {
                 return EngineReply(text: text, insight: result.insight)
             }
             print("Northstar Engine error:", result.error ?? "empty reply")
-            return EngineReply(text: "Northstar couldn't answer right now. Please try again.", insight: nil)
+            return EngineReply(text: "Northstar couldn't answer right now. Please try again.", insight: nil, failed: true)
 
         } catch is CancellationError {
-            return EngineReply(text: "", insight: nil)
+            return EngineReply(text: "", insight: nil, failed: true)
         } catch {
             print("Northstar Engine request failed:", error.localizedDescription)
-            return EngineReply(text: "I couldn't connect right now. Please try again.", insight: nil)
+            return EngineReply(text: "I couldn't connect right now. Please try again.", insight: nil, failed: true)
         }
     }
 

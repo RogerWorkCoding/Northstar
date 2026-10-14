@@ -73,9 +73,9 @@ struct ChatsService {
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let rows = [
-            NewMessage(chat_id: chatId, role: "user", content: String(user.prefix(8000)),
+            NewMessage(chat_id: chatId, role: "user", content: Self.limit(user),
                        created_at: iso.string(from: now)),
-            NewMessage(chat_id: chatId, role: "assistant", content: String(assistant.prefix(8000)),
+            NewMessage(chat_id: chatId, role: "assistant", content: Self.limit(assistant),
                        created_at: iso.string(from: now.addingTimeInterval(0.001))),
         ].filter { !$0.content.isEmpty }
         try await client.from("chat_messages").insert(rows).execute()
@@ -126,6 +126,13 @@ struct ChatsService {
             title += "…"
         }
         return title.isEmpty ? "Chat" : title
+    }
+
+    /// At most 8000 Unicode code points (the database counts these, not visible letters).
+    nonisolated static func limit(_ s: String) -> String {
+        var view = String.UnicodeScalarView()
+        view.append(contentsOf: s.unicodeScalars.prefix(8000))
+        return String(view)
     }
 
     nonisolated static func parseDate(_ s: String) -> Date? {
