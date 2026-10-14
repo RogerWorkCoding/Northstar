@@ -127,12 +127,11 @@ const SKILLS: Record<string, { when: RegExp; rules: string }> = {
     when: /\b(web ?sites?|web ?pages?|landing pages?|home ?pages?|app screens?|screens?|ui|ux|mock ?ups?|wireframes?|layouts?|logos?|brand(ing)?|posters?|flyers?|banners?|business cards?|style|look and feel|colou?rs?|palettes?|fonts?|typography|design)\b/i,
     rules: `Skill: design (loaded because they're working on something visual)
 - Visual (show, don't tell): ONLY when they ask for something visual (a web page, website, app screen,
-  landing page, flyer, layout), include a simple wireframe in visual.svg. Otherwise omit visual.
-  Wireframe rules: one <svg> with viewBox="0 0 360 640" and no width/height; background rect fill #141E45;
-  section boxes fill #24306A with stroke #8EA0E6 (1px) and rx 8; text fill #FFFFFF, font-family system-ui,
-  font-size 13–18, short real labels from their request; image areas are boxes with a thin diagonal cross
-  and the word "Photo". Grey-box layout only: no colors beyond these, no <image>, no scripts, no links,
-  no foreignObject, no styles, no event attributes. Under 60 elements. In the reply, describe the layout
+  landing page, flyer, layout), describe a simple wireframe in visual as a short list of blocks, top to
+  bottom (3–7 blocks). Block types: nav (title = logo/name, items = up to 3 links), hero (title, text,
+  button), image, cards (title, items = up to 3 card names, button), text (title, text), list (title, items),
+  form (title, items = field names, button), button (button), footer (text). Use short real labels from
+  their request (e.g. "Fresh bread daily", "Order now"). The app draws it. In the reply, describe the layout
   in one line and ask one question about it.
 - Options instead of asking: when they want something made (a brand, website, poster, space, style) but
   haven't described the look, or say they're not sure, offer exactly 3 very different directions in
@@ -191,12 +190,26 @@ const REPLY_TOOL = {
       },
       visual: {
         type: "object",
-        description: "Only for visual requests: a simple wireframe.",
+        description: "Only for visual requests: a simple wireframe as a list of blocks, top to bottom.",
         properties: {
           title: { type: "string", description: "Short name, e.g. 'Bakery home page'." },
-          svg: { type: "string", description: "One <svg> element following the wireframe rules." },
+          blocks: {
+            type: "array",
+            maxItems: 8,
+            items: {
+              type: "object",
+              properties: {
+                type: { type: "string", enum: ["nav", "hero", "image", "cards", "text", "list", "form", "button", "footer"] },
+                title: { type: "string" },
+                text: { type: "string" },
+                items: { type: "array", items: { type: "string" }, maxItems: 5 },
+                button: { type: "string" },
+              },
+              required: ["type"],
+            },
+          },
         },
-        required: ["title", "svg"],
+        required: ["title", "blocks"],
       },
       sources: {
         type: "array",
@@ -454,6 +467,123 @@ function safeDirections(d: unknown) {
   return out.length === 3 ? out : [];
 }
 
+// Wireframes are drawn HERE from a short layout list the brain writes
+// (top bar, welcome box, cards…). Much less for Claude to write, so it's
+// faster, every wireframe has the same clean style, and the model never
+// writes drawing code.
+type WireBlock = { type: string; title?: string; text?: string; items?: string[]; button?: string };
+const WIRE_TYPES = ["nav", "hero", "image", "cards", "text", "list", "form", "button", "footer"];
+const W = { bg: "#141E45", box: "#24306A", line: "#8EA0E6", text: "#FFFFFF", soft: "#C9D3FF" };
+
+function esc(t: string): string {
+  return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function wrap(t: string, maxChars: number, maxLines: number): string[] {
+  const words = t.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let cur = "";
+  for (const w of words) {
+    if ((cur + " " + w).trim().length > maxChars) { if (cur) lines.push(cur); cur = w; } else cur = (cur + " " + w).trim();
+    if (lines.length === maxLines) break;
+  }
+  if (cur && lines.length < maxLines) lines.push(cur);
+  if (lines.length === maxLines && words.join(" ").length > lines.join(" ").length) {
+    lines[maxLines - 1] = lines[maxLines - 1].replace(/.{0,1}$/, "…");
+  }
+  return lines;
+}
+const txt = (x: number, y: number, s: string, size = 13, bold = false, anchor = "start", fill = W.text) =>
+  `<text x="${x}" y="${y}" fill="${fill}" font-family="system-ui" font-size="${size}"${bold ? ' font-weight="600"' : ""}${anchor !== "start" ? ` text-anchor="${anchor}"` : ""}>${esc(s)}</text>`;
+const box = (x: number, y: number, w: number, h: number, r = 8, fill = W.box) =>
+  `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${fill}" stroke="${W.line}" stroke-width="1"/>`;
+const photo = (x: number, y: number, w: number, h: number) =>
+  box(x, y, w, h, 6) +
+  `<line x1="${x}" y1="${y}" x2="${x + w}" y2="${y + h}" stroke="${W.line}" stroke-width="1"/>` +
+  `<line x1="${x + w}" y1="${y}" x2="${x}" y2="${y + h}" stroke="${W.line}" stroke-width="1"/>` +
+  txt(x + w / 2, y + h / 2 + 4, "Photo", 12, false, "middle");
+const pill = (x: number, y: number, w: number, label: string) =>
+  box(x, y, w, 34, 17, "none") + txt(x + w / 2, y + 22, label.slice(0, 24), 13, true, "middle");
+
+function drawBlock(b: WireBlock, y: number): { svg: string; h: number } {
+  const X = 16, WD = 328;
+  const t = (b.title ?? "").slice(0, 40), body = (b.text ?? "").slice(0, 160);
+  const items = (b.items ?? []).map((i) => String(i).slice(0, 30)).filter(Boolean);
+  switch (b.type) {
+    case "nav": {
+      const right = items.slice(0, 3).join("   ");
+      return { h: 44, svg: box(X, y, WD, 44) + txt(X + 14, y + 27, t || "Logo", 15, true) + (right ? txt(X + WD - 14, y + 27, right, 12, false, "end", W.soft) : "") };
+    }
+    case "hero": {
+      const lines = wrap(body, 40, 2);
+      let s = box(X, y, WD, 150) + txt(X + 16, y + 38, t || "Big headline", 19, true);
+      lines.forEach((l, i) => (s += txt(X + 16, y + 62 + i * 18, l, 13, false, "start", W.soft)));
+      if (b.button) s += pill(X + 16, y + 100, 140, b.button);
+      return { h: 150, svg: s };
+    }
+    case "image":
+      return { h: 130, svg: photo(X, y, WD, 130) };
+    case "cards": {
+      const n = Math.min(Math.max(items.length, 1), 3), gap = 10, cw = (WD - gap * (n - 1)) / n;
+      let s = t ? txt(X, y + 14, t, 14, true) : "";
+      const top = y + (t ? 24 : 0);
+      for (let i = 0; i < n; i++) {
+        const cx = X + i * (cw + gap);
+        s += box(cx, top, cw, 128) + photo(cx + 8, top + 8, cw - 16, 64) + txt(cx + 10, top + 94, (items[i] ?? "Item").slice(0, 14), 12, true);
+        if (b.button) s += txt(cx + 10, top + 114, b.button.slice(0, 14), 11, false, "start", W.soft);
+      }
+      return { h: 128 + (t ? 24 : 0), svg: s };
+    }
+    case "list": {
+      const rows = items.slice(0, 5);
+      let s = t ? txt(X, y + 14, t, 14, true) : "";
+      const top = y + (t ? 24 : 0);
+      rows.forEach((r, i) => (s += box(X, top + i * 40, WD, 34, 8) + txt(X + 14, top + i * 40 + 22, r, 13)));
+      return { h: (t ? 24 : 0) + rows.length * 40, svg: s };
+    }
+    case "form": {
+      const fields = (items.length ? items : ["Name", "Email"]).slice(0, 4);
+      let s = t ? txt(X, y + 14, t, 14, true) : "";
+      let top = y + (t ? 24 : 0);
+      for (const f of fields) { s += box(X, top, WD, 36, 8, "none") + txt(X + 12, top + 23, f, 13, false, "start", W.soft); top += 44; }
+      s += pill(X, top, WD, b.button || "Send");
+      return { h: top + 34 - y, svg: s };
+    }
+    case "button":
+      return { h: 40, svg: pill(X, y + 3, WD, b.button || t || "Get started") };
+    case "footer":
+      return { h: 40, svg: box(X, y, WD, 40) + txt(X + WD / 2, y + 25, t || body || "Footer", 12, false, "middle", W.soft) };
+    default: { // text
+      const lines = wrap(body, 44, 3);
+      let s = box(X, y, WD, 34 + lines.length * 18) + (t ? txt(X + 14, y + 24, t, 15, true) : "");
+      lines.forEach((l, i) => (s += txt(X + 14, y + (t ? 46 : 26) + i * 18, l, 13, false, "start", W.soft)));
+      return { h: 34 + lines.length * 18 + (t ? 6 : 0), svg: s };
+    }
+  }
+}
+
+/** Turn the brain's layout list into a safe 360×640 wireframe. */
+function renderWireframe(v: unknown): { kind: "svg"; title: string; svg: string } | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const blocks = (Array.isArray(o.blocks) ? o.blocks : [])
+    .map((b) => (b ?? {}) as WireBlock)
+    .filter((b) => WIRE_TYPES.includes(String(b.type)))
+    .slice(0, 8);
+  if (blocks.length === 0) return null;
+  let y = 16, inner = "";
+  for (const b of blocks) {
+    const { svg, h } = drawBlock(b, y);
+    inner += svg;
+    y += h + 12;
+  }
+  // Fit tall layouts into the phone frame.
+  const s = y > 640 ? 624 / y : 1;
+  const tx = s < 1 ? (360 - 360 * s) / 2 : 0;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 640"><rect width="360" height="640" fill="${W.bg}"/>` +
+    `<g transform="translate(${tx.toFixed(1)} 8) scale(${s.toFixed(3)})">${inner}</g></svg>`;
+  return { kind: "svg", title: str(o.title, 80) || "Wireframe", svg };
+}
+
 // Wireframes are drawing only. Anything that could run code or load from
 // the internet is refused, and the app shows them with JavaScript off.
 function safeVisual(v: unknown): { kind: "svg"; title: string; svg: string } | null {
@@ -494,15 +624,23 @@ Deno.serve(async (req) => {
   // Prompt order: constitution → playbook → core rules → skills → settings → memory.
   const skills = skillsFor(messages);
   const crew = str(body.crew, 20) || "calm";
-  const system = [
+  // Two parts: the rules (the same for everyone, cached by Claude so it's faster and
+  // cheaper) and this person's settings, memory and corrections (change each time).
+  const rulesPart = [
     CONSTITUTION,
     PLAYBOOKS[crew] ?? PLAYBOOKS.calm,
     CORE_RULES,
     ...skills.map((name) => SKILLS[name].rules),
+  ].join("\n\n");
+  const personPart = [
     settingsRules(body.settings),
     memoryBlock(body.memory),
     correctionsBlock(body.corrections),
   ].filter(Boolean).join("\n\n");
+  const system = [
+    { type: "text", text: rulesPart, cache_control: { type: "ephemeral" } },
+    ...(personPart ? [{ type: "text", text: personPart }] : []),
+  ];
 
   // Web search is part of the core: Claude decides when a question needs current facts.
   // If they name a site ("search Dell.com"), searches stay on that site.
@@ -527,6 +665,7 @@ Deno.serve(async (req) => {
     system,
     messages,
     tools: withWeb ? [webTool, REPLY_TOOL] : [REPLY_TOOL],
+    // (The tools are part of the cached prefix too: they come before the rules.)
     tool_choice: { type: "auto" },
   });
   let withWeb = true;
@@ -542,6 +681,8 @@ Deno.serve(async (req) => {
       });
       if (res.ok) {
         data = await res.json();
+        const u = (data?.usage ?? {}) as Record<string, number>;
+        console.log("usage", JSON.stringify({ in: u.input_tokens, out: u.output_tokens, cached: u.cache_read_input_tokens, wrote: u.cache_creation_input_tokens }));
       } else {
         const detail = (await res.text()).slice(0, 300);
         console.error("Claude error", res.status, "attempt", attempt, detail);
@@ -623,7 +764,16 @@ Deno.serve(async (req) => {
   const design = skills.includes("design");
   const directions = crisis || personal || !design ? [] : safeDirections(tool.directions);
   const visualsOff = (body.settings as Record<string, unknown> | undefined)?.show_visuals === false;
-  const visual = crisis || visualsOff || !design ? null : safeVisual(tool.visual);
+  // Drawn on the server from the layout list, then checked like any wireframe.
+  const drawn = renderWireframe(tool.visual);
+  const visual = crisis || visualsOff || !design || !drawn ? null : safeVisual(drawn);
+  if (tool.visual && !visual) {
+    // Layout shape only (block types), never the person's words.
+    const kinds = Array.isArray((tool.visual as Record<string, unknown>).blocks)
+      ? ((tool.visual as Record<string, unknown>).blocks as Array<Record<string, unknown>>).map((b) => String(b?.type)).join(",")
+      : typeof tool.visual;
+    console.log("wireframe dropped", JSON.stringify({ design, visualsOff, drawn: !!drawn, kinds }));
+  }
   const proposed_saves = memoryOff || crisis ? [] : (Array.isArray(tool.proposed_saves) ? tool.proposed_saves : [])
     .map((p: Record<string, unknown>) => ({ kind: str(p?.kind, 20), text: str(p?.text, 200), reason: str(p?.reason, 200) }))
     .filter((p) => KINDS.includes(p.kind) && p.text)
