@@ -43,6 +43,17 @@ struct ChatsService {
         let created_at: String
     }
 
+    nonisolated private struct Rename: Encodable, Sendable {
+        let title: String
+    }
+
+    /// Gives a chat the short name Northstar suggested on its first reply.
+    func rename(chatId: UUID, to title: String) async throws {
+        let clean = String(title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
+        guard !clean.isEmpty else { return }
+        try await client.from("chats").update(Rename(title: clean)).eq("id", value: chatId.uuidString).execute()
+    }
+
     nonisolated private struct Touch: Encodable, Sendable {
         let updated_at: String
     }

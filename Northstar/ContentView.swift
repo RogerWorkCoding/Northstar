@@ -967,6 +967,9 @@ struct ContentView: View {
             // Keep this exchange in the saved chat (never blocks the reply).
             if let chatId, !lastUser.isEmpty {
                 try? await chatsService.append(chatId: chatId, user: lastUser, assistant: answer.text)
+                if let title = answer.insight?.chatTitle {
+                    try? await chatsService.rename(chatId: chatId, to: title)
+                }
             }
         }
     }
