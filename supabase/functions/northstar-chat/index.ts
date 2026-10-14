@@ -461,6 +461,12 @@ function settingsRules(s: unknown): string {
   if (o.answer_length === "detailed") lines.push("- The person likes detailed answers when useful.");
   const name = str(o.preferred_name, 40);
   if (name) lines.push(`- Call the person ${name}.`);
+  // A nickname the person gave Northstar. Letters, spaces and simple marks only (it's a name, not rules).
+  const nick = str(o.nickname, 24).replace(/[^\p{L}\p{N} .'-]/gu, "").trim();
+  if (nick) {
+    lines.push(`- The person calls you "${nick}" as a nickname. Answer to it warmly and use it rarely. Your name is` +
+      ` still Northstar: if asked who you are, say you're Northstar, an AI, and that they call you ${nick}.`);
+  }
   if (o.memory_on === false) lines.push("- Memory is off: propose no saves.");
   if (o.show_visuals === false) lines.push("- Visuals are off: never include a wireframe; describe any layout in a few words instead.");
   return lines.length ? "Person's settings:\n" + lines.join("\n") : "";

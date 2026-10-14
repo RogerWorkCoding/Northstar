@@ -28,6 +28,8 @@ struct NorthstarEngineClient {
     nonisolated private struct SettingsPayload: Encodable, Sendable {
         let answer_length: String
         let preferred_name: String
+        /// Optional nickname the person gave Northstar (its name stays Northstar).
+        let nickname: String
         let show_visuals: Bool
         let memory_on: Bool
         /// The phone's time zone (e.g. "America/Los_Angeles"), so "today" and "now" are right.
@@ -70,6 +72,7 @@ struct NorthstarEngineClient {
             SettingsPayload(
                 answer_length: $0.answerLength.rawValue,
                 preferred_name: $0.preferredName,
+                nickname: $0.nickname.trimmingCharacters(in: .whitespacesAndNewlines),
                 show_visuals: $0.showVisuals,
                 memory_on: $0.memoryOn,
                 timezone: TimeZone.current.identifier
