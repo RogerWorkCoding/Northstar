@@ -74,7 +74,14 @@ struct NorthstarEngineClient {
         let turns = messages
             .filter { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .suffix(60) // the brain reads the last 14 in full and keeps the rest as short lines
-            .map { Turn(role: $0.role == .user ? "user" : "assistant", content: $0.content) }
+            .map { message -> Turn in
+                // Northstar's past save offers ride along, so it never offers the same save twice.
+                var content = message.content
+                if message.role == .assistant, let saves = message.insight?.proposedSaves, !saves.isEmpty {
+                    content += "\n\n(Offered to save: " + saves.map { "\u{201C}\($0.text)\u{201D}" }.joined(separator: "; ") + ")"
+                }
+                return Turn(role: message.role == .user ? "user" : "assistant", content: content)
+            }
 
         guard turns.last?.role == "user" else {
             return EngineReply(text: "Ask me something and I'll help.", insight: nil)
