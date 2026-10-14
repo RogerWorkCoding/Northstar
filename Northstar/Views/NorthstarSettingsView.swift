@@ -37,6 +37,7 @@ struct NorthstarSettingsView: View {
     @State private var confirmSignOut = false
     @State private var accountMessage: String?
     @State private var account = AppleAccount.shared
+    @Environment(\.colorScheme) private var colorScheme
     @State private var exportText = "[]"
     @State private var statusMessage: String?
 
@@ -68,14 +69,16 @@ struct NorthstarSettingsView: View {
                         Task {
                             do {
                                 try await account.finish(result)
-                                accountMessage = "Signed in. Your memory is safe if you change phones."
+                                accountMessage = account.cameBack
+                                    ? "Welcome back. Your saved memory and chats are here again."
+                                    : "Signed in. Your memory is safe if you change phones."
                             } catch {
                                 if (error as? ASAuthorizationError)?.code == .canceled { return }
                                 accountMessage = "Couldn't sign in: \(error.localizedDescription)"
                             }
                         }
                     }
-                    .signInWithAppleButtonStyle(.white)
+                    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                     .frame(height: 48)
                 }
                 if let accountMessage {
@@ -85,7 +88,7 @@ struct NorthstarSettingsView: View {
                 Text("Account")
             } footer: {
                 if !account.isSignedInWithApple {
-                    Text("Sign in so your memory, subjects and chats come back if you delete the app or get a new phone. Nothing you have now is lost.")
+                    Text("Sign in so your memory, subjects and chats come back if you delete the app or get a new phone. What you have on this phone now is kept.")
                 }
             }
 

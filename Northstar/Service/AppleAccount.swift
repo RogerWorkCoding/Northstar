@@ -24,6 +24,10 @@ final class AppleAccount {
     /// True once this account is linked to an Apple ID.
     private(set) var isSignedInWithApple = false
     private(set) var email: String?
+    /// Goes up when the phone switches to a different account, so screens can start fresh.
+    private(set) var accountChanges = 0
+    /// True when the last sign-in brought back an existing account (new phone, reinstall).
+    private(set) var cameBack = false
 
     /// The random value for the current request (Apple gets its hash, Supabase checks it).
     private var rawNonce = ""
@@ -34,14 +38,19 @@ final class AppleAccount {
 
     /// Reads who is signed in (call when Settings opens).
     func refresh() async {
-        guard let user = try? await auth.user() else {
-            isSignedInWithApple = false
-            email = nil
-            return
-        }
+        // Saved on the phone first (works offline), then checked with the server.
+        if let local = auth.currentUser { apply(local) }
+        if let fresh = try? await auth.user() { apply(fresh) }
+    }
+
+    private func apply(_ user: User) {
         let apple = user.identities?.first { $0.provider == "apple" }
         isSignedInWithApple = apple != nil
-        email = isSignedInWithApple ? user.email : nil
+        let fromApple: String? = {
+            if case let .string(value)? = apple?.identityData?["email"] { return value }
+            return nil
+        }()
+        email = isSignedInWithApple ? (user.email ?? fromApple) : nil
     }
 
     /// Fills in the Apple request: name and email (asked once by Apple), plus the nonce.
@@ -62,17 +71,25 @@ final class AppleAccount {
 
         let credentials = OpenIDConnectCredentials(provider: .apple, idToken: idToken, nonce: rawNonce)
 
-        do {
-            // Keep everything: attach Apple to the account they already have.
-            try await auth.linkIdentityWithIdToken(credentials: credentials)
-        } catch {
-            // This Apple ID already has a Northstar account (new phone, reinstalled app):
-            // switch to it, so its memory and chats come back.
-            if Self.isAlreadyLinked(error) {
+        cameBack = false
+        if auth.currentSession == nil {
+            // No account on this phone yet: just sign in with Apple.
+            try await auth.signInWithIdToken(credentials: credentials)
+            await SupabaseManager.shared.signInIfNeeded()
+            accountChanges += 1
+        } else {
+            do {
+                // Keep everything: attach Apple to the account they already have.
+                try await auth.linkIdentityWithIdToken(credentials: credentials)
+            } catch {
+                // This Apple ID already has a Northstar account (new phone, reinstalled app):
+                // switch to it, so its memory and chats come back. Anything made on this phone
+                // before signing in stays with the old guest account.
+                guard Self.isAlreadyLinked(error) else { throw error }
                 try await auth.signInWithIdToken(credentials: credentials)
                 await SupabaseManager.shared.signInIfNeeded()
-            } else {
-                throw error
+                cameBack = true
+                accountChanges += 1
             }
         }
         await refresh()
@@ -81,8 +98,10 @@ final class AppleAccount {
     /// Signs out and starts a fresh, empty account on this phone.
     /// Their saved memory stays with their Apple ID; signing in again brings it back.
     func signOut() async {
-        try? await auth.signOut()
+        // This phone only: other phones stay signed in.
+        try? await auth.signOut(scope: .local)
         await SupabaseManager.shared.signInIfNeeded()
+        accountChanges += 1
         await refresh()
     }
 
