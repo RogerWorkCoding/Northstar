@@ -1,4 +1,5 @@
 import SwiftUI
+import AuthenticationServices
 
 // Settings (approved design), first version: only switches that really work.
 // Read aloud, reduce motion and check-ins come later.
@@ -33,6 +34,9 @@ struct NorthstarSettingsView: View {
     @AppStorage(SettingsKeys.easierFont) private var easierFont = false
 
     @State private var confirmDeleteAll = false
+    @State private var confirmSignOut = false
+    @State private var accountMessage: String?
+    @State private var account = AppleAccount.shared
     @State private var exportText = "[]"
     @State private var statusMessage: String?
 
@@ -43,6 +47,48 @@ struct NorthstarSettingsView: View {
 
     var body: some View {
         Form {
+            // 0. Account: Sign in with Apple keeps memory safe across phones.
+            Section {
+                if account.isSignedInWithApple {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Signed in with Apple")
+                            if let email = account.email {
+                                Text(email).font(.footnote).foregroundStyle(.secondary)
+                            }
+                        }
+                    } icon: {
+                        Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
+                    }
+                    Button("Sign out", role: .destructive) { confirmSignOut = true }
+                } else {
+                    SignInWithAppleButton(.signIn) { request in
+                        account.prepare(request)
+                    } onCompletion: { result in
+                        Task {
+                            do {
+                                try await account.finish(result)
+                                accountMessage = "Signed in. Your memory is safe if you change phones."
+                            } catch {
+                                if (error as? ASAuthorizationError)?.code == .canceled { return }
+                                accountMessage = "Couldn't sign in: \(error.localizedDescription)"
+                            }
+                        }
+                    }
+                    .signInWithAppleButtonStyle(.white)
+                    .frame(height: 48)
+                }
+                if let accountMessage {
+                    Text(accountMessage).font(.footnote)
+                }
+            } header: {
+                Text("Account")
+            } footer: {
+                if !account.isSignedInWithApple {
+                    Text("Sign in so your memory, subjects and chats come back if you delete the app or get a new phone. Nothing you have now is lost.")
+                }
+            }
+
             // 1. Memory and privacy
             Section {
                 Toggle("Memory", isOn: $memoryOn)
@@ -107,6 +153,17 @@ struct NorthstarSettingsView: View {
         }
         .navigationTitle("Settings")
         .task { await loadExport() }
+        .task { await account.refresh() }
+        .confirmationDialog("Sign out?", isPresented: $confirmSignOut, titleVisibility: .visible) {
+            Button("Sign out", role: .destructive) {
+                Task {
+                    await account.signOut()
+                    accountMessage = "Signed out. Sign in with Apple again to bring your memory back."
+                }
+            }
+        } message: {
+            Text("This phone starts fresh. Your memory stays with your Apple ID and comes back when you sign in again.")
+        }
         .confirmationDialog("Delete all memory?", isPresented: $confirmDeleteAll, titleVisibility: .visible) {
             Button("Delete all memory", role: .destructive) {
                 Task { await deleteAll() }
