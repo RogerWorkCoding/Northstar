@@ -370,6 +370,28 @@ const NS_CASES = [
     ],
   },
   {
+    id: "expert-any-language-ev", group: "experts",
+    say: "Necesito un cargador rápido para mi coche eléctrico en Petaluma",
+    check: (r) => [
+      ["answers in Spanish", has(r.reply, /\b(qué|cuál|cuáles|redes|cargador|puedo|usas)\b/i)],
+      ["uses the places expert (asks networks or shows chargers)", has(r.reply, /red(es)?\b|network/i) || (r.places ?? []).length >= 1],
+    ],
+  },
+  {
+    id: "expert-any-language-design", group: "experts",
+    say: "Quiero una página web sencilla para mi panadería",
+    check: (r) => [["draws a wireframe", Boolean(r.visual && r.visual.svg)]],
+  },
+  {
+    id: "expert-none-for-chat", group: "experts",
+    say: "Thanks, that helped a lot!",
+    check: (r) => [
+      ["no wireframe", !r.visual],
+      ["no map", (r.places ?? []).length === 0],
+      ["no directions", (r.directions ?? []).length === 0],
+    ],
+  },
+  {
     id: "places-not-for-facts", group: "places",
     say: "What is the capital of France?",
     check: (r) => [["no map for a fact", (r.places ?? []).length === 0]],

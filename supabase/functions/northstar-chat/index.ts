@@ -143,13 +143,16 @@ Saving (ask first, save after)
 
 - Always respond by calling the northstar_reply tool.`;
 
-// 4. Skills: extra rules loaded only when the conversation needs them.
-// Keeps the core small and general; a new ability is a new skill, not a rewrite.
-const SKILLS: Record<string, { when: RegExp; rules: string }> = {
+// 4. Skills (the expert picker): each skill is an expert's rules plus when to use it.
+// All skills are in every prompt (cached, so it stays cheap), and Claude picks the one that
+// fits what the person means, in any language. A new ability is a new skill, not a rewrite.
+// `hint` is only an English shortcut for server-side extras (the wireframe retry); it never
+// decides which expert answers.
+const SKILLS: Record<string, { use: string; hint: RegExp; rules: string }> = {
   design: {
-    // Visual work: pages, screens, brands, print. Checked against their recent messages.
-    when: /\b(web ?sites?|web ?pages?|landing pages?|home ?pages?|app screens?|screens?|ui|ux|mock ?ups?|wireframes?|layouts?|logos?|brand(ing)?|posters?|flyers?|banners?|business cards?|style|look and feel|colou?rs?|palettes?|fonts?|typography|design)\b/i,
-    rules: `Skill: design (loaded because they're working on something visual)
+    use: "they're working on something visual: a web page, app screen, logo, brand, poster, colors or fonts",
+    hint: /\b(web ?sites?|web ?pages?|landing pages?|home ?pages?|app screens?|screens?|ui|ux|mock ?ups?|wireframes?|layouts?|logos?|brand(ing)?|posters?|flyers?|banners?|business cards?|style|look and feel|colou?rs?|palettes?|fonts?|typography|design)\b/i,
+    rules: `
 - Visual (show, don't tell): ONLY when they ask for something visual (a web page, website, app screen,
   landing page, flyer, layout), describe a simple wireframe in visual as a short list of blocks, top to
   bottom (3–7 blocks). Block types: nav (title = logo/name, items = up to 3 links), hero (title, text,
@@ -166,9 +169,9 @@ const SKILLS: Record<string, { when: RegExp; rules: string }> = {
       If they already chose a direction, don't offer new ones.`,
   },
   places: {
-    // Real places to go: shops, food, parks, venues, chargers. The app shows them on Apple Maps.
-    when: /\b(near|nearby|around|places?|where (is|can|to)|restaurants?|caf(e|é)s?|coffee|food|eat|bars?|shops?|stores?|hotels?|parks?|hikes?|trails?|beach(es)?|museums?|venues?|map|directions|address|charg(er|ers|ing)|ev|stations?|visit|go to)\b/i,
-    rules: `Skill: places (loaded because they may want real places to go)
+    use: "they want real places to go: food, shops, parks, venues, chargers, or a place on a map",
+    hint: /\b(near|nearby|around|places?|where (is|can|to)|restaurants?|caf(e|é)s?|coffee|food|eat|bars?|shops?|stores?|hotels?|parks?|hikes?|trails?|beach(es)?|museums?|venues?|map|directions|address|charg(er|ers|ing)|ev|stations?|visit|go to)\b/i,
+    rules: `
 - When you recommend specific real places they can go to, list them in places (up to 5): the name as it
   appears on a map, and the area (street, neighborhood or city). The app shows them on a map; don't repeat
   addresses in the reply, keep it to a short line per place.
@@ -182,10 +185,18 @@ const SKILLS: Record<string, { when: RegExp; rules: string }> = {
   },
 };
 
-/** Which skills this conversation needs, from the person's last few messages. */
-function skillsFor(turns: Turn[]): string[] {
+/** All skills, each headed by when to use it. Same text every time, so it stays cached. */
+const SKILLS_TEXT = `Skills: expert rules for certain kinds of requests. Use a skill only when what they mean fits its
+"Use when", in any language (they may write in Spanish, Japanese or anything else). Most messages need none.
+
+` + Object.entries(SKILLS)
+  .map(([name, sk]) => `### ${name} (Use when: ${sk.use})\n${sk.rules.trim()}`)
+  .join("\n\n");
+
+/** English shortcut only: did their last few messages look like this kind of request? */
+function looksLike(turns: Turn[], name: string): boolean {
   const recent = turns.filter((t) => t.role === "user").slice(-3).map((t) => t.content).join("\n");
-  return Object.entries(SKILLS).filter(([, sk]) => sk.when.test(recent)).map(([name]) => name);
+  return SKILLS[name]?.hint.test(recent) ?? false;
 }
 
 const REPLY_TOOL = {
@@ -807,7 +818,6 @@ Deno.serve(async (req) => {
   const subjects = memoryOnEarly && authEarly.startsWith("Bearer ") ? await loadSubjects(authEarly) : [];
 
   // Prompt order: constitution → playbook → core rules → skills → settings → memory.
-  const skills = skillsFor(messages);
   const crew = str(body.crew, 20) || "calm";
   // Two parts: the rules (the same for everyone, cached by Claude so it's faster and
   // cheaper) and this person's settings, memory and corrections (change each time).
@@ -815,7 +825,7 @@ Deno.serve(async (req) => {
     CONSTITUTION,
     PLAYBOOKS[crew] ?? PLAYBOOKS.calm,
     CORE_RULES,
-    ...skills.map((name) => SKILLS[name].rules),
+    SKILLS_TEXT,
   ].join("\n\n");
   const personPart = [
     nowLine(body.settings),
@@ -949,7 +959,10 @@ Deno.serve(async (req) => {
     .filter((h) => GROUPS.includes(h.group) && h.text)
     .slice(0, 6);
   const memoryOff = (body.settings as Record<string, unknown> | undefined)?.memory_on === false;
-  const design = skills.includes("design");
+  // The expert picker chose design if it drew a layout or offered looks (any language).
+  // The English shortcut only adds the "picture is missing" retry below.
+  const design = Boolean(tool.visual) || Array.isArray(tool.directions) && tool.directions.length > 0 ||
+    looksLike(messages, "design");
   const directions = crisis || personal || !design ? [] : safeDirections(tool.directions);
   const visualsOff = (body.settings as Record<string, unknown> | undefined)?.show_visuals === false;
   // Drawn on the server from the layout list, then checked like any wireframe.
