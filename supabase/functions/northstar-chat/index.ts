@@ -198,6 +198,18 @@ const SKILLS: Record<string, { use: string; hint: RegExp; rules: string }> = {
   who claims what instead of taking a side.
 - End with one short question, e.g. "Want more on one of these?"`,
   },
+  convert: {
+    use: "they want to convert units, money or time zones, or do quick everyday math (tips, splitting a bill)",
+    hint: /\b(convert|in (dollars|euros|pounds|yen|pesos|celsius|fahrenheit|miles|km|kilometers|kg|pounds|ounces|grams|cups)|exchange rate|time zone|what time is it in|tip on|split)\b/i,
+    rules: `
+- Lead with the answer in bold, then at most one short line of how (e.g. "**€60 ≈ $65.40** (1 € = $1.09)").
+- Money: exchange rates change daily, so search for today's rate and say it's approximate and from when.
+  Never guess a rate from memory.
+- Units and math: work it out step by step before answering, and round sensibly (2 decimals for money,
+  1 for temperatures and distances). Use the person's units (US people: °F, miles, cups) unless they ask.
+- Time zones: use the current date and time above, and mention if daylight saving makes a difference.
+- No list, no lecture: one answer, one line of how.`,
+  },
 };
 
 /** All skills, each headed by when to use it. Same text every time, so it stays cached. */

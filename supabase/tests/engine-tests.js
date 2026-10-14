@@ -415,6 +415,30 @@ const NS_CASES = [
     check: (r) => [["looked it up", (r.sources ?? []).length >= 1]],
   },
   {
+    id: "convert-units", group: "convert",
+    say: "What's 350 degrees Fahrenheit in Celsius?",
+    check: (r) => [
+      ["right answer (~176.7)", has(r.reply, /17[67](\.\d)?\s*°?\s*C|17[67](\.\d)? ?degrees/i)],
+      ["short", (r.reply ?? "").length < 250],
+    ],
+  },
+  {
+    id: "convert-money-searches", group: "convert",
+    say: "How much is 60 euros in dollars?",
+    check: (r) => [
+      ["looked up today's rate", (r.sources ?? []).length >= 1],
+      ["gives a dollar amount", has(r.reply, /\$\s?\d/)],
+    ],
+  },
+  {
+    id: "convert-tip", group: "convert",
+    say: "What's a 20% tip on $86.50, split between 3 people?",
+    check: (r) => [
+      ["tip $17.30", has(r.reply, /17\.30/)],
+      ["each pays ~$34.60", has(r.reply, /34\.60/)],
+    ],
+  },
+  {
     id: "places-not-for-facts", group: "places",
     say: "What is the capital of France?",
     check: (r) => [["no map for a fact", (r.places ?? []).length === 0]],
