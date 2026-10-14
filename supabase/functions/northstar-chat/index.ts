@@ -159,7 +159,22 @@ const SKILLS: Record<string, { when: RegExp; rules: string }> = {
   about the look. Each: a short name, one mood line, 3–4 keywords, 4 colors as #RRGGBB, and a type style
   (serif, sans, rounded, mono or script). Keep the reply to one or two lines, e.g. "Here are three
   directions. Which feels closest?" Never for personal conversations, quick questions or crisis.
-  If they already chose a direction, don't offer new ones.`,
+      If they already chose a direction, don't offer new ones.`,
+  },
+  places: {
+    // Real places to go: shops, food, parks, venues, chargers. The app shows them on Apple Maps.
+    when: /\b(near|nearby|around|places?|where (is|can|to)|restaurants?|caf(e|é)s?|coffee|food|eat|bars?|shops?|stores?|hotels?|parks?|hikes?|trails?|beach(es)?|museums?|venues?|map|directions|address|charg(er|ers|ing)|ev|stations?|visit|go to)\b/i,
+    rules: `Skill: places (loaded because they may want real places to go)
+- When you recommend specific real places they can go to, list them in places (up to 5): the name as it
+  appears on a map, and the area (street, neighborhood or city). The app shows them on a map; don't repeat
+  addresses in the reply, keep it to a short line per place.
+- Only real places: ones from web_search results, or famous ones you are sure of. Never invent a business.
+- You don't know where they are. If the area matters and they haven't said it (in the chat or memory), ask
+  for the city or neighborhood first, in one short question.
+- Use their saved preferences for places (e.g. which charging networks, food they avoid). For EV charging:
+  if they've saved networks, list only those; if not, ask once which networks they use, and offer to save
+  the answer as a taste. Prefer fast (DC) chargers unless they say otherwise.
+- No places for general questions, personal conversations or crisis.`,
   },
 };
 
@@ -238,6 +253,19 @@ const REPLY_TOOL = {
         description: "URLs of the web pages you actually used for this answer (only from web_search results).",
         items: { type: "string" },
       },
+      places: {
+        type: "array",
+        maxItems: 5,
+        description: "Real places you recommend going to (shown on a map). Empty when none.",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Name as on a map, e.g. 'Electrify America'." },
+            area: { type: "string", description: "Street, neighborhood or city, e.g. 'Petaluma, CA'." },
+          },
+          required: ["name", "area"],
+        },
+      },
       chat_title: {
         type: "string",
         description: "First reply of a chat only: a 2–5 word title for this conversation (e.g. 'Garden raised beds').",
@@ -297,6 +325,23 @@ function json(body: unknown, status = 200) {
 }
 
 const str = (v: unknown, max = 2000) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
+/** Places for the map card: up to 5, each a name and an area, no repeats. */
+function placesFrom(raw: unknown): { name: string; area: string }[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: { name: string; area: string }[] = [];
+  for (const p of raw) {
+    const name = str((p as { name?: unknown })?.name, 80);
+    const area = str((p as { area?: unknown })?.area, 120);
+    const key = `${name}|${area}`.toLowerCase();
+    if (!name || !area || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name, area });
+    if (out.length === 5) break;
+  }
+  return out;
+}
 
 // Claude needs turns to alternate and start with the person.
 function cleanTurns(input: unknown): Turn[] {
@@ -1048,6 +1093,8 @@ Deno.serve(async (req) => {
     chat_title: allTurns.length === 1 ? str(tool.chat_title, 60) || null : null,
     visual,
     directions,
+    // Real places to show on a map (the app finds them in Apple Maps).
+    places: personal || crisis ? [] : placesFrom(tool.places),
     sources: crisis ? [] : sourcesFrom(tool.sources),
     // A line from an earlier conversation that matches (never in personal or crisis moments).
     from_before: personal || crisis ? [] : await fromBeforeJob,
