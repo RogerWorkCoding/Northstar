@@ -12,6 +12,7 @@ enum SettingsKeys {
     static let answerLength  = "ns.talk.answerLength"
     static let showVisuals   = "ns.talk.showVisuals"
     static let preferredName = "ns.talk.preferredName"
+    static let nickname      = "ns.talk.nickname"
     static let easierFont    = "ns.reading.easierFont"
 }
 
@@ -28,6 +29,7 @@ struct NorthstarSettingsView: View {
     @AppStorage(SettingsKeys.answerLength) private var answerLength = AnswerLength.short
     @AppStorage(SettingsKeys.showVisuals) private var showVisuals = true
     @AppStorage(SettingsKeys.preferredName) private var preferredName = ""
+    @AppStorage(SettingsKeys.nickname) private var nickname = ""
     @AppStorage(SettingsKeys.easierFont) private var easierFont = false
 
     @State private var confirmDeleteAll = false
@@ -75,6 +77,13 @@ struct NorthstarSettingsView: View {
                 TextField("What should Northstar call you?", text: $preferredName)
                     .textContentType(.givenName)
 
+                TextField("Nickname for Northstar (optional)", text: $nickname)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .onChange(of: nickname) {
+                        if nickname.count > 24 { nickname = String(nickname.prefix(24)) }
+                    }
+
                 Picker("Answer length", selection: $answerLength) {
                     ForEach(AnswerLength.allCases) { Text($0.label).tag($0) }
                 }
@@ -83,6 +92,8 @@ struct NorthstarSettingsView: View {
                 Toggle("Show visuals when they help", isOn: $showVisuals)
             } header: {
                 Text("How Northstar talks to you")
+            } footer: {
+                Text("Northstar is always its name. A nickname is just what you call it; it will answer to it.")
             }
 
             // 3. Reading
@@ -171,6 +182,7 @@ struct EngineSettings: Sendable {
     let answerLength: AnswerLength
     let showVisuals: Bool
     let preferredName: String
+    let nickname: String
 
     static var current: EngineSettings {
         let d = UserDefaults.standard
@@ -178,7 +190,8 @@ struct EngineSettings: Sendable {
             memoryOn: d.object(forKey: SettingsKeys.memoryOn) as? Bool ?? true,
             answerLength: AnswerLength(rawValue: d.string(forKey: SettingsKeys.answerLength) ?? "") ?? .short,
             showVisuals: d.object(forKey: SettingsKeys.showVisuals) as? Bool ?? true,
-            preferredName: d.string(forKey: SettingsKeys.preferredName) ?? ""
+            preferredName: d.string(forKey: SettingsKeys.preferredName) ?? "",
+            nickname: d.string(forKey: SettingsKeys.nickname) ?? ""
         )
     }
 }
