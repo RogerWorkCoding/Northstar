@@ -418,7 +418,7 @@ const NS_CASES = [
     id: "convert-units", group: "convert",
     say: "What's 350 degrees Fahrenheit in Celsius?",
     check: (r) => [
-      ["right answer (~176.7)", has(r.reply, /17[67](\.\d)?\s*°?\s*C|17[67](\.\d)? ?degrees/i)],
+      ["right answer (~176.7)", has(r.reply, /17[67](\.\d+)?\s*°?\s*C|17[67](\.\d+)? ?degrees/i)],
       ["short", (r.reply ?? "").length < 250],
     ],
   },

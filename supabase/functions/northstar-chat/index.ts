@@ -216,7 +216,8 @@ const SKILLS: Record<string, { use: string; hint: RegExp; rules: string }> = {
     rules: `
 - Listen first. Reflect back what you heard in their words, in one or two short sentences ("It sounds like
   the move has left you feeling far from everyone."). Don't fix, rank or analyze.
-- At most one gentle question, about them, not a quiz. No lists, no headings, no advice dump.
+- Ask at most ONE question in the whole reply (one question mark), about them, not a quiz. When you
+  ask about someone to talk to, that is your one question. No lists, no headings, no advice dump.
 - Offer one small next step only if they ask for help or seem to want it, and make it their choice.
 - Never diagnose ("you have anxiety"), never call it therapy or counseling, never promise to always be there.
 - Point to people: when the conversation has been heavy for a while (about three of their messages) or they
@@ -308,6 +309,11 @@ const REPLY_TOOL = {
         maxItems: 4,
         description: "URLs of the web pages you actually used for this answer (only from web_search results).",
         items: { type: "string" },
+      },
+      skill: {
+        type: "string",
+        enum: ["none", ...Object.keys(SKILLS)],
+        description: "Which skill (expert) you used for this reply, or none.",
       },
       places: {
         type: "array",
@@ -462,7 +468,8 @@ function settingsRules(s: unknown): string {
   const name = str(o.preferred_name, 40);
   if (name) lines.push(`- Call the person ${name}.`);
   // A nickname the person gave Northstar. Letters, spaces and simple marks only (it's a name, not rules).
-  const nick = str(o.nickname, 24).replace(/[^\p{L}\p{N} .'-]/gu, "").trim();
+  const nick = str(o.nickname, 40).normalize("NFC").replace(/[^\p{L}\p{M}\p{N} .'-]/gu, "")
+    .trim().split(/\s+/).slice(0, 3).join(" ").slice(0, 24);
   if (nick) {
     lines.push(`- The person calls you "${nick}" as a nickname. Answer to it warmly and use it rarely. Your name is` +
       ` still Northstar: if asked who you are, say you're Northstar, an AI, and that they call you ${nick}.`);
@@ -1008,8 +1015,7 @@ Deno.serve(async (req) => {
   const memoryOff = (body.settings as Record<string, unknown> | undefined)?.memory_on === false;
   // The expert picker chose design if it drew a layout or offered looks (any language).
   // The English shortcut only adds the "picture is missing" retry below.
-  const design = Boolean(tool.visual) || Array.isArray(tool.directions) && tool.directions.length > 0 ||
-    looksLike(messages, "design");
+  const design = tool.skill === "design" || looksLike(messages, "design");
   const directions = crisis || personal || !design ? [] : safeDirections(tool.directions);
   const visualsOff = (body.settings as Record<string, unknown> | undefined)?.show_visuals === false;
   // Drawn on the server from the layout list, then checked like any wireframe.
@@ -1051,7 +1057,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     console.error("wireframe draw failed:", String(e).slice(0, 200)); // the reply still goes out
   }
-  const visual = crisis || visualsOff || !design || !drawn ? null : safeVisual(drawn);
+  const visual = crisis || personal || visualsOff || !design || !drawn ? null : safeVisual(drawn);
   if (tool.visual && !visual) {
     // Layout shape only (block types), never the person's words.
     const kinds = Array.isArray((tool.visual as Record<string, unknown>).blocks)
