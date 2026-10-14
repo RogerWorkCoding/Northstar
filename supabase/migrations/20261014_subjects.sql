@@ -1,5 +1,5 @@
--- DRAFT — NOT RUN. Waiting for Roger's OK. (Kept as .txt so nothing runs it by accident.)
 -- Subject cards (memory step 4): one card per subject that grows over time.
+-- Approved by Roger (Oct 13, 2026): updates to a kept subject happen on their own, with Undo.
 -- Purely additive: one new table, one new nullable column on notes.
 
 create table if not exists public.subjects (
@@ -22,6 +22,8 @@ create policy "Own rows only" on public.subjects
   with check (user_id = auth.uid());
 
 create index if not exists subjects_active on public.subjects (user_id, status, updated_at desc);
+-- No duplicates: one active subject per title, per person.
+create unique index if not exists subjects_one_active_title on public.subjects (user_id, lower(title)) where status = 'active';
 
 -- Each note can point to its subject (empty for loose notes).
 alter table public.notes add column if not exists subject_id uuid references public.subjects(id) on delete set null;

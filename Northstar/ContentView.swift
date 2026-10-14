@@ -49,6 +49,9 @@ struct ContentView: View {
     @State private var isThinking = false
     /// Replies whose "From before" card was used or set aside (survives scrolling).
     @State private var fromBeforeDone: Set<UUID> = []
+    /// Subject cards per reply: "kept", "dismissed" or "undone" (survives scrolling).
+    @State private var subjectStates: [UUID: String] = [:]
+    private let subjectsService = SubjectsService()
     /// Pills the person removed since the last message; sent once as corrections.
     @State private var pendingCorrections: [String] = []
     @State private var isStarMenuPresented = false
@@ -284,7 +287,11 @@ struct ContentView: View {
                                     useFromBefore(note)
                                 },
                                 fromBeforeDone: fromBeforeDone.contains(message.id),
-                                onDismissFromBefore: { fromBeforeDone.insert(message.id) }
+                                onDismissFromBefore: { fromBeforeDone.insert(message.id) },
+                                subjectState: subjectStates[message.id],
+                                onKeepSubject: { offer in keepSubject(offer, for: message.id) },
+                                onDismissSubject: { subjectStates[message.id] = "dismissed" },
+                                onUndoSubject: { update in undoSubject(update, for: message.id) }
                             )
                         }
                     }
@@ -826,6 +833,31 @@ struct ContentView: View {
         guard !isThinking else { return }
         viewModel.messages.append(MessageModel(role: .user, content: Self.choicePrefix + direction.name + "\u{201D}."))
         requestGeminiResponse()
+    }
+
+    /// "Keep" on a subject offer: saved only because the person confirmed it.
+    private func keepSubject(_ offer: NorthstarInsight.SubjectOffer, for messageId: UUID) {
+        subjectStates[messageId] = "kept"
+        Task {
+            do {
+                try await subjectsService.keep(title: offer.title, goal: offer.goal, nextStep: offer.nextStep)
+            } catch {
+                subjectStates[messageId] = "keepFailed"   // shows "Couldn't keep it" with the buttons again
+            }
+        }
+    }
+
+    /// "Undo" on an automatic subject update: the card goes back the way it was.
+    private func undoSubject(_ update: NorthstarInsight.SubjectUpdate, for messageId: UUID) {
+        subjectStates[messageId] = "undone"
+        Task {
+            do {
+                let ok = try await subjectsService.undo(update)
+                if !ok { subjectStates[messageId] = "changedSince" }
+            } catch {
+                subjectStates[messageId] = "undoFailed"
+            }
+        }
     }
 
     /// "Use this" on a From before card: bring the earlier line into the chat, in plain words.

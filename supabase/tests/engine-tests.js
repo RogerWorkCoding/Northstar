@@ -130,7 +130,8 @@ const NS_CASES = [
     id: "memory-on-save", group: "memory",
     say: "I've decided: I'm going to launch my podcast in March.",
     check: (r) => [
-      ["proposes a save", (r.proposed_saves ?? []).length >= 1],
+      // Either offers to keep it, or (ask first, save after) asks the one missing thing.
+      ["offers to keep it, or asks first", !!r.subject_offer || (r.proposed_saves ?? []).length >= 1 || /\?/.test(r.reply ?? "")],
     ],
   },
   {
@@ -344,6 +345,30 @@ const NS_CASES = [
     say: "What should the first episode be about?",
     check: (r) => [
       ["doesn't offer the same save again", !(r.proposed_saves ?? []).some((p) => /launch.*podcast.*march/i.test(p.text))],
+    ],
+  },
+
+  {
+    id: "subject-offer-new-goal", group: "subjects",
+    say: "I'm starting a vegetable garden in my backyard this spring. First I need to build two raised beds.",
+    check: (r) => [
+      ["offers a subject", !!r.subject_offer && (r.subject_offer.title ?? "").length > 2],
+      ["no duplicate destination save", !(r.proposed_saves ?? []).some((p) => p.kind === "destination")],
+    ],
+  },
+  {
+    id: "subject-none-personal", group: "subjects",
+    say: "I've been really anxious since I lost my job",
+    check: (r) => [
+      ["no subject for personal moments", !r.subject_offer && !r.subject_update],
+    ],
+  },
+  {
+    id: "subject-none-memory-off", group: "subjects",
+    say: "I'm starting a vegetable garden in my backyard this spring.",
+    settings: { memory_on: false },
+    check: (r) => [
+      ["no subject when memory is off", !r.subject_offer],
     ],
   },
 

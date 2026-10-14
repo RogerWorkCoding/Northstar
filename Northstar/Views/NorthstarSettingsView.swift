@@ -36,6 +36,7 @@ struct NorthstarSettingsView: View {
 
     private let memoryService = MemoryService()
     private let notesService = NotesService()
+    private let subjectsService = SubjectsService()
 
     var body: some View {
         Form {
@@ -100,7 +101,7 @@ struct NorthstarSettingsView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes every destination, decision, preference and note Northstar remembers. It can't be undone.")
+            Text("This removes every subject, destination, decision, preference and note Northstar remembers. It can't be undone.")
         }
     }
 
@@ -112,7 +113,11 @@ struct NorthstarSettingsView: View {
             ["kind": "note", "text": $0.text, "subject": $0.subject ?? "",
              "date": ISO8601DateFormatter().string(from: $0.createdAt)]
         }
-        let rows = saved + notes
+        let subjects = ((try? await subjectsService.all()) ?? []).map {
+            ["kind": "subject", "text": $0.title, "goal": $0.goal ?? "", "next_step": $0.nextStep ?? "",
+             "decisions": $0.decisions.map(\.text).joined(separator: "; "), "status": $0.status]
+        }
+        let rows = saved + notes + subjects
         if let data = try? JSONSerialization.data(withJSONObject: rows, options: [.prettyPrinted]),
            let text = String(data: data, encoding: .utf8) {
             exportText = text
@@ -123,6 +128,7 @@ struct NorthstarSettingsView: View {
         let id = SupabaseManager.shared.identityId
         do {
             try await notesService.deleteAll()
+            try await subjectsService.deleteAll()
             let items = try await memoryService.loadMemories(identityId: id)
             for item in items {
                 try await memoryService.deleteMemory(id: item.id)
