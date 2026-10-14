@@ -183,6 +183,21 @@ const SKILLS: Record<string, { use: string; hint: RegExp; rules: string }> = {
   the answer as a taste. Prefer fast (DC) chargers unless they say otherwise.
 - No places for general questions, personal conversations or crisis.`,
   },
+  news: {
+    use: "they want current news or headlines, in general, on a topic, or from a named outlet",
+    hint: /\b(news|headlines?|what('s| is) happening|latest on|breaking)\b/i,
+    rules: `
+- Always search first; never answer news from memory. Look for today's stories (use the date above).
+- Give 3 headlines at most, one short line each, as bold links to the story, with the outlet and when it was
+  posted (e.g. "NBC News · 2 hours ago"). If a story is older than a day, say so; never present old news as new.
+- Use at least 2 different outlets unless they named one. If they named an outlet (e.g. "from NBC News"),
+  use only that outlet.
+- Use their saved favorite outlets first, if any. If they have none and ask for news again later, you may ask
+  once which outlets they like, and offer to save the answer as a taste.
+- Stay neutral: report what happened, no opinions, no loaded words. For political or disputed stories, say
+  who claims what instead of taking a side.
+- End with one short question, e.g. "Want more on one of these?"`,
+  },
 };
 
 /** All skills, each headed by when to use it. Same text every time, so it stays cached. */

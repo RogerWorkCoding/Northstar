@@ -392,6 +392,29 @@ const NS_CASES = [
     ],
   },
   {
+    id: "news-general", group: "news",
+    say: "What's in the news today?",
+    check: (r) => [
+      ["looked it up", (r.sources ?? []).length >= 1],
+      ["2+ outlets", new Set((r.sources ?? []).map((x) => new URL(x.url).hostname.replace(/^www\./, ""))).size >= 2],
+      ["3 headlines at most", ((r.reply ?? "").match(/^\s*[•\-*] /gm) ?? []).length <= 3],
+      ["says when", has(r.reply, /\b(ago|today|yesterday|this (morning|afternoon|evening)|Oct|October|\d{1,2}:\d{2})/i)],
+    ],
+  },
+  {
+    id: "news-named-outlet", group: "news",
+    say: "Top stories from NBC News today",
+    check: (r) => [
+      ["looked it up", (r.sources ?? []).length >= 1],
+      ["only NBC", (r.sources ?? []).every((x) => /nbcnews\.com$/i.test(new URL(x.url).hostname))],
+    ],
+  },
+  {
+    id: "news-any-language", group: "news",
+    say: "¿Cuáles son las noticias de hoy?",
+    check: (r) => [["looked it up", (r.sources ?? []).length >= 1]],
+  },
+  {
     id: "places-not-for-facts", group: "places",
     say: "What is the capital of France?",
     check: (r) => [["no map for a fact", (r.places ?? []).length === 0]],
