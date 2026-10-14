@@ -842,8 +842,7 @@ struct ContentView: View {
             do {
                 try await subjectsService.keep(title: offer.title, goal: offer.goal, nextStep: offer.nextStep)
             } catch {
-                subjectStates[messageId] = nil   // show the buttons again
-                print("Keep subject failed:", error.localizedDescription)
+                subjectStates[messageId] = "keepFailed"   // shows "Couldn't keep it" with the buttons again
             }
         }
     }
@@ -853,10 +852,10 @@ struct ContentView: View {
         subjectStates[messageId] = "undone"
         Task {
             do {
-                try await subjectsService.undo(id: update.id, to: update.undo)
+                let ok = try await subjectsService.undo(update)
+                if !ok { subjectStates[messageId] = "changedSince" }
             } catch {
-                subjectStates[messageId] = nil
-                print("Undo subject failed:", error.localizedDescription)
+                subjectStates[messageId] = "undoFailed"
             }
         }
     }

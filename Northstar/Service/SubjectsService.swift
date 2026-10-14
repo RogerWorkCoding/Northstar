@@ -71,19 +71,32 @@ struct SubjectsService {
     }
 
     /// "Keep" on an offer: the subject is saved (only what the person confirmed).
+    /// If an active subject with this title already exists, it counts as kept.
     func keep(title: String, goal: String?, nextStep: String?) async throws {
-        try await client.from("subjects")
-            .insert(NewSubject(title: title, goal: goal, next_step: nextStep))
-            .execute()
+        do {
+            try await client.from("subjects")
+                .insert(NewSubject(title: title, goal: goal, next_step: nextStep))
+                .execute()
+        } catch let error as PostgrestError where error.code == "23505" {
+            return // already kept
+        }
     }
 
-    /// Undo an automatic update: put the card back the way it was.
-    func undo(id: UUID, to before: NorthstarInsight.SubjectUpdate.Snapshot) async throws {
-        try await client.from("subjects")
+    nonisolated private struct IdRow: Decodable, Sendable { let id: UUID }
+
+    /// Undo an automatic update: put the card back the way it was, but only if it
+    /// hasn't changed since (so a later update is never wiped). Returns false if it had.
+    func undo(_ update: NorthstarInsight.SubjectUpdate) async throws -> Bool {
+        let before = update.undo
+        let rows: [IdRow] = try await client.from("subjects")
             .update(Restore(goal: before.goal, next_step: before.nextStep, decisions: before.decisions,
                             status: before.status, updated_at: ISO8601DateFormatter().string(from: Date())))
-            .eq("id", value: id.uuidString)
+            .eq("id", value: update.id.uuidString)
+            .eq("updated_at", value: update.stamp)
+            .select("id")
             .execute()
+            .value
+        return !rows.isEmpty
     }
 
     func markDone(id: UUID) async throws {

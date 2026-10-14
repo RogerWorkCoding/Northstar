@@ -15,6 +15,7 @@ struct NotesSearchView: View {
     @State private var recent: [Note] = []      // newest notes, shown as pills when not searching
     @State private var subjects: [Subject] = []  // kept projects, shown above Recent
     @State private var openedSubject: Subject?
+    @State private var subjectFailed = false
     @State private var hintIndex = 0            // which rotating hint is showing
     @FocusState private var fieldFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -48,8 +49,8 @@ struct NotesSearchView: View {
         .task { await loadRecent(); await loadSubjects() }
         .sheet(item: $openedSubject) { subject in
             SubjectDetailSheet(subject: subject,
-                onDone: { Task { try? await subjectsService.markDone(id: subject.id); await loadSubjects() }; openedSubject = nil },
-                onDelete: { Task { try? await subjectsService.delete(id: subject.id); await loadSubjects() }; openedSubject = nil })
+                onDone: { Task { do { try await subjectsService.markDone(id: subject.id) } catch { subjectFailed = true }; await loadSubjects() }; openedSubject = nil },
+                onDelete: { Task { do { try await subjectsService.delete(id: subject.id) } catch { subjectFailed = true }; await loadSubjects() }; openedSubject = nil })
             .presentationDetents([.medium, .large])
         }
         // Rotate the hint every 4 seconds while the field is empty.
@@ -82,6 +83,11 @@ struct NotesSearchView: View {
                 opened = nil
             }
             .presentationDetents([.medium, .large])
+        }
+        .alert("Couldn't change that subject", isPresented: $subjectFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Check your connection and try again.")
         }
         .alert("Couldn't delete that note", isPresented: $deleteFailed) {
             Button("OK", role: .cancel) {}

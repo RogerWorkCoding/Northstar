@@ -919,7 +919,7 @@ Deno.serve(async (req) => {
   // Subjects: offer a new one ("Keep this?"), or update a kept one right away (with Undo).
   let subject_offer: { title: string; goal: string | null; next_step: string | null } | null = null;
   let subject_update: {
-    id: string; title: string; changes: string[];
+    id: string; title: string; changes: string[]; stamp: string;
     undo: { goal: string | null; next_step: string | null; decisions: Subject["decisions"]; status: string };
   } | null = null;
   let linkedSubjectId: string | null = null;
@@ -951,11 +951,12 @@ Deno.serve(async (req) => {
           }
         }
         if (changes.length) {
-          patch.updated_at = new Date().toISOString();
+          const stamp = new Date().toISOString();
+          patch.updated_at = stamp;
           const { error } = await userDb(auth).from("subjects").update(patch).eq("id", s.id);
           if (error) console.error("subject not updated:", error.code, error.message.slice(0, 200));
           else subject_update = {
-            id: s.id, title: s.title, changes,
+            id: s.id, title: s.title, changes, stamp, // Undo only works if nothing changed after this
             undo: { goal: s.goal, next_step: s.next_step, decisions: s.decisions, status: s.status },
           };
         }

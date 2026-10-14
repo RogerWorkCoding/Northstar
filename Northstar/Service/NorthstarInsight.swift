@@ -71,6 +71,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         let id: UUID
         let title: String
         let changes: [String]
+        /// When this change was written; Undo only applies if the card hasn't changed since.
+        let stamp: String
         let undo: Snapshot
     }
 

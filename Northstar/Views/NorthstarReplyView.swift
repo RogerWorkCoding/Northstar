@@ -104,7 +104,7 @@ struct NorthstarReplyView: View {
             }
 
             if let update = insight?.subjectUpdate {
-                SubjectUpdatedLine(update: update, undone: subjectState == "undone", onUndo: onUndoSubject)
+                SubjectUpdatedLine(update: update, state: subjectState, onUndo: onUndoSubject)
             }
 
             if let earlier = insight?.fromBefore.first, !fromBeforeDone {
@@ -574,6 +574,11 @@ struct SubjectOfferCard: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(NorthstarChatStyle.savedGreen)
                 } else {
+                    if state == "keepFailed" {
+                        Text("Couldn't keep it. Check your connection and try again.")
+                            .font(.footnote)
+                            .foregroundStyle(NorthstarChatStyle.soft)
+                    }
                     HStack(spacing: 10) {
                         Button { onKeep(offer) } label: {
                             Text("Keep")
@@ -604,8 +609,10 @@ struct SubjectOfferCard: View {
 /// "✓ Sunrise Loaf updated · Next: pick the name font · Undo"
 struct SubjectUpdatedLine: View {
     let update: NorthstarInsight.SubjectUpdate
-    var undone: Bool = false
+    var state: String? = nil            // nil, "undone", "changedSince" or "undoFailed"
     var onUndo: (NorthstarInsight.SubjectUpdate) -> Void = { _ in }
+
+    private var undone: Bool { state == "undone" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -614,7 +621,7 @@ struct SubjectUpdatedLine: View {
                 Text(undone ? "\(update.title): change undone" : "\(update.title) updated")
                     .font(.subheadline.weight(.semibold))
                 Spacer(minLength: 8)
-                if !undone {
+                if state == nil || state == "undoFailed" {
                     Button("Undo") { onUndo(update) }
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(NorthstarChatStyle.linkBlue)
@@ -623,6 +630,13 @@ struct SubjectUpdatedLine: View {
                 }
             }
             .foregroundStyle(undone ? NorthstarChatStyle.label : NorthstarChatStyle.savedGreen)
+            if state == "changedSince" {
+                Text("The card changed after this, so it wasn't undone. Open it in Search to edit.")
+                    .font(.footnote).foregroundStyle(NorthstarChatStyle.soft)
+            } else if state == "undoFailed" {
+                Text("Couldn't undo. Check your connection and try again.")
+                    .font(.footnote).foregroundStyle(NorthstarChatStyle.soft)
+            }
             if !undone {
                 ForEach(update.changes, id: \.self) { change in
                     Text(change).font(.footnote).foregroundStyle(NorthstarChatStyle.soft)
