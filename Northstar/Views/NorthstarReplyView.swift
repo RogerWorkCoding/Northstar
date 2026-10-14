@@ -111,6 +111,10 @@ struct NorthstarReplyView: View {
                 FromBeforeCard(note: earlier, canUse: canChooseDirection, onUse: onUseFromBefore, onDismiss: onDismissFromBefore)
             }
 
+            if let places = insight?.places, !places.isEmpty {
+                PlacesMapCard(places: places)
+            }
+
             if let sources = insight?.sources, !sources.isEmpty {
                 SourcesRow(sources: sources)
             }

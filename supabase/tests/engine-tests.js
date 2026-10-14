@@ -323,6 +323,45 @@ const NS_CASES = [
   },
 
   {
+    id: "places-map", group: "places",
+    say: "Where can I get good coffee in downtown Petaluma?",
+    check: (r) => [
+      ["shows places on a map", (r.places ?? []).length >= 1 && (r.places ?? []).length <= 5],
+      ["each has a name and area", (r.places ?? []).every((p) => p.name && p.area)],
+      ["looked it up (real places)", (r.sources ?? []).length >= 1],
+    ],
+  },
+  {
+    id: "places-ask-area", group: "places",
+    say: "Find me a good hardware store nearby",
+    check: (r) => [
+      ["asks where (doesn't guess)", has(r.reply, /\b(where|which (city|area|neighborhood|town)|what (city|area|neighborhood|town)|your (city|area|location|neighborhood))\b/i)],
+      ["no places yet", (r.places ?? []).length === 0],
+    ],
+  },
+  {
+    id: "places-ev-asks-networks", group: "places",
+    say: "I need a fast charger for my EV in Petaluma, CA",
+    check: (r) => [
+      ["asks which networks once, or shows chargers", has(r.reply, /network/i) || (r.places ?? []).length >= 1],
+    ],
+  },
+  {
+    id: "places-ev-uses-taste", group: "places",
+    memory: [{ kind: "taste", text: "EV fast charging: only EVgo, Electrify America, Tesla Supercharger, Ionna, Rivian Adventure Network" }],
+    say: "Find a fast charger in Petaluma, CA",
+    check: (r) => [
+      ["doesn't ask again", !has(r.reply, /which (charging )?networks?/i)],
+      ["only their networks", (r.places ?? []).every((p) => /evgo|electrify america|tesla|supercharger|ionna|rivian/i.test(p.name))],
+    ],
+  },
+  {
+    id: "places-not-for-facts", group: "places",
+    say: "What is the capital of France?",
+    check: (r) => [["no map for a fact", (r.places ?? []).length === 0]],
+  },
+
+  {
     id: "no-repeated-question", group: "flow",
     history: [
       { role: "user", content: "Plan a birthday party for my daughter, she's turning 8" },

@@ -83,6 +83,12 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     }
 
     /// A web page Northstar used for its answer (checked on the server: real search results only).
+    /// A real place Northstar recommends; the app finds it in Apple Maps.
+    nonisolated struct Place: Hashable, Sendable, Decodable {
+        let name: String
+        let area: String
+    }
+
     nonisolated struct Source: Hashable, Sendable, Decodable {
         let title: String
         let url: URL
@@ -120,6 +126,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let directions: [Direction]
     /// Web pages used for this answer (empty when Northstar didn't look anything up).
     let sources: [Source]
+    /// Real places to show on a map (empty for most replies).
+    let places: [Place]
     /// A line from an earlier conversation that matches (shown as a "From before" card).
     let fromBefore: [Note]
     /// Subjects: a new one to keep, or a kept one that was just updated.
@@ -144,6 +152,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case crisis
         case directions
         case sources
+        case places
         case fromBefore = "from_before"
         case subjectOffer = "subject_offer"
         case chatTitle = "chat_title"
@@ -165,6 +174,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         var seenSites = Set<String>()
         sources = ((try? c.decodeIfPresent([Source].self, forKey: .sources)) ?? [])
             .filter { $0.url.scheme == "https" && seenSites.insert($0.site).inserted }
+        places = Array(((try? c.decodeIfPresent([Place].self, forKey: .places)) ?? []).prefix(5))
         fromBefore = (try? c.decodeIfPresent([Note].self, forKey: .fromBefore)) ?? []
         subjectOffer = try? c.decodeIfPresent(SubjectOffer.self, forKey: .subjectOffer)
         chatTitle = try? c.decodeIfPresent(String.self, forKey: .chatTitle)
