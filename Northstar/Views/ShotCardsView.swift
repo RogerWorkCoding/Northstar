@@ -1,13 +1,16 @@
 import SwiftUI
 import UIKit
+import AVKit
 
 // 🎬 Shot cards: Northstar plans a video like an art director. Each card holds one shot's
-// prompt to copy into a video tool such as Google Flow (Veo). Northstar doesn't make the video.
+// prompt. "Make video" turns it into a real clip with Google Veo (a few per day);
+// "Copy prompt" is still there for using it in another tool.
 
 struct ShotCardsView: View {
     let shots: [NorthstarInsight.Shot]
 
     @State private var copied: Int?
+    @State private var store = VideoStore.shared
 
     private static let flowURL = URL(string: "https://labs.google/fx/tools/flow")!
 
@@ -65,20 +68,65 @@ struct ShotCardsView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
 
-            Button {
-                UIPasteboard.general.string = shot.prompt
-                withAnimation(.easeOut(duration: 0.2)) { copied = index }
-            } label: {
-                Label(copied == index ? "Copied" : "Copy prompt",
-                      systemImage: copied == index ? "checkmark" : "doc.on.doc")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: 40)
-                    .background(Capsule().fill(Color(red: 0.91, green: 0.93, blue: 1.0)))
+            if let url = store.files[shot.prompt], let player = store.player(for: shot.prompt) {
+                VideoPlayer(player: player)
+                    .aspectRatio(16 / 9, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .accessibilityLabel("Video for shot \(index + 1), \(shot.title)")
+                ShareLink(item: url) {
+                    Label("Save or share", systemImage: "square.and.arrow.up")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(NorthstarChatStyle.soft)
+                }
+            } else if store.making == shot.prompt {
+                HStack(spacing: 10) {
+                    ProgressView().tint(.white)
+                    Text("Making your video… this can take a minute or two.")
+                        .font(.footnote)
+                        .foregroundStyle(NorthstarChatStyle.label)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Copy prompt for shot \(index + 1), \(shot.title)")
+
+            if let problem = store.problems[shot.prompt] {
+                Text(problem)
+                    .font(.footnote)
+                    .foregroundStyle(NorthstarChatStyle.label)
+            }
+
+            HStack(spacing: 10) {
+                if store.files[shot.prompt] == nil {
+                    Button {
+                        store.make(prompt: shot.prompt, seconds: shot.seconds)
+                    } label: {
+                        Label("Make video", systemImage: "play.rectangle.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 40)
+                            .background(Capsule().fill(Color(red: 0.91, green: 0.93, blue: 1.0)))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(store.making != nil)
+                    .opacity(store.making != nil && store.making != shot.prompt ? 0.5 : 1)
+                    .accessibilityLabel("Make a video of shot \(index + 1), \(shot.title)")
+                }
+
+                Button {
+                    UIPasteboard.general.string = shot.prompt
+                    withAnimation(.easeOut(duration: 0.2)) { copied = index }
+                } label: {
+                    Label(copied == index ? "Copied" : "Copy prompt",
+                          systemImage: copied == index ? "checkmark" : "doc.on.doc")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(NorthstarChatStyle.soft)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 40)
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Copy prompt for shot \(index + 1), \(shot.title)")
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
