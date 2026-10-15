@@ -76,6 +76,10 @@ struct VideoLibraryView: View {
         }
         // Reload when coming back from a folder, so moves made inside it show here too.
         .onAppear { Task { await load() } }
+        // Another open Videos screen moved something: show the change here too.
+        .onReceive(NotificationCenter.default.publisher(for: .northstarVideosChanged)) { _ in
+            Task { await load() }
+        }
         .alert(namingTitle, isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
             TextField("Name", text: $nameText)
             Button("Save") { let what = naming; let text = nameText; Task { await applyName(what, text) } }
@@ -320,6 +324,7 @@ struct VideoLibraryView: View {
                 }
             }
             await load()
+            NotificationCenter.default.post(name: .northstarVideosChanged, object: nil)
         }
         return true
     }
@@ -382,4 +387,9 @@ private struct MovePicker: View {
         }
         .presentationDetents([.medium, .large])
     }
+}
+
+extension Notification.Name {
+    /// Posted after videos or folders are moved, so every open Videos screen refreshes.
+    static let northstarVideosChanged = Notification.Name("northstarVideosChanged")
 }
