@@ -9,11 +9,8 @@ struct NorthstarApp: App {
 
         WindowGroup {
 
+            // ContentView sets the window's look (Night on the home screen, the chosen look elsewhere).
             ContentView()
-                // Set the look on the app's windows, so switching in Settings takes effect
-                // right away (and Automatic goes back to following the phone).
-                .onAppear { appearance.apply() }
-                .onChange(of: appearance) { appearance.apply() }
         }
     }
 }

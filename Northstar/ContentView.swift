@@ -15,6 +15,15 @@ struct ContentView: View {
     
     /// Day or Night (from Settings → Appearance, or the phone's setting).
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage(SettingsKeys.appearance) private var appearance = Appearance.automatic
+
+    private func applyWindowLook() {
+        if viewModel.messages.isEmpty && navigationPath.isEmpty {
+            Appearance.night.apply()
+        } else {
+            appearance.apply()
+        }
+    }
 
     @State private var awaitingMemorySave = false
     
@@ -167,6 +176,12 @@ struct ContentView: View {
             loadProjectMemory()
             scheduleWelcomeMessageFade()
         }
+        // The home screen (star and mountains) is always Night, status bar included;
+        // chats and other screens use Settings → Appearance.
+        .onAppear { applyWindowLook() }
+        .onChange(of: viewModel.messages.isEmpty) { applyWindowLook() }
+        .onChange(of: navigationPath) { applyWindowLook() }
+        .onChange(of: appearance) { applyWindowLook() }
         .onChange(of: appleAccount.accountChanges) {
             // Signed in to a different account (or out): start fresh so nothing mixes.
             startNewChat()

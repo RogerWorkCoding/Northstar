@@ -64,6 +64,12 @@ struct WireframeFullScreen: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        content
+            // The full-screen drawing always sits on a dark canvas, in Day and Night.
+            .environment(\.colorScheme, .dark)
+    }
+
+    private var content: some View {
         ZStack(alignment: .topTrailing) {
             Color(red: 0.04, green: 0.07, blue: 0.16).ignoresSafeArea()
 
