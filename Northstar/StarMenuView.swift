@@ -71,8 +71,8 @@ struct StarMenuView: View {
                 )
 
                 menuButton(
-                    title: "Learning",
-                    systemImage: "book",
+                    title: "Videos",
+                    systemImage: "play.rectangle.on.rectangle",
                     action: onLearning
                 )
 

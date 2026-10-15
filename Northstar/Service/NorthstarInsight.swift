@@ -147,6 +147,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let shots: [Shot]
     /// YouTube lessons to watch in the app (empty unless a module found some).
     let videos: [LessonVideo]
+    /// Northstar's suggested folder for saving the videos (the person chooses).
+    let folderHint: String?
     /// A line from an earlier conversation that matches (shown as a "From before" card).
     let fromBefore: [Note]
     /// Subjects: a new one to keep, or a kept one that was just updated.
@@ -174,6 +176,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case places
         case shots
         case videos
+        case folderHint = "folder_hint"
         case fromBefore = "from_before"
         case subjectOffer = "subject_offer"
         case chatTitle = "chat_title"
@@ -200,6 +203,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         videos = Array(((try? c.decodeIfPresent([LessonVideo].self, forKey: .videos)) ?? [])
             .filter { $0.id.range(of: "^[A-Za-z0-9_-]{11}$", options: .regularExpression) != nil }
             .prefix(3))
+        folderHint = try? c.decodeIfPresent(String.self, forKey: .folderHint)
         fromBefore = (try? c.decodeIfPresent([Note].self, forKey: .fromBefore)) ?? []
         subjectOffer = try? c.decodeIfPresent(SubjectOffer.self, forKey: .subjectOffer)
         chatTitle = try? c.decodeIfPresent(String.self, forKey: .chatTitle)

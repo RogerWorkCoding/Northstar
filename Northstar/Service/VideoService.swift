@@ -40,9 +40,11 @@ struct VideoService {
 
     /// Makes the clip, saves it on the phone (Documents/Videos) and returns the file.
     /// Throws a friendly message if it can't.
-    func make(prompt: String, seconds: Int) async throws -> URL {
+    func make(prompt: String, seconds: Int) async throws -> (file: URL, storagePath: String) {
         let (jobId, remote) = try await makeRemote(prompt: prompt, seconds: seconds)
-        return try await saveLocally(remote, name: jobId)
+        let file = try await saveLocally(remote, name: jobId)
+        let user = SupabaseManager.shared.currentUserId?.uuidString.lowercased() ?? ""
+        return (file, "\(user)/\(jobId.lowercased()).mp4")
     }
 
     private func makeRemote(prompt: String, seconds: Int) async throws -> (String, URL) {
@@ -115,6 +117,8 @@ final class VideoStore {
     private(set) var files: [String: URL] = [:]
     private(set) var problems: [String: String] = [:]
     private(set) var making: String?
+    /// Where each made video is kept in storage (for saving it to the Videos library).
+    private(set) var storagePaths: [String: String] = [:]
     @ObservationIgnored private var players: [String: AVPlayer] = [:]
 
     private let service = VideoService()
@@ -134,7 +138,9 @@ final class VideoStore {
         making = prompt
         Task {
             do {
-                files[prompt] = try await service.make(prompt: prompt, seconds: seconds)
+                let made = try await service.make(prompt: prompt, seconds: seconds)
+                storagePaths[prompt] = made.storagePath
+                files[prompt] = made.file
             } catch {
                 problems[prompt] = error.localizedDescription
             }

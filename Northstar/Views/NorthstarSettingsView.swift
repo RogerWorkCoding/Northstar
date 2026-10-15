@@ -248,6 +248,7 @@ struct NorthstarSettingsView: View {
             try await subjectsService.deleteAll()
             try await chatsService.deleteAll()
             try await VideoService().deleteAll()
+            try await VideoLibraryService().deleteAll()
             let items = try await memoryService.loadMemories(identityId: id)
             for item in items {
                 try await memoryService.deleteMemory(id: item.id)

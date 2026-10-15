@@ -52,7 +52,7 @@ struct LessonVideosCard: View {
     }
 }
 
-private struct VideoSheet: View {
+struct VideoSheet: View {
     let video: NorthstarInsight.LessonVideo
     @Environment(\.dismiss) private var dismiss
 
@@ -83,7 +83,7 @@ private struct VideoSheet: View {
 }
 
 /// YouTube's own embedded player (privacy-enhanced mode), inline on the phone.
-private struct YouTubePlayer: UIViewRepresentable {
+struct YouTubePlayer: UIViewRepresentable {
     let id: String
 
     func makeUIView(context: Context) -> WKWebView {
