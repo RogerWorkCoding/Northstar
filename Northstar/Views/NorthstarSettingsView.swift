@@ -169,6 +169,7 @@ struct NorthstarSettingsView: View {
                     ForEach(Appearance.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                .onChange(of: appearance) { appearance.apply() }
             } header: {
                 Text("Appearance")
             } footer: {
