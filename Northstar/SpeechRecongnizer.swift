@@ -25,7 +25,9 @@ final class SpeechRecognizer {
             locale: Locale(identifier: "en-US")
         )
 
-    private let audioEngine = AVAudioEngine()
+    // A fresh engine for each recording: the microphone's format can change between recordings
+    // (AirPods, a call, a video that played), and an old engine keeps the old format → crash.
+    private var audioEngine = AVAudioEngine()
 
     private var recognitionRequest:
         SFSpeechAudioBufferRecognitionRequest?
@@ -86,9 +88,14 @@ final class SpeechRecognizer {
         request.shouldReportPartialResults = true
         recognitionRequest = request
 
+        audioEngine = AVAudioEngine()
         let inputNode = audioEngine.inputNode
+        // The microphone's real format right now (after the audio session is set).
         let recordingFormat =
-            inputNode.outputFormat(forBus: 0)
+            inputNode.inputFormat(forBus: 0)
+        guard recordingFormat.sampleRate > 0, recordingFormat.channelCount > 0 else {
+            throw SpeechRecognizerError.recognizerUnavailable
+        }
 
         recognitionTask =
             speechRecognizer?.recognitionTask(
