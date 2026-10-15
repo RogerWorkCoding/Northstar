@@ -27,18 +27,18 @@ struct DocumentsView: View {
                                 weight: .light
                             )
                         )
-                        .foregroundStyle(.white)
+                        .foregroundStyle(NorthstarChatStyle.text)
 
                     Text("Northstar Documents")
                         .font(.title2)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(NorthstarChatStyle.text)
 
                     Text(
                         "No saved documents found."
                     )
                     .font(.subheadline)
                     .foregroundStyle(
-                        .white.opacity(0.65)
+                        NorthstarChatStyle.label
                     )
                 }
                 .padding()

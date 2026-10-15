@@ -124,7 +124,7 @@ struct NotesSearchView: View {
                             .accessibilityHidden(true)
                     }
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(NorthstarChatStyle.text)
                 .font(.body)
                 .submitLabel(.search)
                 .autocorrectionDisabled()
@@ -145,7 +145,7 @@ struct NotesSearchView: View {
         if let errorMessage {
             message(icon: "exclamationmark.triangle", title: errorMessage, detail: "Check your connection and try again.")
         } else if searched.isEmpty || (isSearching && results.isEmpty) {
-            if isSearching { VStack { ProgressView().tint(.white).padding(.top, 48); Spacer() } }
+            if isSearching { VStack { ProgressView().tint(NorthstarChatStyle.text).padding(.top, 48); Spacer() } }
             else { recentPills }
         } else if results.isEmpty && !isSearching {
             message(icon: "magnifyingglass", title: "Nothing found", detail: "Try other words, or say it a different way.")
@@ -277,7 +277,7 @@ struct NotesSearchView: View {
     private func message(icon: String, title: String, detail: String) -> some View {
         VStack(spacing: 12) {
             Image(systemName: icon).font(.largeTitle).foregroundStyle(NorthstarChatStyle.label)
-            Text(title).font(.headline).foregroundStyle(.white)
+            Text(title).font(.headline).foregroundStyle(NorthstarChatStyle.text)
             Text(detail)
                 .font(.subheadline)
                 .foregroundStyle(NorthstarChatStyle.soft)
@@ -337,14 +337,14 @@ private struct NoteRow: View {
 
             Text(Highlight.bold(note.text, matching: query))
                 .font(.body)
-                .foregroundStyle(.white)
+                .foregroundStyle(NorthstarChatStyle.text)
                 .northstarReadingStyle()
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.06)))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(NorthstarChatStyle.card))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint("Shows what Northstar answered")
@@ -383,9 +383,9 @@ private struct NoteDetailSheet: View {
                         Button { onOpenChat(chatId) } label: {
                             Label("Open the chat", systemImage: "bubble.left.and.bubble.right")
                                 .font(.body.weight(.semibold))
-                                .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
+                                .foregroundStyle(NorthstarChatStyle.onPrimary)
                                 .frame(maxWidth: .infinity, minHeight: 44)
-                                .background(Capsule().fill(Color(red: 0.91, green: 0.93, blue: 1.0)))
+                                .background(Capsule().fill(NorthstarChatStyle.primaryFill))
                         }
                         .buttonStyle(.plain)
                         .padding(.top, 8)
@@ -413,7 +413,7 @@ private struct NoteDetailSheet: View {
                 .foregroundStyle(NorthstarChatStyle.label)
             Text(text)
                 .font(strong ? .title3.weight(.semibold) : .body)
-                .foregroundStyle(strong ? .white : NorthstarChatStyle.soft)
+                .foregroundStyle(strong ? NorthstarChatStyle.text : NorthstarChatStyle.soft)
                 .northstarReadingStyle()
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -469,9 +469,8 @@ extension View {
                     // Tinted toward navy so the glass belongs to the screen (not grey).
                     Capsule().fill(Color(red: 0.42, green: 0.52, blue: 0.95).opacity(0.14))
                 }
-                .environment(\.colorScheme, .dark)
             }
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
+            .overlay(Capsule().strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
             .shadow(color: Color(red: 0.45, green: 0.55, blue: 1.0).opacity(0.15), radius: 12)
     }
 }
@@ -495,7 +494,7 @@ struct SubjectDetailSheet: View {
                         Text(subject.title)
                     }
                     .font(.title2.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(NorthstarChatStyle.text)
 
                     if let goal = subject.goal, !goal.isEmpty { block("GOAL", goal) }
                     if !subject.decisions.isEmpty {
@@ -523,7 +522,7 @@ struct SubjectDetailSheet: View {
                                 .frame(maxWidth: .infinity, minHeight: 44)
                         }
                         .buttonStyle(.bordered)
-                        .tint(.white)
+                        .tint(NorthstarChatStyle.text)
                         }
                         Button(role: .destructive) { confirmDelete = true } label: {
                             Label("Delete", systemImage: "trash")

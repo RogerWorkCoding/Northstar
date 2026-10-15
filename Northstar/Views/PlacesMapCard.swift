@@ -44,7 +44,7 @@ struct PlacesMapCard: View {
                 .overlay(alignment: .topTrailing) {
                     Label("Open in Maps", systemImage: "arrow.up.right")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(NorthstarChatStyle.text)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(Capsule().fill(Color.black.opacity(0.55)))
@@ -58,9 +58,9 @@ struct PlacesMapCard: View {
                 .accessibilityAddTraits(.isButton)
             } else if !searched {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.white.opacity(0.05))
+                    .fill(NorthstarChatStyle.card)
                     .frame(height: 220)
-                    .overlay(ProgressView().tint(.white))
+                    .overlay(ProgressView().tint(NorthstarChatStyle.text))
             }
 
             VStack(spacing: 8) {
@@ -71,8 +71,8 @@ struct PlacesMapCard: View {
             }
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.06)))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(NorthstarChatStyle.card))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
         .accessibilityElement(children: .contain)
         .task(id: places) { await search() }
     }
@@ -104,7 +104,7 @@ struct PlacesMapCard: View {
         }
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.05)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NorthstarChatStyle.card))
         .contentShape(Rectangle())
         .accessibilityLabel("\(f.place.name), \(f.place.area)")
         .accessibilityHint("Opens in Apple Maps")

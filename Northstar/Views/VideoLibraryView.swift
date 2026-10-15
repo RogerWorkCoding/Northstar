@@ -53,7 +53,7 @@ struct VideoLibraryView: View {
         ZStack {
             NorthstarChatStyle.background.ignoresSafeArea()
             if !loaded {
-                ProgressView().tint(.white)
+                ProgressView().tint(NorthstarChatStyle.text)
             } else if failed {
                 message(icon: "exclamationmark.triangle", title: "Couldn't load your videos",
                         detail: "Check your connection and try again.")
@@ -202,7 +202,7 @@ struct VideoLibraryView: View {
 
     private func card(highlight: Bool, faint: Bool = false) -> some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(highlight ? NorthstarChatStyle.linkBlue.opacity(0.35) : Color.white.opacity(faint ? 0.03 : 0.06))
+            .fill(highlight ? NorthstarChatStyle.linkBlue.opacity(0.35) : faint ? NorthstarChatStyle.card.opacity(0.5) : NorthstarChatStyle.card)
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(highlight ? NorthstarChatStyle.linkBlue : Color.clear, lineWidth: 1.5))
     }
@@ -212,9 +212,9 @@ struct VideoLibraryView: View {
             Group {
                 if let id = video.youtubeId {
                     AsyncImage(url: URL(string: "https://img.youtube.com/vi/\(id)/mqdefault.jpg")) { $0.resizable().aspectRatio(16 / 9, contentMode: .fill) }
-                        placeholder: { Color.white.opacity(0.08) }
+                        placeholder: { NorthstarChatStyle.card }
                 } else {
-                    ZStack { Color.white.opacity(0.08); Image(systemName: "sparkles.tv").foregroundStyle(.white) }
+                    ZStack { NorthstarChatStyle.cardStrong; Image(systemName: "sparkles.tv").foregroundStyle(NorthstarChatStyle.text) }
                 }
             }
             .frame(width: 80, height: 45)
@@ -251,7 +251,7 @@ struct VideoLibraryView: View {
     private func message(icon: String, title: String, detail: String) -> some View {
         VStack(spacing: 12) {
             Image(systemName: icon).font(.largeTitle).foregroundStyle(NorthstarChatStyle.label)
-            Text(title).font(.headline).foregroundStyle(.white)
+            Text(title).font(.headline).foregroundStyle(NorthstarChatStyle.text)
             Text(detail).font(.subheadline).foregroundStyle(NorthstarChatStyle.soft).multilineTextAlignment(.center)
         }
         .padding(32)
@@ -294,7 +294,7 @@ struct VideoLibraryView: View {
         Label(title, systemImage: icon)
             .font(.subheadline.weight(.semibold))
             .lineLimit(1)
-            .foregroundStyle(.white)
+            .foregroundStyle(NorthstarChatStyle.text)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(Capsule().fill(NorthstarChatStyle.userBubble))

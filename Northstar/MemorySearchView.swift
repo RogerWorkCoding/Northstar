@@ -70,6 +70,9 @@ struct MemorySearchView: View {
                 }
             }
         }
+        // This older screen keeps its Night look in Day too.
+        .environment(\.colorScheme, .dark)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .navigationTitle(
             "Search Memory"
         )

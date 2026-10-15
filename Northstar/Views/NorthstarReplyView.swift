@@ -5,14 +5,44 @@ import SwiftUI
 // above the reply, "What I heard" pills below it, then one-tap save cards.
 // Quick questions show only the answer.
 
+/// Northstar's colors. Each one has a Night value (navy, the original look) and a Day value
+/// (warm cream paper with navy ink, easier for long reading and in sunlight). The app follows
+/// Settings → Appearance: Automatic (the phone's light/dark setting), Day or Night.
+/// The home screen with the star and mountains always stays Night.
 enum NorthstarChatStyle {
-    static let text = Color(red: 0.95, green: 0.96, blue: 1.0)       // #F2F4FF
-    static let soft = Color(red: 0.79, green: 0.83, blue: 1.0)       // #C9D3FF
-    static let label = Color(red: 0.68, green: 0.73, blue: 0.90)     // #AEB9E6
-    static let userBubble = Color(red: 0.17, green: 0.24, blue: 0.48) // #2B3C7A
-    static let savedGreen = Color(red: 0.81, green: 0.96, blue: 0.89) // #CFF5E3
-    static let background = Color(red: 0.08, green: 0.12, blue: 0.25) // screens like Search
-    static let linkBlue = Color(red: 0.62, green: 0.75, blue: 1.0)    // #9EBFFF links in replies
+    // Ink
+    static let text = dyn(0xF2F4FF, 0x16213F)
+    static let soft = dyn(0xC9D3FF, 0x3D4870)
+    static let label = dyn(0xAEB9E6, 0x5C6688)
+    static let linkBlue = dyn(0x9EBFFF, 0x2C4FB0)        // links in replies
+    static let savedGreen = dyn(0xCFF5E3, 0x1E7A4C)
+    static let warning = dyn(0xFFCCB3, 0xA0401E)         // "Couldn't save" lines
+    // Surfaces
+    static let background = dyn(0x141F40, 0xF6F1E6)      // screens like Search, Videos, Projects
+    static let userBubble = dyn(0x2B3C7A, 0x1E2B57)
+    static let onUserBubble = dyn(0xF2F4FF, 0xFFFFFF)
+    static let card = dyn(0xFFFFFF, 0xFFFFFF, darkAlpha: 0.06)        // cards on the page
+    static let cardStrong = dyn(0xFFFFFF, 0xFFFFFF, darkAlpha: 0.10)  // raised cards, chips
+    static let stroke = dyn(0xFFFFFF, 0xE2D9C6, darkAlpha: 0.22)      // card and capsule edges
+    // Main button (e.g. Save): light pill on Night, navy pill on Day.
+    static let primaryFill = dyn(0xE8ECFF, 0x1E2B57)
+    static let onPrimary = dyn(0x0D1736, 0xFFFFFF)
+    // Send button in the chat field (white arrow on both).
+    static let sendFill = dyn(0xFFFFFF, 0x1E2B57, darkAlpha: 0.20)
+    // The small star in the chat header on Day (gold); Night uses the glowing star.
+    static let starGold = dyn(0xF2F4FF, 0xB9852A)
+
+    /// A color with a Night value and a Day value.
+    nonisolated private static func dyn(_ dark: UInt32, _ light: UInt32, darkAlpha: CGFloat = 1) -> Color {
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .light ? rgb(light, 1) : rgb(dark, darkAlpha)
+        })
+    }
+
+    nonisolated private static func rgb(_ hex: UInt32, _ alpha: CGFloat) -> UIColor {
+        UIColor(red: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255, alpha: alpha)
+    }
 }
 
 /// Your message: one soft blue bubble on the right.
@@ -25,7 +55,7 @@ struct UserMessageView: View {
             Text(text)
                 .font(.system(size: 17))
                 .lineSpacing(3)
-                .foregroundStyle(.white)
+                .foregroundStyle(NorthstarChatStyle.onUserBubble)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
                 .background(
@@ -211,7 +241,7 @@ struct NorthstarReplyView: View {
                     HStack(spacing: 0) {
                         // Plain words only (approved): no group labels on pills.
                         Text(pill.text)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(NorthstarChatStyle.text)
                         Button {
                             withAnimation(.easeOut(duration: 0.2)) {
                                 _ = removedPills.insert(pill)
@@ -231,8 +261,8 @@ struct NorthstarReplyView: View {
                     .padding(.leading, 14)
                     .padding(.trailing, 2)
                     .frame(height: 40)
-                    .background(Capsule().fill(Color.white.opacity(0.08)))
-                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
+                    .background(Capsule().fill(NorthstarChatStyle.card))
+                    .overlay(Capsule().strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
                 }
             }
         }
@@ -267,7 +297,7 @@ struct NorthstarReplyView: View {
                     Text("Undo")
                         .font(.system(size: 15, weight: .semibold))
                         .underline()
-                        .foregroundStyle(.white)
+                        .foregroundStyle(NorthstarChatStyle.text)
                         .frame(minWidth: 44, minHeight: 44)
                 }
                 .buttonStyle(.plain)
@@ -276,8 +306,8 @@ struct NorthstarReplyView: View {
             .foregroundStyle(NorthstarChatStyle.savedGreen)
             .padding(.horizontal, 16)
             .frame(height: 48)
-            .background(Capsule().fill(Color(red: 0.56, green: 0.90, blue: 0.75).opacity(0.12)))
-            .overlay(Capsule().strokeBorder(Color(red: 0.56, green: 0.90, blue: 0.75).opacity(0.35), lineWidth: 1))
+            .background(Capsule().fill(NorthstarChatStyle.savedGreen.opacity(0.12)))
+            .overlay(Capsule().strokeBorder(NorthstarChatStyle.savedGreen.opacity(0.45), lineWidth: 1))
             .accessibilityElement(children: .contain)
         default:
             VStack(alignment: .leading, spacing: 12) {
@@ -292,7 +322,7 @@ struct NorthstarReplyView: View {
 
                 Text(save.text)
                     .font(.system(size: 17))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(NorthstarChatStyle.text)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if !save.reason.isEmpty {
@@ -305,7 +335,7 @@ struct NorthstarReplyView: View {
                 if cardStates[save] == .failed {
                     Text("Couldn't save. Try again.")
                         .font(.system(size: 14))
-                        .foregroundStyle(Color(red: 1.0, green: 0.80, blue: 0.70))
+                        .foregroundStyle(NorthstarChatStyle.warning)
                 }
 
                 HStack(spacing: 10) {
@@ -321,9 +351,9 @@ struct NorthstarReplyView: View {
                     } label: {
                         Text(cardStates[save] == .saving ? "Saving…" : "Save")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
+                            .foregroundStyle(NorthstarChatStyle.onPrimary)
                             .frame(maxWidth: .infinity, minHeight: 44)
-                            .background(Capsule().fill(Color(red: 0.91, green: 0.93, blue: 1.0)))
+                            .background(Capsule().fill(NorthstarChatStyle.primaryFill))
                     }
                     .buttonStyle(.plain)
                     .disabled(cardStates[save] == .saving)
@@ -335,16 +365,16 @@ struct NorthstarReplyView: View {
                     } label: {
                         Text("Not now")
                             .font(.system(size: 16))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(NorthstarChatStyle.text)
                             .frame(maxWidth: .infinity, minHeight: 44)
-                            .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
+                            .overlay(Capsule().strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(16)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.07)))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(NorthstarChatStyle.card))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
         }
     }
 
@@ -375,7 +405,7 @@ struct CrisisHelpCard: View {
 
             Text("Talk to someone now. It's free and confidential.")
                 .font(.system(size: 17))
-                .foregroundStyle(.white)
+                .foregroundStyle(NorthstarChatStyle.text)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 10) {
@@ -387,7 +417,7 @@ struct CrisisHelpCard: View {
                 Text("In danger right now? Call 911")
                     .font(.system(size: 15, weight: .semibold))
                     .underline()
-                    .foregroundStyle(.white)
+                    .foregroundStyle(NorthstarChatStyle.text)
                     .frame(minHeight: 44)
             }
 
@@ -396,17 +426,17 @@ struct CrisisHelpCard: View {
                 .foregroundStyle(NorthstarChatStyle.soft)
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.10)))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.30), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(NorthstarChatStyle.cardStrong))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
     }
 
     private func helpLink(_ title: String, systemImage: String, url: String) -> some View {
         Link(destination: URL(string: url)!) {
             Label(title, systemImage: systemImage)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
+                .foregroundStyle(NorthstarChatStyle.onPrimary)
                 .frame(maxWidth: .infinity, minHeight: 48)
-                .background(Capsule().fill(Color(red: 0.91, green: 0.93, blue: 1.0)))
+                .background(Capsule().fill(NorthstarChatStyle.primaryFill))
         }
     }
 }
@@ -489,8 +519,8 @@ struct SourcesRow: View {
                         .foregroundStyle(NorthstarChatStyle.soft)
                         .padding(.horizontal, 12)
                         .frame(minHeight: 36)
-                        .background(Capsule().fill(Color.white.opacity(0.08)))
-                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+                        .background(Capsule().fill(NorthstarChatStyle.card))
+                        .overlay(Capsule().strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
                     }
                     .accessibilityLabel("Source: \(source.title), \(source.site)")
                     .accessibilityHint("Opens in Safari")
@@ -532,26 +562,26 @@ struct FromBeforeCard: View {
                         } label: {
                             Text("Use this")
                                 .font(.body.weight(.semibold))
-                                .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
+                                .foregroundStyle(NorthstarChatStyle.onPrimary)
                                 .frame(maxWidth: .infinity, minHeight: 44)
-                                .background(Capsule().fill(Color(red: 0.91, green: 0.93, blue: 1.0)))
+                                .background(Capsule().fill(NorthstarChatStyle.primaryFill))
                         }
                         Button {
                             withAnimation(.easeOut(duration: 0.2)) { onDismiss() }
                         } label: {
                             Text("Not now")
                                 .font(.body)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(NorthstarChatStyle.text)
                                 .frame(maxWidth: .infinity, minHeight: 44)
-                                .overlay(Capsule().strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
+                                .overlay(Capsule().strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
                         }
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(16)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.06)))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(NorthstarChatStyle.card))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
             .accessibilityElement(children: .contain)
     }
 }
@@ -575,7 +605,7 @@ struct SubjectOfferCard: View {
 
                 Text(offer.title)
                     .font(.title3.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(NorthstarChatStyle.text)
                 if let goal = offer.goal, !goal.isEmpty {
                     Text(goal).font(.body).foregroundStyle(NorthstarChatStyle.soft)
                 }
@@ -597,24 +627,24 @@ struct SubjectOfferCard: View {
                         Button { onKeep(offer) } label: {
                             Text("Keep")
                                 .font(.body.weight(.semibold))
-                                .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
+                                .foregroundStyle(NorthstarChatStyle.onPrimary)
                                 .frame(maxWidth: .infinity, minHeight: 44)
-                                .background(Capsule().fill(Color(red: 0.91, green: 0.93, blue: 1.0)))
+                                .background(Capsule().fill(NorthstarChatStyle.primaryFill))
                         }
                         Button { withAnimation(.easeOut(duration: 0.2)) { onDismiss() } } label: {
                             Text("Not now")
                                 .font(.body)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(NorthstarChatStyle.text)
                                 .frame(maxWidth: .infinity, minHeight: 44)
-                                .overlay(Capsule().strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
+                                .overlay(Capsule().strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
                         }
                     }
                     .buttonStyle(.plain)
                 }
             }
             .padding(16)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.06)))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(NorthstarChatStyle.card))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
             .accessibilityElement(children: .contain)
         }
     }

@@ -19,7 +19,7 @@ struct HistoryView: View {
             NorthstarChatStyle.background.ignoresSafeArea()
 
             if !loaded {
-                ProgressView().tint(.white)
+                ProgressView().tint(NorthstarChatStyle.text)
             } else if failed {
                 message(icon: "exclamationmark.triangle", title: "Couldn't load your chats",
                         detail: "Check your connection and try again.")
@@ -94,7 +94,7 @@ struct HistoryView: View {
     private func message(icon: String, title: String, detail: String) -> some View {
         VStack(spacing: 12) {
             Image(systemName: icon).font(.largeTitle).foregroundStyle(NorthstarChatStyle.label)
-            Text(title).font(.headline).foregroundStyle(.white)
+            Text(title).font(.headline).foregroundStyle(NorthstarChatStyle.text)
             Text(detail).font(.subheadline).foregroundStyle(NorthstarChatStyle.soft).multilineTextAlignment(.center)
         }
         .padding(32)

@@ -47,8 +47,8 @@ struct WireframeCard: View {
                 .frame(maxWidth: .infinity)
             }
             .padding(16)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.06)))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(NorthstarChatStyle.card))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Wireframe: \(visual.title). Tap to see it large.")
@@ -70,7 +70,7 @@ struct WireframeFullScreen: View {
             VStack(spacing: 16) {
                 Text(visual.title)
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(NorthstarChatStyle.text)
                     .padding(.top, 8)
 
                 SVGView(svg: visual.svg)
@@ -87,9 +87,9 @@ struct WireframeFullScreen: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(NorthstarChatStyle.text)
                     .frame(width: 44, height: 44)
-                    .background(Circle().fill(Color.white.opacity(0.16)))
+                    .background(Circle().fill(NorthstarChatStyle.cardStrong))
             }
             .accessibilityLabel("Close")
             .padding(.trailing, 16)
