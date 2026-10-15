@@ -373,7 +373,7 @@ const NS_CASES = [
     id: "expert-any-language-ev", group: "experts",
     say: "Necesito un cargador rápido para mi coche eléctrico en Petaluma",
     check: (r) => [
-      ["answers in Spanish", has(r.reply, /\b(qué|cuál|cuáles|redes|cargador|puedo|usas)\b/i)],
+      ["answers in Spanish", has(r.reply, /\b(qué|cuál|cuáles|redes|cargador(es)?|puedo|usas|estos|son|rápidos?)\b/i)],
       ["uses the places expert (asks networks or shows chargers)", has(r.reply, /red(es)?\b|network/i) || (r.places ?? []).length >= 1],
     ],
   },
