@@ -149,6 +149,10 @@ struct NorthstarReplyView: View {
                 ShotCardsView(shots: shots, suggestedFolder: insight?.folderHint)
             }
 
+            if let code = insight?.code, !code.isEmpty {
+                CodeCardsView(snippets: code)
+            }
+
             if let videos = insight?.videos, !videos.isEmpty {
                 LessonVideosCard(videos: videos)
                 SaveVideoCard(items: videos.map { .youtube(id: $0.id, title: $0.title) },

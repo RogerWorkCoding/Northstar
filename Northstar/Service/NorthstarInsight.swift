@@ -90,6 +90,14 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         let url: String
     }
 
+    /// A code card from the Coding module: shown in a monospace box with a Copy button.
+    nonisolated struct CodeSnippet: Hashable, Sendable, Decodable {
+        let title: String
+        let language: String
+        let code: String
+        let explain: String
+    }
+
     /// A video shot card: paste the prompt into a video tool like Google Flow.
     nonisolated struct Shot: Hashable, Sendable, Decodable {
         let title: String
@@ -147,6 +155,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let shots: [Shot]
     /// YouTube lessons to watch in the app (empty unless a module found some).
     let videos: [LessonVideo]
+    /// Code cards (empty unless the Coding module is on).
+    let code: [CodeSnippet]
     /// Northstar's suggested folder for saving the videos (the person chooses).
     let folderHint: String?
     /// A line from an earlier conversation that matches (shown as a "From before" card).
@@ -176,6 +186,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case places
         case shots
         case videos
+        case code
         case folderHint = "folder_hint"
         case fromBefore = "from_before"
         case subjectOffer = "subject_offer"
@@ -204,6 +215,9 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
             .filter { $0.id.range(of: "^[A-Za-z0-9_-]{11}$", options: .regularExpression) != nil }
             .prefix(3))
         folderHint = try? c.decodeIfPresent(String.self, forKey: .folderHint)
+        code = Array(((try? c.decodeIfPresent([CodeSnippet].self, forKey: .code)) ?? [])
+            .filter { !$0.code.isEmpty }
+            .prefix(3))
         fromBefore = (try? c.decodeIfPresent([Note].self, forKey: .fromBefore)) ?? []
         subjectOffer = try? c.decodeIfPresent(SubjectOffer.self, forKey: .subjectOffer)
         chatTitle = try? c.decodeIfPresent(String.self, forKey: .chatTitle)

@@ -526,6 +526,33 @@ const NS_CASES = [
     ],
   },
   {
+    id: "module-coding-on", group: "modules",
+    settings: { modules: ["coding"] },
+    say: "In SwiftUI, how do I make a button that shows a checkmark after I tap it?",
+    check: (r) => [
+      ["gives code cards", (r.code ?? []).length >= 1],
+      ["Swift code", (r.code ?? []).some((c) => /swift/.test(c.language) && /Button|struct/.test(c.code))],
+      ["no code pasted in the reply", !/```|struct \w+: View/.test(r.reply ?? "")],
+      ["short reply", (r.reply ?? "").length < 500],
+    ],
+  },
+  {
+    id: "module-coding-debug", group: "modules",
+    settings: { modules: ["coding"] },
+    say: "My Swift app says: Cannot find 'VideoStore' in scope. What does that mean?",
+    check: (r) => [
+      ["explains the cause in plain words", has(r.reply, /scope|can.?t (see|find)|not (visible|imported|defined)|file|target|spell/i)],
+    ],
+  },
+  {
+    id: "module-coding-off", group: "modules",
+    say: "In SwiftUI, how do I make a button that shows a checkmark after I tap it?",
+    check: (r) => [
+      ["no code cards when the module is off", (r.code ?? []).length === 0],
+      ["doesn't mention a code card", !/card below|code card/i.test(r.reply ?? "")],
+    ],
+  },
+  {
     id: "module-off-by-default", group: "modules",
     say: "I want to carve my first spoon. What tools do I need?",
     check: (r) => [["no module videos when it's off", (r.videos ?? []).length === 0]],
