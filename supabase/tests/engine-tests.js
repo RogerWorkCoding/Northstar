@@ -498,6 +498,7 @@ const NS_CASES = [
       ["2–5 shots", (r.shots ?? []).length >= 2 && (r.shots ?? []).length <= 5],
       ["each has a prompt and length", (r.shots ?? []).every((x) => x.prompt.length > 30 && [4, 6, 8].includes(x.seconds))],
       ["doesn't paste the prompts in the reply", (r.reply ?? "").length < 400],
+      ["suggests a folder", has(r.folder_hint, /\w/) && r.folder_hint.length <= 40],
     ],
   },
   {
@@ -511,7 +512,7 @@ const NS_CASES = [
   {
     id: "video-none-for-chat", group: "video",
     say: "What's the capital of Japan?",
-    check: (r) => [["no shots", (r.shots ?? []).length === 0]],
+    check: (r) => [["no shots", (r.shots ?? []).length === 0], ["no folder hint", !r.folder_hint]],
   },
   {
     id: "module-woodcarving-on", group: "modules",
@@ -521,6 +522,7 @@ const NS_CASES = [
       ["names carving tools", has(r.reply, /hook knife|sloyd|whittling knife/i)],
       ["safety", has(r.reply, /glove|away from|safety|thumb guard/i)],
       ["real YouTube videos", (r.videos ?? []).length >= 1 && (r.videos ?? []).every((v) => /^[A-Za-z0-9_-]{11}$/.test(v.id))],
+      ["suggests a folder", has(r.folder_hint, /\w/)],
     ],
   },
   {
