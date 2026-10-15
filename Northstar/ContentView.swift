@@ -517,7 +517,7 @@ struct ContentView: View {
         case .settings:
             NorthstarSettingsView()
         case .about:
-            placeholderScreen(title: "About Northstar", symbol: "sparkle")
+            AboutView()
         }
     }
 
