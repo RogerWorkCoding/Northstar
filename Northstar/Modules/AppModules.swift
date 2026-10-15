@@ -6,24 +6,28 @@ import Foundation
 
 nonisolated enum AppModule: String, CaseIterable, Identifiable, Sendable {
     case woodcarving
+    case coding
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .woodcarving: return "Wood carving"
+        case .coding: return "Coding"
         }
     }
 
     var icon: String {
         switch self {
         case .woodcarving: return "hammer"
+        case .coding: return "chevron.left.forwardslash.chevron.right"
         }
     }
 
     var blurb: String {
         switch self {
         case .woodcarving: return "Tools, wood, cuts, sharpening and safety, with video lessons."
+        case .coding: return "A patient senior engineer: plain-words explanations, code you can copy, help with errors."
         }
     }
 

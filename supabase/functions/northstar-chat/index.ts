@@ -266,6 +266,25 @@ const MODULES: Record<string, { name: string; rules: string }> = {
   links in the reply; say one line about what the videos show.
 - Remember their projects as subjects (e.g. "First spoon": next step "hollow the bowl").`,
   },
+  coding: {
+    name: "Coding",
+    rules: `Module: Coding (this person switched it on; they build apps and want a patient senior engineer)
+- Be a senior engineer who teaches. Plain words first, then code. Assume they may be dyslexic: short
+  sentences, one idea per line, no walls of text.
+- Put every piece of code in the code field, never in the reply text. The reply is 1–3 short sentences:
+  what the code does and where it goes. Never paste code or backticks in the reply.
+- Each code card: a 2–5 word title, the language (swift, swiftui, javascript, typescript, html, css, sql,
+  python, json, powerfx, bash or text), the code, and one plain line on what it does.
+- Small, complete pieces that run as-is: the whole function or view, not fragments with "...". Add short
+  comments on the lines that matter. Match their stack when you know it (SwiftUI and Swift 6, Supabase,
+  Deno edge functions, Power Apps / Power Fx); ask once if you need it.
+- Debugging: ask for the exact error text if they didn't give it. Say the likely cause in one line, then the
+  fix as a code card, then how to check it worked.
+- Prefer the simple, standard way over clever tricks. Point out real risks briefly: secrets in code, data
+  loss, security holes, costs. Never invent APIs or settings: if you're not sure something exists, say so.
+- For bigger jobs, give the steps in order (1, 2, 3) and only the first step's code, then ask to continue.
+- Remember their projects as subjects (e.g. "Northstar app": next step "add the Day theme").`,
+  },
 };
 
 /** The modules this person switched on (only known ones). */
@@ -375,6 +394,21 @@ const REPLY_TOOL = {
             prompt: { type: "string", description: "Prompt for an AI video tool: subject, action, camera, light, mood, sound." },
           },
           required: ["title", "seconds", "framing", "prompt"],
+        },
+      },
+      code: {
+        type: "array",
+        maxItems: 3,
+        description: "Code cards (only when the Coding module is on and code helps). Empty otherwise.",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "2–5 words, e.g. 'Save button view'." },
+            language: { type: "string", description: "swift, swiftui, javascript, typescript, html, css, sql, python, json, powerfx, bash or text." },
+            code: { type: "string", description: "The complete code, ready to paste." },
+            explain: { type: "string", description: "One plain line on what it does." },
+          },
+          required: ["title", "language", "code", "explain"],
         },
       },
       folder_hint: {
@@ -543,6 +577,24 @@ function splitHistory(turns: Turn[]): { recent: Turn[]; earlier: string } {
     recent[0].content = "(Earlier in this chat, oldest first, shortened:\n" + lines.join("\n") + ")\n\n" + recent[0].content;
   }
   return { recent, earlier: "" };
+}
+
+// Code cards from the Coding module: up to 3, each under 6000 characters.
+const CODE_LANGS = ["swift", "swiftui", "javascript", "typescript", "html", "css", "sql", "python", "json", "powerfx", "bash", "text"];
+function codeFrom(raw: unknown): { title: string; language: string; code: string; explain: string }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 3).map((x) => {
+    const o = (x ?? {}) as Record<string, unknown>;
+    const lang = str(o.language, 20).toLowerCase();
+    // Strip any Markdown fence the model added around the code.
+    const code = (typeof o.code === "string" ? o.code : "").replace(/^```[a-zA-Z]*\n?/, "").replace(/\n?```\s*$/, "").slice(0, 6000);
+    return {
+      title: str(o.title, 60) || "Code",
+      language: CODE_LANGS.includes(lang) ? lang : "text",
+      code,
+      explain: str(o.explain, 200),
+    };
+  }).filter((c) => c.code.trim().length > 0);
 }
 
 // Settings from the app become short rules (answer length, preferred name, …).
@@ -1365,6 +1417,8 @@ Deno.serve(async (req) => {
     places: personal || crisis ? [] : placesFrom(tool.places),
     // Video shot cards to paste into a video tool (never in personal or crisis moments).
     shots: personal || crisis ? [] : shotsFrom(tool.shots),
+    // Code cards (Coding module only): monospace, with a Copy button in the app.
+    code: personal || crisis || !modulesFrom(body.settings).includes("coding") ? [] : codeFrom(tool.code),
     // YouTube videos that play in the app (only ones the web search really found).
     videos: personal || crisis ? [] : videosFrom(tool.videos),
     // A suggested folder for saving those videos (the person picks the folder).
