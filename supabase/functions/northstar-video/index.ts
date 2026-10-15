@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
         headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
         body: JSON.stringify({
           instances: [{ prompt }],
-          parameters: { aspectRatio: "16:9", durationSeconds: String(seconds), resolution: "720p" },
+          parameters: { aspectRatio: "16:9", durationSeconds: seconds, resolution: "720p" },
         }),
       });
       if (res.ok) operation = str((await res.json())?.name, 300);
