@@ -119,6 +119,10 @@ struct NorthstarReplyView: View {
                 ShotCardsView(shots: shots)
             }
 
+            if let videos = insight?.videos, !videos.isEmpty {
+                LessonVideosCard(videos: videos)
+            }
+
             if let sources = insight?.sources, !sources.isEmpty {
                 SourcesRow(sources: sources)
             }

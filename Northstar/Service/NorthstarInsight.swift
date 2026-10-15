@@ -83,6 +83,13 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     }
 
     /// A web page Northstar used for its answer (checked on the server: real search results only).
+    /// A real YouTube lesson the brain found (modules like Wood carving).
+    nonisolated struct LessonVideo: Hashable, Sendable, Decodable, Identifiable {
+        let id: String      // YouTube video id
+        let title: String
+        let url: String
+    }
+
     /// A video shot card: paste the prompt into a video tool like Google Flow.
     nonisolated struct Shot: Hashable, Sendable, Decodable {
         let title: String
@@ -138,6 +145,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let places: [Place]
     /// Video shot cards (empty unless they're making a video).
     let shots: [Shot]
+    /// YouTube lessons to watch in the app (empty unless a module found some).
+    let videos: [LessonVideo]
     /// A line from an earlier conversation that matches (shown as a "From before" card).
     let fromBefore: [Note]
     /// Subjects: a new one to keep, or a kept one that was just updated.
@@ -164,6 +173,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case sources
         case places
         case shots
+        case videos
         case fromBefore = "from_before"
         case subjectOffer = "subject_offer"
         case chatTitle = "chat_title"
@@ -187,6 +197,9 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
             .filter { $0.url.scheme == "https" && seenSites.insert($0.site).inserted }
         places = Array(((try? c.decodeIfPresent([Place].self, forKey: .places)) ?? []).prefix(5))
         shots = Array(((try? c.decodeIfPresent([Shot].self, forKey: .shots)) ?? []).prefix(5))
+        videos = Array(((try? c.decodeIfPresent([LessonVideo].self, forKey: .videos)) ?? [])
+            .filter { $0.id.range(of: "^[A-Za-z0-9_-]{11}$", options: .regularExpression) != nil }
+            .prefix(3))
         fromBefore = (try? c.decodeIfPresent([Note].self, forKey: .fromBefore)) ?? []
         subjectOffer = try? c.decodeIfPresent(SubjectOffer.self, forKey: .subjectOffer)
         chatTitle = try? c.decodeIfPresent(String.self, forKey: .chatTitle)

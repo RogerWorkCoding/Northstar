@@ -14,6 +14,7 @@ enum SettingsKeys {
     static let showVisuals   = "ns.talk.showVisuals"
     static let preferredName = "ns.talk.preferredName"
     static let nickname      = "ns.talk.nickname"
+    static let modules       = "ns.modules"
     static let easierFont    = "ns.reading.easierFont"
 }
 
@@ -34,6 +35,7 @@ struct NorthstarSettingsView: View {
     @AppStorage(SettingsKeys.easierFont) private var easierFont = false
 
     @State private var confirmDeleteAll = false
+    @State private var moduleOn: Set<AppModule> = Set(AppModule.enabled)
     @State private var confirmSignOut = false
     @State private var accountMessage: String?
     @State private var account = AppleAccount.shared
@@ -145,6 +147,32 @@ struct NorthstarSettingsView: View {
                 Text("Northstar is always its name. A nickname is just what you call it; it will answer to it.")
             }
 
+            // 2b. Modules: add-on experts, off unless switched on here.
+            Section {
+                ForEach(AppModule.allCases) { module in
+                    Toggle(isOn: Binding(
+                        get: { moduleOn.contains(module) },
+                        set: { on in
+                            AppModule.set(module, on: on)
+                            if on { moduleOn.insert(module) } else { moduleOn.remove(module) }
+                        }
+                    )) {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(module.title)
+                                Text(module.blurb).font(.footnote).foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: module.icon)
+                        }
+                    }
+                }
+            } header: {
+                Text("Modules")
+            } footer: {
+                Text("Add-on experts. Each one only works when it's switched on.")
+            }
+
             // 3. Reading
             Section {
                 Toggle("Easier reading", isOn: $easierFont)
@@ -244,6 +272,7 @@ struct EngineSettings: Sendable {
     let showVisuals: Bool
     let preferredName: String
     let nickname: String
+    let modules: [String]
 
     static var current: EngineSettings {
         let d = UserDefaults.standard
@@ -252,7 +281,8 @@ struct EngineSettings: Sendable {
             answerLength: AnswerLength(rawValue: d.string(forKey: SettingsKeys.answerLength) ?? "") ?? .short,
             showVisuals: d.object(forKey: SettingsKeys.showVisuals) as? Bool ?? true,
             preferredName: d.string(forKey: SettingsKeys.preferredName) ?? "",
-            nickname: d.string(forKey: SettingsKeys.nickname) ?? ""
+            nickname: d.string(forKey: SettingsKeys.nickname) ?? "",
+            modules: AppModule.enabled.map(\.rawValue)
         )
     }
 }
