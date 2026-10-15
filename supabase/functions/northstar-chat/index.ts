@@ -633,6 +633,78 @@ type Subject = {
   id: string; title: string; goal: string | null; next_step: string | null;
   decisions: Array<{ text: string; at: string }>; status: string;
 };
+// ---- Cost guard -----------------------------------------------------------
+// Each reply's cost is counted per person and for everyone, per day (UTC).
+// Over a limit, Northstar answers kindly without calling Claude. Safety never waits:
+// someone in crisis still gets help. If the usage tables aren't there, it stays open.
+const LIMITS = {
+  userRequests: Number(Deno.env.get("NS_USER_DAILY_REQUESTS") ?? 200),
+  userCostMicros: Number(Deno.env.get("NS_USER_DAILY_DOLLARS") ?? 2) * 1_000_000,
+  globalCostMicros: Number(Deno.env.get("NS_GLOBAL_DAILY_DOLLARS") ?? 25) * 1_000_000,
+};
+// Claude Sonnet 5.5 prices, in millionths of a dollar per token (= dollars per million tokens).
+const PRICE = { input: 2, cacheWrite: 2.5, cacheRead: 0.1, output: 10, webSearch: 10_000 };
+
+function serviceDb() {
+  return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+    auth: { persistSession: false },
+  });
+}
+
+/** The signed-in person's id from their token (the gateway already checked it), or null. */
+function userIdFrom(auth: string): string | null {
+  try {
+    const part = auth.replace(/^Bearer\s+/i, "").split(".")[1];
+    if (!part) return null;
+    const json = JSON.parse(atob(part.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(part.length / 4) * 4, "=")));
+    return json?.role === "authenticated" && /^[0-9a-f-]{36}$/i.test(json?.sub ?? "") ? json.sub : null;
+  } catch {
+    return null;
+  }
+}
+
+/** What one Claude call cost, from its usage numbers. */
+function costMicros(usage: unknown): number {
+  const u = (usage ?? {}) as Record<string, unknown>;
+  const n = (k: string) => Number(u[k] ?? 0) || 0;
+  const searches = Number((u.server_tool_use as Record<string, unknown> | undefined)?.web_search_requests ?? 0) || 0;
+  return Math.round(
+    n("input_tokens") * PRICE.input + n("cache_creation_input_tokens") * PRICE.cacheWrite +
+    n("cache_read_input_tokens") * PRICE.cacheRead + n("output_tokens") * PRICE.output +
+    searches * PRICE.webSearch,
+  );
+}
+
+/** "user" or "global" when today's limit is reached; null when fine (or unknown). */
+async function overLimit(userId: string | null): Promise<"user" | "global" | null> {
+  try {
+    const { data, error } = await serviceDb().rpc("usage_today", { p_user: userId });
+    if (error) throw error;
+    const row = (Array.isArray(data) ? data[0] : data) ?? {};
+    if (Number(row.global_cost_micros ?? 0) >= LIMITS.globalCostMicros) return "global";
+    if (userId && (Number(row.user_requests ?? 0) >= LIMITS.userRequests ||
+      Number(row.user_cost_micros ?? 0) >= LIMITS.userCostMicros)) return "user";
+    return null;
+  } catch (e) {
+    console.error("cost guard check skipped:", String((e as Error)?.message ?? e).slice(0, 160));
+    return null;
+  }
+}
+
+async function recordUsage(userId: string | null, micros: number): Promise<void> {
+  try {
+    const { error } = await serviceDb().rpc("add_usage", { p_user: userId, p_cost_micros: Math.min(micros, 10_000_000) });
+    if (error) throw error;
+  } catch (e) {
+    console.error("cost guard record skipped:", String((e as Error)?.message ?? e).slice(0, 160));
+  }
+}
+
+const LIMIT_REPLY = {
+  user: "You've reached today's limit for Northstar. It resets tomorrow. Everything you've saved is safe.",
+  global: "Northstar is resting for the rest of today. Please try again tomorrow. Everything you've saved is safe.",
+};
+
 function userDb(auth: string) {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
     global: { headers: { Authorization: auth } },
@@ -966,6 +1038,18 @@ Deno.serve(async (req) => {
   });
   let withWeb = true;
 
+  // Cost guard: over today's limit → a kind answer without calling Claude (crisis help still comes first).
+  const usageUser = userIdFrom(req.headers.get("Authorization") ?? "");
+  let spentMicros = 0;
+  const limit = await overLimit(usageUser);
+  if (limit) {
+    const help = crisisNet(messages[messages.length - 1].content);
+    console.log("cost guard: limit", limit);
+    return json(help
+      ? { reply: CRISIS_FALLBACK, crisis: true, personal: true, stage: null, stage_reason: "", destination: null, heard: [], proposed_saves: [], visual: null, directions: [] }
+      : { reply: LIMIT_REPLY[limit], limit, stage: null, stage_reason: "", personal: false, crisis: false, destination: null, heard: [], proposed_saves: [], visual: null, directions: [], places: [], shots: [], sources: [] });
+  }
+
   // One retry when Claude is busy (429, 5xx, 529 overloaded) or the network blips.
   let data: Record<string, unknown> | null = null;
   for (let attempt = 1; attempt <= 2 && !data; attempt++) {
@@ -977,6 +1061,7 @@ Deno.serve(async (req) => {
       });
       if (res.ok) {
         data = await res.json();
+        spentMicros += costMicros(data?.usage);
         const u = (data?.usage ?? {}) as Record<string, number>;
         console.log("usage", JSON.stringify({ in: u.input_tokens, out: u.output_tokens, cached: u.cache_read_input_tokens, wrote: u.cache_creation_input_tokens }));
       } else {
@@ -1003,6 +1088,14 @@ Deno.serve(async (req) => {
       ? { reply: CRISIS_FALLBACK, crisis: true, personal: true, stage: null, stage_reason: "", destination: null, heard: [], proposed_saves: [], visual: null, directions: [] }
       : { error: "Northstar couldn't reach Claude. Try again." }, help ? 200 : 502);
   }
+
+  // Count this reply's cost after it's on its way (never slows the answer).
+  const later = (job: Promise<void>) => {
+    // deno-lint-ignore no-explicit-any
+    const rt = (globalThis as any).EdgeRuntime;
+    if (rt?.waitUntil) rt.waitUntil(job); else job.catch(() => {});
+  };
+  later(recordUsage(usageUser, spentMicros));
 
   const blocks = (data.content ?? []) as Array<Record<string, unknown>>;
   const tool = blocks.find((b) => b.type === "tool_use" && b.name === "northstar_reply")?.input as
@@ -1086,6 +1179,7 @@ Deno.serve(async (req) => {
       });
       if (res.ok) {
         const again = await res.json();
+        later(recordUsage(usageUser, costMicros(again?.usage)));
         const t2 = ((again.content ?? []) as Array<Record<string, unknown>>)
           .find((b) => b.type === "tool_use" && b.name === "northstar_reply")?.input as Record<string, unknown> | undefined;
         if (t2?.visual) visualSource = t2.visual;
