@@ -61,7 +61,7 @@ struct VideoLibraryView: View {
                 message(icon: "film.stack", title: folder == nil ? "No saved videos yet" : "This folder is empty",
                         detail: folder == nil
                             ? "When Northstar shows a video, tap Save to keep it here. Make folders to organize them."
-                            : "Save videos here from a chat, or move them in with ⋯ → Move.")
+                            : "Save videos here from a chat, or drag them in (or ⋯ → Move).")
             } else {
                 list
             }
@@ -111,73 +111,94 @@ struct VideoLibraryView: View {
         }
     }
 
+    // A plain scrolling column (not a List): Lists handle drops themselves and swallow
+    // drops on their rows, so drag and drop onto folders only works this way.
     private var list: some View {
-        List {
-            if let folder {
-                // Drop here to take something out of this folder (up one level).
-                let parentName = folders.first { $0.id == folder.parentId }?.name ?? "Videos"
-                Label("Drag here to move up to \(parentName)", systemImage: "arrow.up.doc")
-                    .font(.footnote)
-                    .foregroundStyle(NorthstarChatStyle.label)
-                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
-                    .listRowBackground(dropTarget == "up" ? NorthstarChatStyle.linkBlue.opacity(0.35) : Color.clear)
-                    .dropDestination(for: String.self) { items, _ in
-                        drop(items, into: folder.parentId)
-                    } isTargeted: { over in
-                        if over { dropTarget = "up" } else if dropTarget == "up" { dropTarget = nil }
-                    }
-                    .accessibilityLabel("Move up to \(parentName)")
-                    .accessibilityHint("Drop a video or folder here to move it out of this folder")
-            }
-            if !subfolders.isEmpty {
-                Section {
-                    ForEach(subfolders) { sub in
-                        NavigationLink {
-                            VideoLibraryView(folder: sub)
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: dropTarget == sub.id.uuidString ? "folder.fill.badge.plus" : "folder.fill")
-                                    .foregroundStyle(NorthstarChatStyle.linkBlue)
-                                Text(sub.name).foregroundStyle(NorthstarChatStyle.text)
-                                Spacer()
-                                Text("\(count(in: sub))").font(.footnote).foregroundStyle(NorthstarChatStyle.label)
-                            }
-                        }
-                        .listRowBackground(dropTarget == sub.id.uuidString
-                                           ? NorthstarChatStyle.linkBlue.opacity(0.35) : Color.white.opacity(0.06))
-                        .draggable(Self.dragKey(folder: sub.id)) { dragPreview(icon: "folder.fill", title: sub.name) }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 8) {
+                if let folder {
+                    // Drop here to take something out of this folder (up one level).
+                    let parentName = folders.first { $0.id == folder.parentId }?.name ?? "Videos"
+                    Label("Drag here to move up to \(parentName)", systemImage: "arrow.up.doc")
+                        .font(.footnote)
+                        .foregroundStyle(NorthstarChatStyle.label)
+                        .padding(.horizontal, 14)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .background(card(highlight: dropTarget == "up", faint: true))
+                        .contentShape(Rectangle())
                         .dropDestination(for: String.self) { items, _ in
-                            drop(items, into: sub.id)
+                            drop(items, into: folder.parentId)
                         } isTargeted: { over in
-                            if over { dropTarget = sub.id.uuidString } else if dropTarget == sub.id.uuidString { dropTarget = nil }
+                            if over { dropTarget = "up" } else if dropTarget == "up" { dropTarget = nil }
                         }
-                        .accessibilityHint("Hold and drag videos or folders here to move them in")
-                        .contextMenu { folderMenu(sub) }
-                        .swipeActions { Button(role: .destructive) { deletingFolder = sub } label: { Label("Delete", systemImage: "trash") } }
+                        .accessibilityLabel("Move up to \(parentName)")
+                        .accessibilityHint("Drop a video or folder here to move it out of this folder")
+                }
+                if !subfolders.isEmpty {
+                    header("Folders").padding(.top, 8)
+                    ForEach(subfolders) { sub in
+                        folderRow(sub)
                     }
-                } header: { header("Folders") }
-            }
-            if !videosHere.isEmpty {
-                Section {
+                }
+                if !videosHere.isEmpty {
+                    header("Videos").padding(.top, 8)
                     ForEach(videosHere) { video in
                         Button { Task { await play(video) } } label: { videoRow(video) }
                             .buttonStyle(.plain)
-                            .listRowBackground(Color.white.opacity(0.06))
+                            .padding(10)
+                            .background(card(highlight: false))
+                            .contextMenu { videoMenu(video) }
                             .draggable(Self.dragKey(video: video.id)) {
                                 dragPreview(icon: video.isYouTube ? "play.rectangle.fill" : "sparkles.tv", title: video.title)
                             }
-                            .contextMenu { videoMenu(video) }
-                            .swipeActions {
-                                Button(role: .destructive) {
-                                    Task { try? await library.deleteVideo(video.id); await load() }
-                                } label: { Label("Delete", systemImage: "trash") }
-                            }
                     }
-                } header: { header("Videos") }
+                }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
+    }
+
+    private func folderRow(_ sub: VideoFolder) -> some View {
+        let over = dropTarget == sub.id.uuidString
+        return HStack(spacing: 0) {
+            NavigationLink {
+                VideoLibraryView(folder: sub)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: over ? "folder.fill.badge.plus" : "folder.fill")
+                        .foregroundStyle(NorthstarChatStyle.linkBlue)
+                    Text(sub.name).foregroundStyle(NorthstarChatStyle.text)
+                    Spacer()
+                    Text("\(count(in: sub))").font(.footnote).foregroundStyle(NorthstarChatStyle.label)
+                    Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(NorthstarChatStyle.label)
+                }
+                .padding(.leading, 14)
+                .frame(minHeight: 48)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Menu { folderMenu(sub) } label: {
+                Image(systemName: "ellipsis.circle").foregroundStyle(NorthstarChatStyle.label).frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("More for \(sub.name)")
+        }
+        .background(card(highlight: over))
+        .contextMenu { folderMenu(sub) }
+        .draggable(Self.dragKey(folder: sub.id)) { dragPreview(icon: "folder.fill", title: sub.name) }
+        .dropDestination(for: String.self) { items, _ in
+            drop(items, into: sub.id)
+        } isTargeted: { isOver in
+            if isOver { dropTarget = sub.id.uuidString } else if dropTarget == sub.id.uuidString { dropTarget = nil }
+        }
+        .accessibilityHint("Hold and drag videos or folders here to move them in")
+    }
+
+    private func card(highlight: Bool, faint: Bool = false) -> some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(highlight ? NorthstarChatStyle.linkBlue.opacity(0.35) : Color.white.opacity(faint ? 0.03 : 0.06))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(highlight ? NorthstarChatStyle.linkBlue : Color.clear, lineWidth: 1.5))
     }
 
     private func videoRow(_ video: SavedVideo) -> some View {
