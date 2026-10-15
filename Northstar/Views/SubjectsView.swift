@@ -18,7 +18,7 @@ struct SubjectsView: View {
         ZStack {
             NorthstarChatStyle.background.ignoresSafeArea()
             if !loaded {
-                ProgressView().tint(.white)
+                ProgressView().tint(NorthstarChatStyle.text)
             } else if failed {
                 message(icon: "exclamationmark.triangle", title: "Couldn't load your projects",
                         detail: "Check your connection and try again.")
@@ -107,7 +107,7 @@ struct SubjectsView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(isDone ? 0.03 : 0.06)))
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(isDone ? NorthstarChatStyle.card.opacity(0.5) : NorthstarChatStyle.card))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -121,7 +121,7 @@ struct SubjectsView: View {
     private func message(icon: String, title: String, detail: String) -> some View {
         VStack(spacing: 12) {
             Image(systemName: icon).font(.largeTitle).foregroundStyle(NorthstarChatStyle.label)
-            Text(title).font(.headline).foregroundStyle(.white)
+            Text(title).font(.headline).foregroundStyle(NorthstarChatStyle.text)
             Text(detail).font(.subheadline).foregroundStyle(NorthstarChatStyle.soft).multilineTextAlignment(.center)
         }
         .padding(32)

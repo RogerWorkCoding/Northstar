@@ -13,6 +13,9 @@ struct ContentView: View {
         case about
     }
     
+    /// Day or Night (from Settings → Appearance, or the phone's setting).
+    @Environment(\.colorScheme) private var colorScheme
+
     @State private var awaitingMemorySave = false
     
     @State private var detectedMemoryCandidate: MemoryCandidate?
@@ -94,9 +97,12 @@ struct ContentView: View {
                     promptArea
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Home (star and mountains) is always Night; chats follow Day or Night.
+                .environment(\.colorScheme, viewModel.messages.isEmpty ? .dark : colorScheme)
 
                 if isStarMenuPresented {
                     starMenu
+                        .environment(\.colorScheme, .dark)
                 }
             }
             // The landscape and chat veil sit BEHIND the layout as a background,
@@ -131,6 +137,7 @@ struct ContentView: View {
                 onMicrophoneTapped: { toggleMicrophone() },
                 onSave: { saveLivePDF() }
             )
+            .preferredColorScheme(.dark)   // the live PDF draft keeps its Night look
         }
         .sheet(isPresented: $isPDFSharePresented) {
             pdfShareView
@@ -183,13 +190,20 @@ struct ContentView: View {
 
     private var compactHeader: some View {
         HStack(spacing: 6) {
-            NorthstarVisionStarMark(size: 16)
-                .accessibilityHidden(true)
+            if colorScheme == .light {
+                Image(systemName: "sparkle")
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(NorthstarChatStyle.starGold)
+                    .accessibilityHidden(true)
+            } else {
+                NorthstarVisionStarMark(size: 16)
+                    .accessibilityHidden(true)
+            }
 
             Text("Northstar")
                 .font(.system(size: 14, weight: .medium))
                 .tracking(2)
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(NorthstarChatStyle.soft)
                 .accessibilityAddTraits(.isHeader)
         }
         .padding(.top, 6)
@@ -256,17 +270,21 @@ struct ContentView: View {
     /// Dark navy veil over the landscape while chatting. Home stays clear.
     private var chatVeil: some View {
         ZStack {
-            Rectangle().fill(.ultraThinMaterial)
-            LinearGradient(
-                colors: [
-                    Color(red: 0.05, green: 0.09, blue: 0.21).opacity(0.55),
-                    Color(red: 0.05, green: 0.09, blue: 0.21).opacity(0.75)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            if colorScheme == .light {
+                // Day: a solid cream page over the landscape, for easy reading.
+                NorthstarChatStyle.background
+            } else {
+                Rectangle().fill(.ultraThinMaterial)
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.05, green: 0.09, blue: 0.21).opacity(0.55),
+                        Color(red: 0.05, green: 0.09, blue: 0.21).opacity(0.75)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
         }
-        .environment(\.colorScheme, .dark)
         .ignoresSafeArea()
         .allowsHitTesting(false)
         .opacity(viewModel.messages.isEmpty ? 0 : 1)
@@ -337,13 +355,13 @@ struct ContentView: View {
             } label: {
                 Image(systemName: "sparkle")
                     .font(.system(size: 18, weight: .light))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(NorthstarChatStyle.text)
                     .frame(width: 34, height: 34)
             }
 
             TextField("Ask Northstar...", text: $promptText, axis: .vertical)
                 .focused($isPromptFocused)
-                .foregroundStyle(.white)
+                .foregroundStyle(NorthstarChatStyle.text)
                 .lineLimit(1...6)
                 .disabled(isThinking)
                 .submitLabel(.send)
@@ -352,7 +370,7 @@ struct ContentView: View {
             Button { toggleMicrophone() } label: {
                 Image(systemName: speechRecognizer.isRecording ? "stop.circle.fill" : "mic.fill")
                     .font(.system(size: 18))
-                    .foregroundStyle(speechRecognizer.isRecording ? .red : .white)
+                    .foregroundStyle(speechRecognizer.isRecording ? .red : NorthstarChatStyle.text)
                     .frame(width: 34, height: 34)
             }
 
@@ -363,7 +381,7 @@ struct ContentView: View {
                     .font(.system(size: isThinking ? 12 : 15, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 34, height: 34)
-                    .background { Circle().fill(.white.opacity(0.20)) }
+                    .background { Circle().fill(NorthstarChatStyle.sendFill) }
             }
         }
         .padding(.horizontal, 12)
@@ -372,14 +390,13 @@ struct ContentView: View {
             // Frosted glass: the scene blurs through, with a soft white tint.
             ZStack {
                 Rectangle().fill(.ultraThinMaterial)
-                Color.white.opacity(0.10)
+                NorthstarChatStyle.cardStrong
             }
-            .environment(\.colorScheme, .dark)
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
+                .strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1)
         }
         .shadow(color: Color(red: 0.45, green: 0.55, blue: 1.0).opacity(0.18), radius: 16)
         .padding(.horizontal, 6)
@@ -506,16 +523,16 @@ struct ContentView: View {
 
     private func placeholderScreen(title: String, symbol: String) -> some View {
         ZStack {
-            Color(red: 0.08, green: 0.12, blue: 0.25).ignoresSafeArea()
+            NorthstarChatStyle.background.ignoresSafeArea()
             VStack(spacing: 18) {
                 Image(systemName: symbol)
                     .font(.system(size: 42, weight: .ultraLight))
                 Text(title).font(.system(size: 28, weight: .light))
                 Text("This Northstar area is ready to be designed.")
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.65))
+                    .foregroundStyle(NorthstarChatStyle.label)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(NorthstarChatStyle.text)
             .padding()
         }
         .navigationTitle(title)

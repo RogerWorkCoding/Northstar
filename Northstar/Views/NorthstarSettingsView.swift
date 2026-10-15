@@ -16,6 +16,27 @@ enum SettingsKeys {
     static let nickname      = "ns.talk.nickname"
     static let modules       = "ns.modules"
     static let easierFont    = "ns.reading.easierFont"
+    static let appearance    = "ns.appearance"
+}
+
+/// Day (cream page, navy text) or Night (navy). Automatic follows the phone's setting.
+nonisolated enum Appearance: String, CaseIterable, Identifiable, Sendable {
+    case automatic, day, night
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .automatic: return "Automatic"
+        case .day: return "Day"
+        case .night: return "Night"
+        }
+    }
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .automatic: return nil
+        case .day: return .light
+        case .night: return .dark
+        }
+    }
 }
 
 nonisolated enum AnswerLength: String, CaseIterable, Identifiable, Sendable {
@@ -33,6 +54,7 @@ struct NorthstarSettingsView: View {
     @AppStorage(SettingsKeys.preferredName) private var preferredName = ""
     @AppStorage(SettingsKeys.nickname) private var nickname = ""
     @AppStorage(SettingsKeys.easierFont) private var easierFont = false
+    @AppStorage(SettingsKeys.appearance) private var appearance = Appearance.automatic
 
     @State private var confirmDeleteAll = false
     @State private var moduleOn: Set<AppModule> = Set(AppModule.enabled)
@@ -123,6 +145,18 @@ struct NorthstarSettingsView: View {
                 Text("Memory and privacy")
             } footer: {
                 Text("Northstar only remembers what you say or confirm, plus one-line notes you can find in Search (never feelings or health). You can see, change or delete any of it. When memory is off, nothing is saved or used.")
+            }
+
+            // 1b. Appearance: Day, Night, or follow the phone.
+            Section {
+                Picker("Appearance", selection: $appearance) {
+                    ForEach(Appearance.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Appearance")
+            } footer: {
+                Text("Day is a cream page with dark text, easiest for long reading and in sunlight. Night is the navy look. Automatic follows your iPhone. The home screen stays night sky.")
             }
 
             // 2. How Northstar talks to you

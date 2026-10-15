@@ -36,7 +36,7 @@ struct DirectionsView: View {
         return VStack(alignment: .leading, spacing: 12) {
             Text(d.name)
                 .font(.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(NorthstarChatStyle.text)
 
             HStack(spacing: 8) {
                 ForEach(Array(d.palette.enumerated()), id: \.offset) { _, hex in
@@ -45,7 +45,7 @@ struct DirectionsView: View {
                         .frame(width: 40, height: 40)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
+                                .strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1)
                         )
                 }
             }
@@ -54,7 +54,7 @@ struct DirectionsView: View {
 
             Text("Aa  \(d.name)")
                 .font(d.sampleFont)
-                .foregroundStyle(.white)
+                .foregroundStyle(NorthstarChatStyle.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .accessibilityHidden(true)
@@ -76,12 +76,12 @@ struct DirectionsView: View {
             } label: {
                 Text(isChosen ? "Chosen ✓" : "Choose this")
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(isChosen ? .white : Color(red: 0.05, green: 0.09, blue: 0.21))
+                    .foregroundStyle(isChosen ? NorthstarChatStyle.text : NorthstarChatStyle.onPrimary)
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .background(
                         Capsule().fill(isChosen
-                            ? Color(red: 0.56, green: 0.90, blue: 0.75).opacity(0.25)
-                            : Color(red: 0.91, green: 0.93, blue: 1.0))
+                            ? NorthstarChatStyle.savedGreen.opacity(0.25)
+                            : NorthstarChatStyle.primaryFill)
                     )
             }
             .buttonStyle(.plain)
@@ -90,10 +90,10 @@ struct DirectionsView: View {
             .accessibilityLabel(isChosen ? "\(d.name), chosen" : "Choose \(d.name)")
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.06)))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(NorthstarChatStyle.card))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.white.opacity(isChosen ? 0.5 : 0.18), lineWidth: isChosen ? 2 : 1)
+                .strokeBorder(isChosen ? NorthstarChatStyle.savedGreen : NorthstarChatStyle.stroke, lineWidth: isChosen ? 2 : 1)
         )
         .accessibilityElement(children: .contain)
     }

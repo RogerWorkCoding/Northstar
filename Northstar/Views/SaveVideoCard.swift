@@ -60,7 +60,7 @@ struct SaveVideoCard: View {
                 .foregroundStyle(NorthstarChatStyle.text)
                 .padding(.horizontal, 12)
                 .frame(minHeight: 40)
-                .background(Capsule().fill(Color.white.opacity(0.08)))
+                .background(Capsule().fill(NorthstarChatStyle.card))
             }
             .accessibilityLabel("Folder: \(folderLabel)")
 
@@ -70,9 +70,9 @@ struct SaveVideoCard: View {
                 } label: {
                     Text(stateIsSaving ? "Saving…" : "Save")
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
+                        .foregroundStyle(NorthstarChatStyle.onPrimary)
                         .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(Capsule().fill(Color(red: 0.91, green: 0.93, blue: 1.0)))
+                        .background(Capsule().fill(NorthstarChatStyle.primaryFill))
                 }
                 .disabled(stateIsSaving)
                 Button {
@@ -80,9 +80,9 @@ struct SaveVideoCard: View {
                 } label: {
                     Text("Not now")
                         .font(.body)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(NorthstarChatStyle.text)
                         .frame(maxWidth: .infinity, minHeight: 44)
-                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
+                        .overlay(Capsule().strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
                 }
             }
             .buttonStyle(.plain)
@@ -92,8 +92,8 @@ struct SaveVideoCard: View {
             }
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.06)))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(NorthstarChatStyle.card))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
         .task { await load() }
         .alert("New folder", isPresented: $askingName) {
             TextField("Folder name", text: $newFolderName)

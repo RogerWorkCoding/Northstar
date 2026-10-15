@@ -34,11 +34,11 @@ struct LessonVideosCard: View {
             AsyncImage(url: URL(string: "https://img.youtube.com/vi/\(video.id)/mqdefault.jpg")) { image in
                 image.resizable().aspectRatio(16 / 9, contentMode: .fill)
             } placeholder: {
-                Color.white.opacity(0.08)
+                NorthstarChatStyle.card
             }
             .frame(width: 112, height: 63)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(Image(systemName: "play.fill").foregroundStyle(.white).shadow(radius: 3))
+            .overlay(Image(systemName: "play.fill").foregroundStyle(.white).shadow(radius: 3))  // on the thumbnail
 
             Text(video.title)
                 .font(.subheadline.weight(.semibold))
@@ -47,7 +47,7 @@ struct LessonVideosCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(8)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.06)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NorthstarChatStyle.card))
         .contentShape(Rectangle())
     }
 }
