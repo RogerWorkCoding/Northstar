@@ -10,7 +10,10 @@ struct NorthstarApp: App {
         WindowGroup {
 
             ContentView()
-                .preferredColorScheme(appearance.colorScheme)
+                // Set the look on the app's windows, so switching in Settings takes effect
+                // right away (and Automatic goes back to following the phone).
+                .onAppear { appearance.apply() }
+                .onChange(of: appearance) { appearance.apply() }
         }
     }
 }

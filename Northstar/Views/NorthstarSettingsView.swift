@@ -39,6 +39,22 @@ nonisolated enum Appearance: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+extension Appearance {
+    /// Applies the look to every window of the app (Automatic = follow the phone).
+    @MainActor func apply() {
+        let style: UIUserInterfaceStyle
+        switch self {
+        case .automatic: style = .unspecified
+        case .day: style = .light
+        case .night: style = .dark
+        }
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            for window in windowScene.windows { window.overrideUserInterfaceStyle = style }
+        }
+    }
+}
+
 nonisolated enum AnswerLength: String, CaseIterable, Identifiable, Sendable {
     case short, detailed
     var id: String { rawValue }
