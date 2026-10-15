@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // Q2 chat design (approved): Northstar's reply has no bubble — large, clear
 // text on the night sky. When Northstar is guiding, a small stage chip sits

@@ -44,7 +44,7 @@ struct PlacesMapCard: View {
                 .overlay(alignment: .topTrailing) {
                     Label("Open in Maps", systemImage: "arrow.up.right")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(NorthstarChatStyle.text)
+                        .foregroundStyle(.white)  // on a dark pill over the map, in Day and Night
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(Capsule().fill(Color.black.opacity(0.55)))

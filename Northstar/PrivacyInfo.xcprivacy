@@ -4,6 +4,7 @@
   Northstar's privacy manifest (Apple requires it for App Store and TestFlight uploads).
   Matches the privacy page: no tracking, no ads; data is used only to make the app work.
   UserDefaults: settings saved on this phone (Appearance, nickname, modules) — reason CA92.1.
+  File timestamps: Documents shows your own PDFs newest first — reason C617.1.
 -->
 <plist version="1.0">
 <dict>
@@ -19,6 +20,14 @@
 			<key>NSPrivacyAccessedAPITypeReasons</key>
 			<array>
 				<string>CA92.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
 			</array>
 		</dict>
 	</array>
