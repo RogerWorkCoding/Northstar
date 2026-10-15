@@ -547,7 +547,10 @@ const NS_CASES = [
   {
     id: "module-coding-off", group: "modules",
     say: "In SwiftUI, how do I make a button that shows a checkmark after I tap it?",
-    check: (r) => [["no code cards when the module is off", (r.code ?? []).length === 0]],
+    check: (r) => [
+      ["no code cards when the module is off", (r.code ?? []).length === 0],
+      ["doesn't mention a code card", !/card below|code card/i.test(r.reply ?? "")],
+    ],
   },
   {
     id: "module-off-by-default", group: "modules",

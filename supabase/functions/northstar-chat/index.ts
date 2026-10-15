@@ -473,6 +473,14 @@ const REPLY_TOOL = {
   },
 };
 
+// The same tool without code cards, for everyone who hasn't switched the Coding module on
+// (so Northstar never mentions a code card that won't show).
+const REPLY_TOOL_NO_CODE = (() => {
+  const t = structuredClone(REPLY_TOOL);
+  delete (t.input_schema.properties as Record<string, unknown>).code;
+  return t;
+})();
+
 const STAGES = ["Reflection", "Perspective", "Clarity", "Direction", "Progress"];
 const GROUPS = ["what", "feeling", "for", "must", "avoid"];
 const KINDS = ["destination", "decision", "next_step", "taste", "open_question"];
@@ -1123,12 +1131,13 @@ Deno.serve(async (req) => {
     max_uses: 3,
     ...(site ? { allowed_domains: [site] } : {}),
   };
+  const replyTool = modulesFrom(body.settings).includes("coding") ? REPLY_TOOL : REPLY_TOOL_NO_CODE;
   const buildRequest = (withWeb: boolean) => JSON.stringify({
     model: MODEL,
     max_tokens: 4000,
     system,
     messages,
-    tools: withWeb ? [webTool, REPLY_TOOL] : [REPLY_TOOL],
+    tools: withWeb ? [webTool, replyTool] : [replyTool],
     // (The tools are part of the cached prefix too: they come before the rules.)
     tool_choice: { type: "auto" },
   });
@@ -1280,7 +1289,7 @@ Deno.serve(async (req) => {
           model: MODEL,
           max_tokens: 1200,
           system,
-          tools: [REPLY_TOOL],
+          tools: [replyTool],
           tool_choice: { type: "auto" },
           messages: [
             ...messages,
