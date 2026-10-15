@@ -18,6 +18,7 @@ enum SettingsKeys {
     static let modules       = "ns.modules"
     static let easierFont    = "ns.reading.easierFont"
     static let appearance    = "ns.appearance"
+    static let welcomed      = "ns.welcomed"
 }
 
 /// Day (cream page, navy text) or Night (navy). Automatic follows the phone's setting.

@@ -4,6 +4,7 @@ import SwiftUI
 // Plain words, short lines. Follows Day / Night.
 
 struct AboutView: View {
+    @AppStorage(SettingsKeys.welcomed) private var welcomed = true
     /// Set these when they exist; the rows only show once they're filled in.
     private let privacyURL: URL? = nil      // e.g. https://mynorthstarlabs.app/privacy
     private let contactEmail: String? = nil  // e.g. hello@mynorthstarlabs.app
@@ -112,6 +113,15 @@ struct AboutView: View {
                                     .foregroundStyle(NorthstarChatStyle.linkBlue)
                             }
                         }
+                    }
+
+                    Button {
+                        welcomed = false   // the welcome opens over the app
+                    } label: {
+                        Label("Show the welcome again", systemImage: "sparkles")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(NorthstarChatStyle.linkBlue)
+                            .frame(maxWidth: .infinity, minHeight: 44)
                     }
 
                     VStack(spacing: 4) {

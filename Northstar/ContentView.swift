@@ -16,6 +16,8 @@ struct ContentView: View {
     /// Day or Night (from Settings → Appearance, or the phone's setting).
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage(SettingsKeys.appearance) private var appearance = Appearance.automatic
+    /// First-run welcome (shown once; About can show it again).
+    @AppStorage(SettingsKeys.welcomed) private var welcomed = false
 
     private func applyWindowLook() {
         if viewModel.messages.isEmpty && navigationPath.isEmpty {
@@ -131,6 +133,9 @@ struct ContentView: View {
             .navigationDestination(for: Destination.self) { destination in
                 destinationView(for: destination)
             }
+        }
+        .fullScreenCover(isPresented: Binding(get: { !welcomed }, set: { if !$0 { welcomed = true } })) {
+            WelcomeView { welcomed = true }
         }
         .fullScreenCover(isPresented: $isCameraPresented) {
             CameraView(selectedImage: $selectedImage)
