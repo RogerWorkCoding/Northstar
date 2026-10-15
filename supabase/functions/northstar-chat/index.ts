@@ -243,6 +243,37 @@ const SKILLS: Record<string, { use: string; hint: RegExp; rules: string }> = {
   },
 };
 
+// 5. Modules: add-ons a person switches on in Settings (off for everyone else).
+// Unlike skills, a module's rules are only in the prompt for people who turned it on.
+const MODULES: Record<string, { name: string; rules: string }> = {
+  woodcarving: {
+    name: "Wood carving",
+    rules: `Module: Wood carving (this person switched it on; they carve wood as a hobby)
+- Be a patient, experienced carving teacher. Fit the answer to their level; ask once if it matters.
+- Tools: name the few they actually need first (e.g. sloyd/whittling knife, hook knife, strop and compound,
+  cut-resistant glove, thumb guard) and what can wait. Prefer good beginner tools over expensive sets.
+- Wood: suggest easy woods for the project (basswood/lime for whittling and relief, green birch, cherry or
+  maple for spoons) and why: grain, hardness, green vs dry.
+- Technique: small steps in order (layout, roughing out, refining, finishing). Use real cut names
+  (push cut, pull/paring cut, stop cut, chip cut, thumb push) and explain each in a few words.
+- Sharpening: a sharp edge is safer; mention stropping often.
+- Safety, always for sharp tools: carve away from the body, keep the free hand behind the edge, wear a cut
+  glove on the holding hand, take breaks. Never skip safety for power tools (gouges, rotary tools, axes).
+- Finishing: food-safe oils for spoons and bowls (raw linseed, walnut or mineral oil), drying time.
+- Videos: when a video would help (a technique, a sharpening method, a first project), search the web for
+  good YouTube tutorials (include "youtube" in the search) and put up to 3 youtube.com/watch or youtu.be
+  links from the search results in videos. Prefer clear, well-known teaching channels. Don't list the
+  links in the reply; say one line about what the videos show.
+- Remember their projects as subjects (e.g. "First spoon": next step "hollow the bowl").`,
+  },
+};
+
+/** The modules this person switched on (only known ones). */
+function modulesFrom(settings: unknown): string[] {
+  const raw = (settings as Record<string, unknown> | undefined)?.modules;
+  return Array.isArray(raw) ? [...new Set(raw.map((m) => str(m, 40)).filter((m) => m in MODULES))].sort() : [];
+}
+
 /** All skills, each headed by when to use it. Same text every time, so it stays cached. */
 const SKILLS_TEXT = `Skills: expert rules for certain kinds of requests. Use a skill only when what they mean fits its
 "Use when", in any language (they may write in Spanish, Japanese or anything else). Most messages need none.
@@ -345,6 +376,12 @@ const REPLY_TOOL = {
           },
           required: ["title", "seconds", "framing", "prompt"],
         },
+      },
+      videos: {
+        type: "array",
+        maxItems: 3,
+        description: "YouTube video URLs from your web_search results (only when a module asks for videos). Empty otherwise.",
+        items: { type: "string" },
       },
       places: {
         type: "array",
@@ -998,6 +1035,7 @@ Deno.serve(async (req) => {
     PLAYBOOKS[crew] ?? PLAYBOOKS.calm,
     CORE_RULES,
     SKILLS_TEXT,
+    ...modulesFrom(body.settings).map((m) => MODULES[m].rules),
   ].join("\n\n");
   const personPart = [
     nowLine(body.settings),
@@ -1124,6 +1162,22 @@ Deno.serve(async (req) => {
       if (seen.has(site)) continue;
       seen.add(site);
       out.push({ title: found.get(url)!, url });
+      if (out.length === 3) break;
+    }
+    return out;
+  };
+
+  // YouTube videos the web search really found, as { id, title, url }.
+  const videosFrom = (picked: unknown) => {
+    const out: { id: string; title: string; url: string }[] = [];
+    const seen = new Set<string>();
+    for (const u of Array.isArray(picked) ? picked : []) {
+      const url = str(u, 500);
+      if (!found.has(url)) continue;
+      const id = url.match(/(?:youtube\.com\/watch\?(?:[^#]*&)?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/)?.[1];
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push({ id, title: found.get(url)!.replace(/\s*-\s*YouTube\s*$/i, ""), url: `https://www.youtube.com/watch?v=${id}` });
       if (out.length === 3) break;
     }
     return out;
@@ -1307,6 +1361,8 @@ Deno.serve(async (req) => {
     places: personal || crisis ? [] : placesFrom(tool.places),
     // Video shot cards to paste into a video tool (never in personal or crisis moments).
     shots: personal || crisis ? [] : shotsFrom(tool.shots),
+    // YouTube videos that play in the app (only ones the web search really found).
+    videos: personal || crisis ? [] : videosFrom(tool.videos),
     sources: crisis ? [] : sourcesFrom(tool.sources),
     // A line from an earlier conversation that matches (never in personal or crisis moments).
     from_before: personal || crisis ? [] : await fromBeforeJob,

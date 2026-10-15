@@ -30,6 +30,8 @@ struct NorthstarEngineClient {
         let preferred_name: String
         /// Optional nickname the person gave Northstar (its name stays Northstar).
         let nickname: String
+        /// Add-on modules this person switched on (e.g. "woodcarving").
+        let modules: [String]
         let show_visuals: Bool
         let memory_on: Bool
         /// The phone's time zone (e.g. "America/Los_Angeles"), so "today" and "now" are right.
@@ -73,6 +75,7 @@ struct NorthstarEngineClient {
                 answer_length: $0.answerLength.rawValue,
                 preferred_name: $0.preferredName,
                 nickname: $0.nickname.trimmingCharacters(in: .whitespacesAndNewlines),
+                modules: $0.modules,
                 show_visuals: $0.showVisuals,
                 memory_on: $0.memoryOn,
                 timezone: TimeZone.current.identifier
