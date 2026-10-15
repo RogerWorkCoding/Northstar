@@ -13,8 +13,17 @@ import Supabase
 
 nonisolated enum AppleAccountError: LocalizedError, Sendable {
     case noToken
-    var errorDescription: String? { "Apple didn't send a sign-in token. Please try again." }
+    case message(String)
+    var errorDescription: String? {
+        switch self {
+        case .noToken: return "Apple didn't send a sign-in token. Please try again."
+        case .message(let text): return text
+        }
+    }
 }
+
+nonisolated private struct DeleteAccountRequest: Encodable, Sendable { let action = "delete" }
+nonisolated private struct DeleteAccountReply: Decodable, Sendable { let deleted: Bool?; let error: String? }
 
 @MainActor
 @Observable
@@ -99,6 +108,23 @@ final class AppleAccount {
     /// Their saved memory stays with their Apple ID; signing in again brings it back.
     func signOut() async {
         // This phone only: other phones stay signed in.
+        try? await auth.signOut(scope: .local)
+        await SupabaseManager.shared.signInIfNeeded()
+        accountChanges += 1
+        await refresh()
+    }
+
+    /// Permanently deletes this account and everything Northstar saved for it (memory, subjects,
+    /// notes, chats, videos), then starts this phone fresh. Can't be undone.
+    func deleteAccount() async throws {
+        let reply: DeleteAccountReply = try await SupabaseManager.shared.client.functions.invoke(
+            "northstar-account", options: FunctionInvokeOptions(body: DeleteAccountRequest())
+        )
+        guard reply.deleted == true else {
+            throw AppleAccountError.message(reply.error ?? "Couldn't delete the account.")
+        }
+        // The copies on this phone too.
+        try? FileManager.default.removeItem(at: URL.documentsDirectory.appending(path: "Videos", directoryHint: .isDirectory))
         try? await auth.signOut(scope: .local)
         await SupabaseManager.shared.signInIfNeeded()
         accountChanges += 1

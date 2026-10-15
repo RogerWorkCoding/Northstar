@@ -1,0 +1,187 @@
+<title>Northstar Privacy</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+  /* Layout: one calm reading column under a night-sky header; a short summary first, details after. */
+  :root {
+    --bg: #f6f7fb;
+    --surface: #ffffff;
+    --ink: #1b2340;
+    --muted: #57607d;
+    --rule: #dde1ee;
+    --night: #0f1630;
+    --star: #e7b54a;
+    --star-ink: #8a5f0c;
+    --display: "Fraunces", Georgia, "Times New Roman", serif;
+    --body: "Atkinson Hyperlegible", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0c1226; --surface: #141c38; --ink: #e9ecf8; --muted: #a6aecb;
+      --rule: #273055; --night: #070b1a; --star: #f0c766; --star-ink: #f0c766;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c1226; --surface: #141c38; --ink: #e9ecf8; --muted: #a6aecb;
+    --rule: #273055; --night: #070b1a; --star: #f0c766; --star-ink: #f0c766;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 1.0625rem;
+    line-height: 1.65;
+  }
+  .band {
+    background: var(--night);
+    color: #eef1fb;
+  }
+  .wrap {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  header .wrap { padding-block: 2.5rem 2rem; display: grid; gap: 0.75rem; }
+  .mark { display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; letter-spacing: 0.18em; text-transform: uppercase; color: #c9d1ef; }
+  .mark svg { width: 22px; height: 22px; flex: none; }
+  h1 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(2rem, 6vw, 2.75rem);
+    line-height: 1.1;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .dated { color: #aeb7da; font-size: 0.95rem; margin: 0; }
+
+  main .wrap { padding-block: 2rem 4rem; display: grid; gap: 2.25rem; }
+
+  .promise {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+    padding: 1.25rem 1.4rem;
+    display: grid;
+    gap: 0.5rem;
+  }
+  .promise h2 { margin: 0; }
+  .promise ul { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.35rem; }
+
+  section { display: grid; gap: 0.6rem; }
+  h2 {
+    font-family: var(--display);
+    font-weight: 500;
+    font-size: 1.4rem;
+    line-height: 1.25;
+    margin: 0;
+    text-wrap: balance;
+  }
+  p { margin: 0; }
+  ul { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.3rem; }
+  .muted { color: var(--muted); }
+  strong { font-weight: 700; }
+
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 34rem; font-size: 0.97rem; }
+  th, td { text-align: left; vertical-align: top; padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--rule); }
+  tr:last-child td { border-bottom: 0; }
+  th { font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+
+  .fill { background: color-mix(in srgb, var(--star) 22%, transparent); color: var(--ink); padding: 0 0.25em; border-radius: 4px; }
+  a { color: var(--star-ink); text-underline-offset: 3px; }
+  a:focus-visible { outline: 2px solid var(--star); outline-offset: 2px; border-radius: 3px; }
+  footer { border-top: 1px solid var(--rule); padding-top: 1.25rem; font-size: 0.92rem; color: var(--muted); }
+</style>
+
+<header class="band">
+  <div class="wrap">
+    <div class="mark">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#e7b54a" d="M12 1.5l2.2 7.3 7.3 2.2-7.3 2.2L12 20.5l-2.2-7.3L2.5 11l7.3-2.2z"/></svg>
+      Northstar Labs
+    </div>
+    <h1>Northstar Privacy</h1>
+    <p class="dated">Last updated October 14, 2026 · Draft for testers</p>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div class="promise" aria-labelledby="short">
+      <h2 id="short">The short version</h2>
+      <ul>
+        <li>Northstar remembers only what you tell it or confirm. You can see, change or delete all of it.</li>
+        <li>It never saves your feelings or health unless you ask it to.</li>
+        <li>No ads. We never sell your information.</li>
+        <li>You can turn memory off, or delete your whole account, in Settings.</li>
+      </ul>
+    </div>
+
+    <section aria-labelledby="what">
+      <h2 id="what">What Northstar keeps</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th scope="col">What</th><th scope="col">Why</th><th scope="col">When</th></tr></thead>
+          <tbody>
+            <tr><td>Your messages and Northstar's replies</td><td>To answer you, and so a chat is there when you come back</td><td>Chats are saved only while memory is on</td></tr>
+            <tr><td>Short notes (one line per conversation)</td><td>So you can search for something you talked about</td><td>Only while memory is on. Never feelings or health</td></tr>
+            <tr><td>Things you confirm, like a goal or a choice</td><td>So Northstar can pick up where you left off</td><td>Only when you say "keep this" or confirm it</td></tr>
+            <tr><td>Your settings, nickname and modules</td><td>So Northstar works the way you set it</td><td>Kept on your phone and sent with each message</td></tr>
+            <tr><td>Videos you make</td><td>So you can watch, save and share them</td><td>Only when you tap Make video</td></tr>
+            <tr><td>Your Apple ID email (if you sign in with Apple)</td><td>So your account comes back on a new phone</td><td>Only if you choose to sign in</td></tr>
+            <tr><td>A daily count of use and cost</td><td>So no one runs up surprise costs</td><td>Every reply, as numbers only</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">Northstar does not use your location, contacts or photos unless you share something with it yourself.</p>
+    </section>
+
+    <section aria-labelledby="who">
+      <h2 id="who">Who helps run Northstar</h2>
+      <p>To work, Northstar sends some information to a few companies. They handle it for us under their terms for paying developers.</p>
+      <ul>
+        <li><strong>Anthropic (Claude)</strong> writes Northstar's replies and does web searches. Your message and the memory Northstar needs for that reply are sent with it.</li>
+        <li><strong>Google (Veo)</strong> makes videos from the shot prompt you choose.</li>
+        <li><strong>Supabase</strong> stores your account, memory, chats and videos securely.</li>
+        <li><strong>Apple</strong> handles Sign in with Apple, maps and test versions of the app.</li>
+        <li><strong>YouTube</strong> plays lesson videos when you open one.</li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="control">
+      <h2 id="control">Your choices</h2>
+      <ul>
+        <li><strong>See it:</strong> Settings → Review memory, and Search.</li>
+        <li><strong>Take it with you:</strong> Settings → Export my memory.</li>
+        <li><strong>Delete memory:</strong> Settings → Delete all memory.</li>
+        <li><strong>Delete everything:</strong> Settings → Delete my account. This removes your account, memory, notes, chats and videos for good.</li>
+        <li><strong>Turn memory off:</strong> Settings → Memory. Nothing new is saved while it's off.</li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="care">
+      <h2 id="care">Hard moments</h2>
+      <p>Northstar is not a therapist, doctor or lawyer. If you share something that sounds like a crisis, it points you to real help first, such as the 988 Suicide &amp; Crisis Lifeline in the US. What you share in those moments isn't saved unless you ask.</p>
+    </section>
+
+    <section aria-labelledby="kids">
+      <h2 id="kids">Children</h2>
+      <p>Northstar is made for adults. It isn't meant for anyone under 18.</p>
+    </section>
+
+    <section aria-labelledby="changes">
+      <h2 id="changes">Changes and questions</h2>
+      <p>If this page changes, we'll update the date at the top and tell you in the app when it matters.</p>
+      <p>Questions or requests: <span class="fill">[your contact email]</span></p>
+    </section>
+
+    <footer>
+      Northstar Labs · <span class="fill">[company address]</span><br>
+      This is a plain-language draft for testers. Please have it reviewed before the public launch.
+    </footer>
+  </div>
+</main>

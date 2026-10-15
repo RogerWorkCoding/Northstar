@@ -37,6 +37,7 @@ struct NorthstarSettingsView: View {
     @State private var confirmDeleteAll = false
     @State private var moduleOn: Set<AppModule> = Set(AppModule.enabled)
     @State private var confirmSignOut = false
+    @State private var confirmDeleteAccount = false
     @State private var accountMessage: String?
     @State private var account = AppleAccount.shared
     @Environment(\.colorScheme) private var colorScheme
@@ -86,6 +87,7 @@ struct NorthstarSettingsView: View {
                 if let accountMessage {
                     Text(accountMessage).font(.footnote)
                 }
+                Button("Delete my account", role: .destructive) { confirmDeleteAccount = true }
             } header: {
                 Text("Account")
             } footer: {
@@ -194,6 +196,21 @@ struct NorthstarSettingsView: View {
             }
         } message: {
             Text("This phone starts fresh. Your memory stays with your Apple ID and comes back when you sign in again.")
+        }
+        .confirmationDialog("Delete your account?", isPresented: $confirmDeleteAccount, titleVisibility: .visible) {
+            Button("Delete my account", role: .destructive) {
+                Task {
+                    do {
+                        try await account.deleteAccount()
+                        accountMessage = "Your account and everything Northstar saved are deleted."
+                        await loadExport()
+                    } catch {
+                        accountMessage = "Couldn't delete the account. Please try again."
+                    }
+                }
+            }
+        } message: {
+            Text("This permanently deletes your account and everything Northstar saved: memory, subjects, notes, chats and videos. It can't be undone.")
         }
         .confirmationDialog("Delete all memory?", isPresented: $confirmDeleteAll, titleVisibility: .visible) {
             Button("Delete all memory", role: .destructive) {
