@@ -19,3 +19,4 @@ Run `supabase/migrations/20261017_videos.sql` in the **SQL Editor**.
 - `NS_VEO_MODEL`: `veo-3.1-lite-generate-preview` (default, cheapest) or `veo-3.1-fast-generate-preview`
 - `NS_VEO_DOLLARS_PER_SECOND`: `0.05` for Lite (default), `0.10` for Fast
 - `NS_USER_DAILY_VIDEOS`: `3` by default
+- `NS_VEO_RESOLUTION`: `720p` (default) or `1080p` (8-second clips only)

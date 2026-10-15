@@ -30,6 +30,8 @@ const GEMINI = "https://generativelanguage.googleapis.com/v1beta";
 // Lite is the cheapest (≈ $0.05/s); set NS_VEO_MODEL to "veo-3.1-fast-generate-preview" for better quality.
 const MODEL = Deno.env.get("NS_VEO_MODEL") ?? "veo-3.1-lite-generate-preview";
 // Price per second of video, in millionths of a dollar (Veo 3.1 Lite, 720p ≈ $0.05/s; Fast ≈ $0.10/s).
+// 720p (default) or 1080p. Google only makes 1080p clips at 8 seconds.
+const RESOLUTION = Deno.env.get("NS_VEO_RESOLUTION") === "1080p" ? "1080p" : "720p";
 const PRICE_PER_SECOND = Number(Deno.env.get("NS_VEO_DOLLARS_PER_SECOND") ?? 0.05) * 1_000_000;
 
 const LIMITS = {
@@ -79,7 +81,8 @@ Deno.serve(async (req) => {
   // ---- Start a clip ---------------------------------------------------------
   if (body.action === "start") {
     const prompt = str(body.prompt, 1200);
-    const seconds = [4, 6, 8].includes(Number(body.seconds)) ? Number(body.seconds) : 8;
+    const asked = [4, 6, 8].includes(Number(body.seconds)) ? Number(body.seconds) : 8;
+    const seconds = RESOLUTION === "1080p" ? 8 : asked;
     if (!prompt) return json({ error: "Missing prompt." }, 400);
     const cost = Math.round(seconds * PRICE_PER_SECOND);
 
@@ -107,7 +110,7 @@ Deno.serve(async (req) => {
         headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
         body: JSON.stringify({
           instances: [{ prompt }],
-          parameters: { aspectRatio: "16:9", durationSeconds: seconds, resolution: "720p" },
+          parameters: { aspectRatio: "16:9", durationSeconds: seconds, resolution: RESOLUTION },
         }),
       });
       if (res.ok) operation = str((await res.json())?.name, 300);
