@@ -116,11 +116,13 @@ struct NorthstarReplyView: View {
             }
 
             if let shots = insight?.shots, !shots.isEmpty {
-                ShotCardsView(shots: shots)
+                ShotCardsView(shots: shots, suggestedFolder: insight?.folderHint)
             }
 
             if let videos = insight?.videos, !videos.isEmpty {
                 LessonVideosCard(videos: videos)
+                SaveVideoCard(items: videos.map { .youtube(id: $0.id, title: $0.title) },
+                              suggestedFolder: insight?.folderHint)
             }
 
             if let sources = insight?.sources, !sources.isEmpty {

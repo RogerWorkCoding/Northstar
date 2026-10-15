@@ -484,10 +484,8 @@ struct ContentView: View {
         case .discovery:
             placeholderScreen(title: "Discovery", symbol: "safari")
         case .learning:
-            placeholderScreen(
-                title: "Learning",
-                symbol: "book"
-            )
+            // 🎬 Videos: saved YouTube lessons and videos made in Northstar, in folders.
+            VideoLibraryView()
         case .memory:
             // Search: find anything you've said (by words and meaning).
             NotesSearchView(onOpenChat: openChat)

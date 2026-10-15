@@ -8,6 +8,7 @@ import AVKit
 
 struct ShotCardsView: View {
     let shots: [NorthstarInsight.Shot]
+    var suggestedFolder: String?
 
     @State private var copied: Int?
     @State private var store = VideoStore.shared
@@ -73,8 +74,11 @@ struct ShotCardsView: View {
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .accessibilityLabel("Video for shot \(index + 1), \(shot.title)")
+                if let path = store.storagePaths[shot.prompt] {
+                    SaveVideoCard(items: [.made(storagePath: path, title: shot.title)], suggestedFolder: suggestedFolder)
+                }
                 ShareLink(item: url) {
-                    Label("Save or share", systemImage: "square.and.arrow.up")
+                    Label("Share or save to Photos", systemImage: "square.and.arrow.up")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(NorthstarChatStyle.soft)
                 }

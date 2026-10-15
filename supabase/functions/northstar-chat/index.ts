@@ -377,6 +377,10 @@ const REPLY_TOOL = {
           required: ["title", "seconds", "framing", "prompt"],
         },
       },
+      folder_hint: {
+        type: "string",
+        description: "Only when you include videos or shots: a 1–3 word folder name to suggest saving them in (the project, module or topic, e.g. 'Wood carving', 'Northstar promo'). The person chooses; this is only a suggestion.",
+      },
       videos: {
         type: "array",
         maxItems: 3,
@@ -1363,6 +1367,8 @@ Deno.serve(async (req) => {
     shots: personal || crisis ? [] : shotsFrom(tool.shots),
     // YouTube videos that play in the app (only ones the web search really found).
     videos: personal || crisis ? [] : videosFrom(tool.videos),
+    // A suggested folder for saving those videos (the person picks the folder).
+    folder_hint: personal || crisis ? null : str(tool.folder_hint, 40).replace(/[^\p{L}\p{M}\p{N} &'.-]/gu, "").trim() || null,
     sources: crisis ? [] : sourcesFrom(tool.sources),
     // A line from an earlier conversation that matches (never in personal or crisis moments).
     from_before: personal || crisis ? [] : await fromBeforeJob,
