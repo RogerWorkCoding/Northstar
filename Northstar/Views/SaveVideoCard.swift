@@ -11,6 +11,8 @@ struct SaveVideoCard: View {
     @State private var chosen: UUID?
     @State private var newFolderName = ""
     @State private var askingName = false
+    @State private var picked = false          // the person chose a folder themselves
+    @State private var beforeAsking = ""       // the name to restore if they cancel
     @State private var state: SaveState = .asking
 
     private enum SaveState { case asking, saving, saved(String?), dismissed, failed }
@@ -40,14 +42,14 @@ struct SaveVideoCard: View {
 
             Menu {
                 if let suggestedFolder, !folders.contains(where: { $0.name.caseInsensitiveCompare(suggestedFolder) == .orderedSame && $0.parentId == nil }) {
-                    Button("New: \(suggestedFolder)") { chosen = nil; newFolderName = suggestedFolder }
+                    Button("New: \(suggestedFolder)") { picked = true; chosen = nil; newFolderName = suggestedFolder }
                 }
                 ForEach(folders) { folder in
-                    Button(VideoLibraryService.path(of: folder, in: folders)) { chosen = folder.id; newFolderName = "" }
+                    Button(VideoLibraryService.path(of: folder, in: folders)) { picked = true; chosen = folder.id; newFolderName = "" }
                 }
                 Divider()
-                Button("New folder…") { askingName = true }
-                Button("No folder") { chosen = nil; newFolderName = "" }
+                Button("New folder…") { picked = true; beforeAsking = newFolderName; newFolderName = ""; askingName = true }
+                Button("No folder") { picked = true; chosen = nil; newFolderName = "" }
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "folder")
@@ -96,7 +98,7 @@ struct SaveVideoCard: View {
         .alert("New folder", isPresented: $askingName) {
             TextField("Folder name", text: $newFolderName)
             Button("OK") { chosen = nil }
-            Button("Cancel", role: .cancel) { newFolderName = "" }
+            Button("Cancel", role: .cancel) { newFolderName = beforeAsking }
         }
     }
 
@@ -112,8 +114,20 @@ struct SaveVideoCard: View {
 
     private func load() async {
         folders = (try? await library.folders()) ?? []
+        // Already saved (e.g. the chat was reopened)? Show where, instead of asking again.
+        var savedIn: [UUID?] = []
+        for item in items {
+            guard let found = try? await library.existing(item) else { savedIn = []; break }
+            savedIn.append(found.folderId)
+        }
+        if !items.isEmpty, savedIn.count == items.count, case .asking = state {
+            let folderName = savedIn.first.flatMap { slot in slot.flatMap { fid in folders.first { $0.id == fid } } }
+                .map { VideoLibraryService.path(of: $0, in: folders) }
+            state = .saved(Set(savedIn).count == 1 ? folderName : nil)
+            return
+        }
         // Start with Northstar's suggestion: an existing folder with that name, or a new one.
-        if chosen == nil, newFolderName.isEmpty, let suggestedFolder {
+        if !picked, chosen == nil, newFolderName.isEmpty, let suggestedFolder {
             if let match = folders.first(where: { $0.parentId == nil && $0.name.caseInsensitiveCompare(suggestedFolder) == .orderedSame }) {
                 chosen = match.id
             } else {

@@ -62,11 +62,23 @@ struct VideoLibraryService {
         try await client.from("video_folders").select("id, parent_id, name").order("name").execute().value
     }
 
+    /// Makes a folder — or returns the one already there with that name in that place.
     func createFolder(name: String, parent: UUID?) async throws -> VideoFolder {
-        let clean = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60))
-        return try await client.from("video_folders")
-            .insert(NewFolder(name: clean.isEmpty ? "New folder" : clean, parent_id: parent))
-            .select("id, parent_id, name").single().execute().value
+        let trimmed = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60))
+        let clean = trimmed.isEmpty ? "New folder" : trimmed
+        func existing() async throws -> VideoFolder? {
+            try await folders().first { $0.parentId == parent && $0.name.caseInsensitiveCompare(clean) == .orderedSame }
+        }
+        if let found = try await existing() { return found }
+        do {
+            return try await client.from("video_folders")
+                .insert(NewFolder(name: clean, parent_id: parent))
+                .select("id, parent_id, name").single().execute().value
+        } catch {
+            // Made at the same moment by another card or device: use that one.
+            if let found = try await existing() { return found }
+            throw error
+        }
     }
 
     func renameFolder(_ id: UUID, to name: String) async throws {
@@ -86,11 +98,14 @@ struct VideoLibraryService {
 
     /// The folder with this name at the top level, created if it doesn't exist yet.
     func folderNamed(_ name: String) async throws -> VideoFolder {
-        let all = try await folders()
-        if let found = all.first(where: { $0.parentId == nil && $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
-            return found
-        }
-        return try await createFolder(name: name, parent: nil)
+        try await createFolder(name: name, parent: nil)
+    }
+
+    /// Settings → Delete all: every folder and saved video.
+    func deleteAll() async throws {
+        guard let user = SupabaseManager.shared.currentUserId else { return }
+        try await client.from("saved_videos").delete().eq("user_id", value: user.uuidString).execute()
+        try await client.from("video_folders").delete().eq("user_id", value: user.uuidString).execute()
     }
 
     // MARK: Videos
@@ -102,7 +117,12 @@ struct VideoLibraryService {
             .execute().value
     }
 
+    /// Saves a video, or moves it if it's already saved (each video is kept once).
     func save(_ video: VideoToSave, in folder: UUID?) async throws {
+        if let already = try await existing(video) {
+            try await moveVideo(already.id, into: folder)
+            return
+        }
         let row: NewVideo
         switch video {
         case let .youtube(id, title):
@@ -111,6 +131,17 @@ struct VideoLibraryService {
             row = NewVideo(folder_id: folder, title: String(title.prefix(200)), source: "made", youtube_id: nil, storage_path: path)
         }
         try await client.from("saved_videos").insert(row).execute()
+    }
+
+    /// The saved copy of this video, if it was saved before.
+    func existing(_ video: VideoToSave) async throws -> SavedVideo? {
+        let base = client.from("saved_videos").select("id, folder_id, title, source, youtube_id, storage_path")
+        let rows: [SavedVideo]
+        switch video {
+        case let .youtube(id, _): rows = try await base.eq("youtube_id", value: id).limit(1).execute().value
+        case let .made(path, _): rows = try await base.eq("storage_path", value: path).limit(1).execute().value
+        }
+        return rows.first
     }
 
     func moveVideo(_ id: UUID, into folder: UUID?) async throws {

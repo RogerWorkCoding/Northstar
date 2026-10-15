@@ -62,7 +62,7 @@ struct VideoLibraryView: View {
                 list
             }
         }
-        .navigationTitle(folder?.name ?? "Videos")
+        .navigationTitle(folder.map { f in folders.first { $0.id == f.id }?.name ?? f.name } ?? "Videos")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

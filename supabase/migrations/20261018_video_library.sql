@@ -10,6 +10,7 @@ create table if not exists public.video_folders (
   name        text not null check (char_length(name) between 1 and 60),
   created_at  timestamptz not null default now(),
   unique (id, user_id),
+  check (parent_id is null or parent_id <> id),
   foreign key (parent_id, user_id) references public.video_folders(id, user_id) on delete cascade
 );
 
@@ -30,6 +31,34 @@ create table if not exists public.saved_videos (
 
 create index if not exists video_folders_user on public.video_folders (user_id, parent_id);
 create index if not exists saved_videos_user on public.saved_videos (user_id, folder_id, created_at desc);
+
+-- No two folders with the same name in the same place.
+create unique index if not exists video_folders_unique_name
+  on public.video_folders (user_id, coalesce(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(name));
+-- Each video is saved once per person (saving it again just moves it).
+create unique index if not exists saved_videos_unique_youtube on public.saved_videos (user_id, youtube_id) where youtube_id is not null;
+create unique index if not exists saved_videos_unique_made on public.saved_videos (user_id, storage_path) where storage_path is not null;
+
+-- A folder can't be moved inside itself (or inside something inside it).
+create or replace function public.video_folders_no_cycle() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if new.parent_id is not null and exists (
+    with recursive up as (
+      select id, parent_id, 1 as depth from public.video_folders where id = new.parent_id
+      union all
+      select f.id, f.parent_id, up.depth + 1 from public.video_folders f join up on f.id = up.parent_id where up.depth < 100
+    )
+    select 1 from up where id = new.id
+  ) then
+    raise exception 'A folder can''t go inside itself';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists video_folders_no_cycle on public.video_folders;
+create trigger video_folders_no_cycle before insert or update of parent_id on public.video_folders
+  for each row execute function public.video_folders_no_cycle();
 
 alter table public.video_folders enable row level security;
 alter table public.saved_videos  enable row level security;
