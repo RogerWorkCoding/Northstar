@@ -65,12 +65,6 @@ struct StarMenuView: View {
                 )
 
                 menuButton(
-                    title: "Discovery",
-                    systemImage: "safari",
-                    action: onDiscovery
-                )
-
-                menuButton(
                     title: "Videos",
                     systemImage: "play.rectangle.on.rectangle",
                     action: onLearning

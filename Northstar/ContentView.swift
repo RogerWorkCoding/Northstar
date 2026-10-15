@@ -480,7 +480,8 @@ struct ContentView: View {
     private func destinationView(for destination: Destination) -> some View {
         switch destination {
         case .projects:
-            placeholderScreen(title: "Projects", symbol: "folder")
+            // Projects: the subjects Northstar keeps (goal, decisions, next step).
+            SubjectsView()
         case .discovery:
             placeholderScreen(title: "Discovery", symbol: "safari")
         case .learning:

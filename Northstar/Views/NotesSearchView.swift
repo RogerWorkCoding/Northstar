@@ -478,7 +478,7 @@ extension View {
 
 // MARK: - A subject: goal, decisions and next step
 
-private struct SubjectDetailSheet: View {
+struct SubjectDetailSheet: View {
     let subject: Subject
     var onDone: () -> Void
     var onDelete: () -> Void
@@ -516,6 +516,7 @@ private struct SubjectDetailSheet: View {
                     if let next = subject.nextStep, !next.isEmpty { block("NEXT STEP", next) }
 
                     HStack(spacing: 10) {
+                        if subject.status != "done" {
                         Button(action: onDone) {
                             Label("Mark done", systemImage: "checkmark")
                                 .font(.body.weight(.semibold))
@@ -523,6 +524,7 @@ private struct SubjectDetailSheet: View {
                         }
                         .buttonStyle(.bordered)
                         .tint(.white)
+                        }
                         Button(role: .destructive) { confirmDelete = true } label: {
                             Label("Delete", systemImage: "trash")
                                 .font(.body.weight(.semibold))
