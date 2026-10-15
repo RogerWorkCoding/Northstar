@@ -14,16 +14,7 @@ struct WelcomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ZStack {
-            NorthstarVisionLandscapeBackground()
-                .ignoresSafeArea()
-            // A soft veil so the words always read clearly over the sky.
-            LinearGradient(colors: [Color.black.opacity(0.15), Color.black.opacity(0.55)],
-                           startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
-                .accessibilityHidden(true)
-
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
                 HStack {
                     Spacer()
                     if page < 2 {
@@ -81,7 +72,18 @@ struct WelcomeView: View {
                 .padding(.bottom, 28)
                 .frame(maxWidth: 480)
             }
-            .foregroundStyle(.white)
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The sky sits BEHIND the layout, so the picture never changes the layout's size.
+        .background {
+            ZStack {
+                NorthstarVisionLandscapeBackground()
+                // A soft veil so the words always read clearly over the sky.
+                LinearGradient(colors: [Color.black.opacity(0.15), Color.black.opacity(0.55)],
+                               startPoint: .top, endPoint: .bottom)
+            }
+            .ignoresSafeArea()
+            .accessibilityHidden(true)
         }
         // The welcome always sits on the night sky.
         .environment(\.colorScheme, .dark)
