@@ -58,8 +58,6 @@ function userIdFrom(auth: string): string | null {
   }
 }
 
-const startOfTodayUtc = () => new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z").toISOString();
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Use POST." }, 405);
@@ -85,49 +83,44 @@ Deno.serve(async (req) => {
     if (!prompt) return json({ error: "Missing prompt." }, 400);
     const cost = Math.round(seconds * PRICE_PER_SECOND);
 
-    // Limits: clips today, and the shared daily budget.
-    const { count } = await db.from("video_jobs").select("id", { count: "exact", head: true })
-      .eq("user_id", userId).gte("created_at", startOfTodayUtc()).neq("status", "failed");
-    if ((count ?? 0) >= LIMITS.userVideos) {
-      return json({ status: "failed", limit: "user",
-        error: `That's today's ${LIMITS.userVideos} videos. You can make more tomorrow.` }, 429);
-    }
-    try {
-      const { data } = await db.rpc("usage_today", { p_user: userId });
-      const row = (Array.isArray(data) ? data[0] : data) ?? {};
-      if (Number(row.global_cost_micros ?? 0) + cost > LIMITS.globalCostMicros ||
-        Number(row.user_cost_micros ?? 0) + cost > LIMITS.userCostMicros) {
+    // Check the limits and reserve the clip in one step, before asking Google (no races, no free clips).
+    const { data: jobId, error: reserveError } = await db.rpc("reserve_video", {
+      p_user: userId, p_prompt: prompt, p_seconds: seconds, p_cost_micros: cost,
+      p_max_videos: LIMITS.userVideos, p_user_cap_micros: LIMITS.userCostMicros, p_global_cap_micros: LIMITS.globalCostMicros,
+    });
+    if (reserveError || !jobId) {
+      const msg = reserveError?.message ?? "";
+      if (msg.includes("limit:videos")) {
+        return json({ status: "failed", limit: "user", error: `That's today's ${LIMITS.userVideos} videos. You can make more tomorrow.` }, 429);
+      }
+      if (msg.includes("limit:budget")) {
         return json({ status: "failed", limit: "budget", error: "Today's limit is reached. Please try again tomorrow." }, 429);
       }
-    } catch { /* cost guard not set up: stay open */ }
+      console.error("reserve_video failed", msg.slice(0, 200));
+      return json({ status: "failed", error: "Video isn't ready yet. Please try again later." }, 503);
+    }
 
-    const res = await fetch(`${GEMINI}/models/${MODEL}:predictLongRunning`, {
-      method: "POST",
-      headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        instances: [{ prompt }],
-        parameters: { aspectRatio: "16:9", durationSeconds: String(seconds), resolution: "720p" },
-      }),
-    });
-    if (!res.ok) {
-      const detail = (await res.text()).slice(0, 300);
-      console.error("veo start failed", res.status, detail);
+    let operation = "";
+    try {
+      const res = await fetch(`${GEMINI}/models/${MODEL}:predictLongRunning`, {
+        method: "POST",
+        headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instances: [{ prompt }],
+          parameters: { aspectRatio: "16:9", durationSeconds: String(seconds), resolution: "720p" },
+        }),
+      });
+      if (res.ok) operation = str((await res.json())?.name, 300);
+      else console.error("veo start failed", res.status, (await res.text()).slice(0, 300));
+    } catch (e) {
+      console.error("veo start error", String(e).slice(0, 200));
+    }
+    if (!operation) {
+      await db.rpc("release_video", { p_job: jobId });
       return json({ status: "failed", error: "Google couldn't start this video. Please try again." }, 502);
     }
-    const op = await res.json();
-    const operation = str(op?.name, 300);
-    if (!operation) return json({ status: "failed", error: "Google didn't start the video." }, 502);
-
-    const { data: job, error } = await db.from("video_jobs")
-      .insert({ user_id: userId, prompt, seconds, operation, cost_micros: cost })
-      .select("id").single();
-    if (error) {
-      console.error("video job insert failed", error.message);
-      return json({ status: "failed", error: "Couldn't save the video job." }, 500);
-    }
-    // Charge it to the shared daily budget now (Google bills when it generates).
-    await db.rpc("add_usage", { p_user: userId, p_cost_micros: cost }).then(() => {}, () => {});
-    return json({ job_id: job.id, status: "working" });
+    await db.from("video_jobs").update({ operation, updated_at: new Date().toISOString() }).eq("id", jobId);
+    return json({ job_id: jobId, status: "working" });
   }
 
   // ---- Check a clip ---------------------------------------------------------
@@ -145,7 +138,8 @@ Deno.serve(async (req) => {
     }
     if (job.status === "failed") return json({ status: "failed", error: job.error ?? "The video didn't work." });
 
-    // Still working: ask Google.
+    // Still working: ask Google (a just-reserved job may not have its operation yet).
+    if (!job.operation) return json({ status: "working" });
     const res = await fetch(`${GEMINI}/${job.operation}`, { headers: { "x-goog-api-key": key } });
     if (!res.ok) {
       console.error("veo check failed", res.status, (await res.text()).slice(0, 200));

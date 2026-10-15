@@ -10,11 +10,7 @@ struct ShotCardsView: View {
     let shots: [NorthstarInsight.Shot]
 
     @State private var copied: Int?
-    @State private var making: Int?
-    @State private var videos: [Int: URL] = [:]
-    @State private var problems: [Int: String] = [:]
-
-    private let videoService = VideoService()
+    @State private var store = VideoStore.shared
 
     private static let flowURL = URL(string: "https://labs.google/fx/tools/flow")!
 
@@ -72,17 +68,17 @@ struct ShotCardsView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
 
-            if let url = videos[index] {
-                VideoPlayer(player: AVPlayer(url: url))
+            if let url = store.files[shot.prompt], let player = store.player(for: shot.prompt) {
+                VideoPlayer(player: player)
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .accessibilityLabel("Video for shot \(index + 1), \(shot.title)")
                 ShareLink(item: url) {
-                    Label("Share video", systemImage: "square.and.arrow.up")
+                    Label("Save or share", systemImage: "square.and.arrow.up")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(NorthstarChatStyle.soft)
                 }
-            } else if making == index {
+            } else if store.making == shot.prompt {
                 HStack(spacing: 10) {
                     ProgressView().tint(.white)
                     Text("Making your video… this can take a minute or two.")
@@ -92,16 +88,16 @@ struct ShotCardsView: View {
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             }
 
-            if let problem = problems[index] {
+            if let problem = store.problems[shot.prompt] {
                 Text(problem)
                     .font(.footnote)
                     .foregroundStyle(NorthstarChatStyle.label)
             }
 
             HStack(spacing: 10) {
-                if videos[index] == nil {
+                if store.files[shot.prompt] == nil {
                     Button {
-                        make(index: index, shot: shot)
+                        store.make(prompt: shot.prompt, seconds: shot.seconds)
                     } label: {
                         Label("Make video", systemImage: "play.rectangle.fill")
                             .font(.subheadline.weight(.semibold))
@@ -111,8 +107,8 @@ struct ShotCardsView: View {
                             .background(Capsule().fill(Color(red: 0.91, green: 0.93, blue: 1.0)))
                     }
                     .buttonStyle(.plain)
-                    .disabled(making != nil)
-                    .opacity(making != nil && making != index ? 0.5 : 1)
+                    .disabled(store.making != nil)
+                    .opacity(store.making != nil && store.making != shot.prompt ? 0.5 : 1)
                     .accessibilityLabel("Make a video of shot \(index + 1), \(shot.title)")
                 }
 
@@ -136,22 +132,5 @@ struct ShotCardsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.06)))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
-    }
-
-    /// One clip at a time; the button shows progress, then the video plays in the card.
-    private func make(index: Int, shot: NorthstarInsight.Shot) {
-        problems[index] = nil
-        making = index
-        Task {
-            do {
-                let url = try await videoService.make(prompt: shot.prompt, seconds: shot.seconds)
-                withAnimation(.easeOut(duration: 0.25)) { videos[index] = url }
-            } catch is CancellationError {
-                // Left the screen: nothing to show.
-            } catch {
-                problems[index] = error.localizedDescription
-            }
-            making = nil
-        }
     }
 }
