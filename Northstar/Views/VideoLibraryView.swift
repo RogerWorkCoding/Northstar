@@ -178,6 +178,8 @@ struct VideoLibraryView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            // Don't pop the folder open while something is dragged over it; the drop moves it in.
+            .springLoadingBehavior(.disabled)
             Menu { folderMenu(sub) } label: {
                 Image(systemName: "ellipsis.circle").foregroundStyle(NorthstarChatStyle.label).frame(width: 44, height: 44)
             }
