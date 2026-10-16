@@ -19,6 +19,8 @@ struct ContentView: View {
     @AppStorage(SettingsKeys.appearance) private var appearance = Appearance.automatic
     /// First-run welcome (shown once; About can show it again).
     @AppStorage(SettingsKeys.welcomed) private var welcomed = false
+    /// The one-time "New: Concierge" hint above the ask bar.
+    @AppStorage("ns.conciergeHintSeen") private var conciergeHintSeen = false
 
     private func applyWindowLook() {
         if viewModel.messages.isEmpty && navigationPath.isEmpty {
@@ -399,10 +401,48 @@ struct ContentView: View {
         }
     }
 
+    /// Shown once so people know the bell is there; tapping it (or ✕) hides it for good.
+    private var conciergeHint: some View {
+        HStack(spacing: 8) {
+            Button {
+                conciergeHintSeen = true
+                isPromptFocused = false
+                isConciergePresented = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "bell.fill")
+                        .foregroundStyle(NorthstarChatStyle.starGold)
+                    Text("New: Concierge. Dinner, classes, fun and more.")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(NorthstarChatStyle.text)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the Concierge")
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) { conciergeHintSeen = true }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(NorthstarChatStyle.label)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Hide this tip")
+        }
+        .padding(.leading, 6)
+        .transition(.opacity)
+    }
+
     /// 🛎 Opens the Concierge: dinner, fitness, fun, rides, errands, gifts. Home only, in the ask bar by the star.
     private var conciergeButton: some View {
         Button {
             isPromptFocused = false
+            conciergeHintSeen = true
             isConciergePresented = true
         } label: {
             Image(systemName: "bell")
@@ -420,6 +460,8 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 10) {
             if let selectedImage {
                 attachedPhoto(selectedImage)
+            } else if !conciergeHintSeen {
+                conciergeHint
             }
             promptRow
         }
@@ -489,10 +531,8 @@ struct ContentView: View {
                     .frame(width: 34, height: 34)
             }
 
-            // Home only: the concierge bell sits next to the star (both are "places to go").
-            if viewModel.messages.isEmpty {
-                conciergeButton
-            }
+            // The concierge bell sits next to the star on every screen (both are "places to go").
+            conciergeButton
 
             TextField("Ask Northstar...", text: $promptText, axis: .vertical)
                 .focused($isPromptFocused)
