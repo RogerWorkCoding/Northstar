@@ -12,6 +12,9 @@ struct WelcomeView: View {
     private let lastPage = 3
     @State private var account = AppleAccount.shared
     @State private var message: String?
+    // First page: the two sentences fade in one after the other.
+    @State private var firstShown = false
+    @State private var secondShown = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -34,14 +37,7 @@ struct WelcomeView: View {
                     .accessibilityHidden(true)
 
                 TabView(selection: $page) {
-                    pageView(
-                        title: "Find your direction",
-                        lines: [
-                            "Northstar helps you decide what matters,",
-                            "then take the next small step.",
-                            "Your direction is always yours."
-                        ]
-                    ).tag(0)
+                    firstPage.tag(0)
 
                     pageView(
                         title: "Talk or type",
@@ -99,6 +95,41 @@ struct WelcomeView: View {
         }
         // The welcome always sits on the night sky.
         .environment(\.colorScheme, .dark)
+    }
+
+    /// "Find your direction": sentence one fades in, then sentence two.
+    private var firstPage: some View {
+        VStack(spacing: 18) {
+            Text("Find your direction")
+                .font(.system(size: 32, weight: .light))
+                .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
+            VStack(spacing: 8) {
+                VStack(spacing: 8) {
+                    Text("Northstar helps you decide what matters,")
+                    Text("then take the next small step.")
+                }
+                .opacity(firstShown ? 1 : 0)
+                .offset(y: firstShown || reduceMotion ? 0 : 6)
+                Text("Your direction is always yours.")
+                    .opacity(secondShown ? 1 : 0)
+                    .offset(y: secondShown || reduceMotion ? 0 : 6)
+            }
+            .font(.system(size: 19))
+            .multilineTextAlignment(.center)
+            .foregroundStyle(.white.opacity(0.88))
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 40)
+        .padding(.horizontal, 28)
+        .frame(maxWidth: 520)
+        .task {
+            try? await Task.sleep(for: .milliseconds(400))
+            withAnimation(.easeOut(duration: 1.0)) { firstShown = true }
+            try? await Task.sleep(for: .milliseconds(1600))
+            withAnimation(.easeOut(duration: 1.0)) { secondShown = true }
+        }
     }
 
     private func pageView(title: LocalizedStringKey, lines: [String]) -> some View {
