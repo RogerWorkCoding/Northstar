@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import PhotosUI
 
 struct ContentView: View {
     enum Destination: Hashable {
@@ -62,6 +63,8 @@ struct ContentView: View {
     @State private var viewModel = ChatViewModel()
     @State private var isCameraPresented = false
     @State private var isPhotoLibraryPresented = false
+    /// The photo picked in Apple's photo picker (Photo Library opens it straight away).
+    @State private var photoItem: PhotosPickerItem?
     @State private var selectedImage: UIImage?
     @State private var promptText = ""
     @State private var isThinking = false
@@ -141,8 +144,18 @@ struct ContentView: View {
             CameraView(selectedImage: $selectedImage)
                 .ignoresSafeArea()
         }
-        .sheet(isPresented: $isPhotoLibraryPresented) {
-            PhotoPickerView(selectedImage: $selectedImage)
+        // Photo Library opens Apple's own photo picker straight away: no extra screen in between.
+        // It only sees the photo the person picks (no full library permission needed).
+        .photosPicker(isPresented: $isPhotoLibraryPresented, selection: $photoItem, matching: .images)
+        .onChange(of: photoItem) {
+            guard let item = photoItem else { return }
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    selectedImage = image
+                }
+                photoItem = nil
+            }
         }
         .sheet(isPresented: $isLivePDFDraftPresented) {
             LivePDFDraftView(
