@@ -16,7 +16,7 @@ enum NorthstarChatStyle {
     static let soft = dyn(0xC9D3FF, 0x3D4870)
     static let label = dyn(0xAEB9E6, 0x5C6688)
     static let linkBlue = dyn(0x9EBFFF, 0x2C4FB0)        // links in replies
-    static let listening = dyn(0x5B8CFF, 0x2C4FB0)       // the mic while it's listening (Northstar blue, not red)
+    static let listening = dyn(0x3E64D6, 0x2C4FB0)       // the mic while it's listening (Northstar blue, not red)
     static let savedGreen = dyn(0xCFF5E3, 0x1E7A4C)
     static let warning = dyn(0xFFCCB3, 0xA0401E)         // "Couldn't save" lines
     // Surfaces
