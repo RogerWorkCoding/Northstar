@@ -6,8 +6,8 @@ import SwiftUI
 struct AboutView: View {
     @AppStorage(SettingsKeys.welcomed) private var welcomed = true
     /// Set these when they exist; the rows only show once they're filled in.
-    private let privacyURL: URL? = nil      // e.g. https://mynorthstarlabs.app/privacy
-    private let contactEmail: String? = nil  // e.g. hello@mynorthstarlabs.app
+    private let privacyURL: URL? = URL(string: "https://mynorthstarlabs.com/privacy.html")
+    private let contactEmail: String? = "rogwar51@gmail.com"   // switch to hello@mynorthstarlabs.com when it is set up
 
     private var version: String {
         let info = Bundle.main.infoDictionary
