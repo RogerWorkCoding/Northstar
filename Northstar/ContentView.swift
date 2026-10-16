@@ -448,7 +448,7 @@ struct ContentView: View {
         .transition(.opacity)
     }
 
-    /// 🛎 Opens the Concierge: dinner, fitness, fun, rides, errands, gifts. Home only, in the ask bar by the star.
+    /// 🛎 Opens the Concierge: dinner, fitness, fun, travel, errands, gifts. In the ask bar by the star, on every screen.
     private var conciergeButton: some View {
         Button {
             isPromptFocused = false
@@ -463,7 +463,7 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Concierge")
-        .accessibilityHint("Find dinner, classes, things to do, rides and more")
+        .accessibilityHint("Find dinner, classes, things to do, travel and more")
     }
 
     private var composerBox: some View {
