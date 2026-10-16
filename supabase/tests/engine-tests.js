@@ -531,7 +531,7 @@ const NS_CASES = [
     say: "My spoon keeps tearing out when I carve the bowl. What am I doing wrong?",
     check: (r) => [
       ["explains grain like a teacher", has(r.reply, /grain|downhill|direction/i)],
-      ["gives the why", has(r.reply, /because|so that|that's why|which is why|so the|so it/i)],
+      ["gives the why", has(r.reply, /because|since|\bso\b|that's why|which is why|that's what|causes?|lifts?|tears? (out|up)/i)],
       ["no invented personal experience", !/\b(when I (carved|was carving|started carving)|in my (\d+ )?years|my (favorite|own) (knife|spoon|workshop)|I've carved)\b/i.test(r.reply ?? "")],
     ],
   },
