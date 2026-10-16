@@ -367,7 +367,7 @@ struct ContentView: View {
                     }
 
                     if isThinking {
-                        NorthstarThinkingView()
+                        NorthstarThinkingStar()
                             .id("THINKING")
                             .transition(.opacity)
                     }

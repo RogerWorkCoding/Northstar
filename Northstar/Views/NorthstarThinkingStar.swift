@@ -4,7 +4,7 @@ import SwiftUI
 // The star rocks 25° left, back to center, 25° right, while soft light rays pulse around it.
 // With Reduce Motion on, the star stays still and only the rays glow.
 
-struct NorthstarThinkingView: View {
+struct NorthstarThinkingStar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var rock = false
     @State private var glow = false
@@ -54,5 +54,5 @@ struct NorthstarThinkingView: View {
 }
 
 #Preview {
-    NorthstarThinkingView().padding().background(NorthstarChatStyle.background)
+    NorthstarThinkingStar().padding().background(NorthstarChatStyle.background)
 }
