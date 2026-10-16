@@ -60,6 +60,9 @@ struct ContentView: View {
     @State private var navigationPath: [Destination] = []
     /// The saved chat this conversation belongs to (nil until the first message, or with memory off).
     @State private var currentChatId: UUID?
+    /// The chat that was open last time, so closing the app (even by mistake) never loses it.
+    /// Cleared only when they tap New chat (or the chat is deleted).
+    @AppStorage("ns.openChatId") private var openChatId = ""
     private let chatsService = ChatsService()
     @State private var speechRecognizer = SpeechRecognizer()
     @State private var appleAccount = AppleAccount.shared
@@ -203,7 +206,12 @@ struct ContentView: View {
             await SupabaseManager.shared.signInIfNeeded()
             loadProjectMemory()
             scheduleWelcomeMessageFade()
+            // Reopen the chat they were in, right where they left off.
+            if viewModel.messages.isEmpty, let id = UUID(uuidString: openChatId) {
+                openChat(id)
+            }
         }
+        .onChange(of: currentChatId) { openChatId = currentChatId?.uuidString ?? "" }
         // The home screen (star and mountains) is always Night, status bar included;
         // chats and other screens use Settings → Appearance.
         .onAppear { applyWindowLook() }
