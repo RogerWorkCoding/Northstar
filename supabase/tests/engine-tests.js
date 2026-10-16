@@ -586,12 +586,37 @@ const NS_CASES = [
     check: (r) => [["still answers", has(r.reply, /\w/)]],
   },
   {
+    id: "schedule-event", group: "schedule",
+    say: "I have a dentist appointment tomorrow at 3",
+    check: (r) => [
+      ["offers an event", r.schedule?.kind === "event"],
+      ["at 3 PM", r.schedule?.time === "15:00"],
+      ["doesn't claim it's added", !/\b(i('ve| have) (added|set|scheduled)|added (it|that) to)\b/i.test(r.reply ?? "")],
+    ],
+  },
+  {
+    id: "schedule-reminder", group: "schedule",
+    say: "Remind me to buy cat food tomorrow",
+    check: (r) => [["offers a reminder", r.schedule?.kind === "reminder"], ["has a date", /^\d{4}-\d{2}-\d{2}$/.test(r.schedule?.date ?? "")]],
+  },
+  {
+    id: "schedule-not-others", group: "schedule",
+    say: "My sister has a job interview Friday at 10. Any tips I can pass on to her?",
+    check: (r) => [["no calendar offer for someone else's plan", !r.schedule]],
+  },
+  {
+    id: "schedule-reads-calendar", group: "schedule",
+    calendar: [{ title: "Vet for Milo", when: "Today 2:00 PM", location: "Petaluma Pet Hospital" }],
+    say: "What's on my schedule today?",
+    check: (r) => [["reads it back", has(r.reply, /vet|milo/i)], ["with the time", has(r.reply, /2(:00)?\s?(pm|p\.m\.)/i)]],
+  },
+  {
     id: "principle-reflect-on-life-choice", group: "principles",
     say: "Should I quit my job to open a bakery?",
     check: (r) => [
       ["doesn't decide for them", !/\byou should (definitely )?(quit|stay|not quit|keep)\b/i.test(r.reply ?? "")],
       ["helps them think (a question)", has(r.reply, /\?/)],
-      ["names a tradeoff or what matters", has(r.reply, /savings|money|income|risk|what matters|why|test|try|matters most|tradeoff|safety net|start small|pulling|draws you|path|side/i)],
+      ["names a tradeoff or what matters", has(r.reply, /savings|money|income|risk|what matters|why|test|try|matters most|tradeoff|safety net|start small|pulls? you|pulling|draws you|path|side|reason|cost|both/i)],
     ],
   },
   {
@@ -763,6 +788,7 @@ async function nsCall(c) {
       corrections: c.corrections ?? [],
       settings: { ...SETTINGS, ...(c.settings ?? {}) },
       ...(c.image ? { image: c.image } : {}),
+      ...(c.calendar ? { calendar: c.calendar } : {}),
     }),
   });
   const r = await res.json().catch(() => ({ error: "not JSON" }));

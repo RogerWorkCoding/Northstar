@@ -19,6 +19,10 @@ enum SettingsKeys {
     static let easierFont    = "ns.reading.easierFont"
     static let appearance    = "ns.appearance"
     static let welcomed      = "ns.welcomed"
+    static let speakReplies  = "ns.voice.speakReplies"
+    static let voice         = "ns.voice.choice"
+    static let voiceSpeed    = "ns.voice.speed"
+    static let premiumVoice  = "ns.voice.premium"
 }
 
 /// Day (cream page, navy text) or Night (navy). Automatic follows the phone's setting.

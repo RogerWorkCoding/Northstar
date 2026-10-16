@@ -118,29 +118,77 @@ struct NorthstarVisionLandscapeBackground: View {
 struct NorthstarVisionStarMark: View {
     var size: CGFloat = 56
 
+    private let edgeBlue = Color(red: 0.56, green: 0.71, blue: 1.0)
+    private let warm = Color(red: 1.0, green: 0.94, blue: 0.78)
+
     var body: some View {
         ZStack {
-            Image(systemName: "sparkle")
-                .resizable()
-                .scaledToFit()
-                .frame(width: size * 1.714, height: size * 1.714)
-                .foregroundStyle(Color(red: 0.62, green: 0.74, blue: 0.92))
-                .blur(radius: size * 0.393)
-                .opacity(0.4)
-
-            Image(systemName: "sparkle")
-                .resizable()
-                .scaledToFit()
+            // The faint ring and soft light rays, only where there's room for them.
+            if size >= 36 {
+                Circle()
+                    .stroke(Color(red: 0.71, green: 0.78, blue: 0.93).opacity(0.32), lineWidth: max(0.5, size * 0.005))
+                    .frame(width: size * 0.7, height: size * 0.7)
+                ForEach([45.0, -45.0], id: \.self) { angle in
+                    Capsule()
+                        .fill(warm.opacity(0.5))
+                        .frame(width: size * 0.38, height: max(1, size * 0.014))
+                        .blur(radius: size * 0.03)
+                        .rotationEffect(.degrees(angle))
+                }
+                Capsule()
+                    .fill(Color(red: 0.74, green: 0.82, blue: 1.0).opacity(0.35))
+                    .frame(width: size * 1.5, height: max(1, size * 0.01))
+                    .blur(radius: size * 0.012)
+            }
+            // Soft blue glow around the star.
+            NorthstarStarShape()
+                .fill(edgeBlue)
                 .frame(width: size, height: size)
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [NorthstarResponseTheme.warmWhite, Color(red: 0.72, green: 0.82, blue: 0.96)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .shadow(color: Color(red: 0.6, green: 0.72, blue: 0.9).opacity(0.5), radius: size * 0.214)
+                .blur(radius: size * 0.05)
+                .opacity(0.55)
+            // Glass body: warm at the center, cooler toward the tips.
+            NorthstarStarShape()
+                .fill(RadialGradient(colors: [Color(red: 1, green: 0.94, blue: 0.78),
+                                              Color(red: 0.85, green: 0.89, blue: 0.98).opacity(0.8),
+                                              Color(red: 0.62, green: 0.71, blue: 0.9).opacity(0.6)],
+                                     center: .center, startRadius: 0, endRadius: size * 0.45))
+                .frame(width: size, height: size)
+            // Bright glass edges.
+            NorthstarStarShape()
+                .stroke(LinearGradient(colors: [.white, warm, Color(red: 0.87, green: 0.91, blue: 1)],
+                                       startPoint: .top, endPoint: .bottom),
+                        style: StrokeStyle(lineWidth: max(0.6, size * 0.004), lineJoin: .miter, miterLimit: 40))
+                .frame(width: size, height: size)
+            // Warm light at the center.
+            Circle()
+                .fill(RadialGradient(colors: [.white,
+                                              Color(red: 1, green: 0.96, blue: 0.84).opacity(0.95),
+                                              Color(red: 1, green: 0.89, blue: 0.66).opacity(0.25),
+                                              Color(red: 0.56, green: 0.69, blue: 0.93).opacity(0)],
+                                     center: .center, startRadius: 0, endRadius: size * 0.18))
+                .frame(width: size * 0.36, height: size * 0.36)
         }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The Northstar star: four slim, curved points (vertical slightly longer), as a vector so it's sharp at any size.
+struct NorthstarStarShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let c = CGPoint(x: rect.midX, y: rect.midY)
+        let r = min(rect.width, rect.height) / 2
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: c.x + x * r, y: c.y + y * r) }
+        let a: CGFloat = 0.006, b: CGFloat = 0.09
+        let top: CGFloat = -0.97, bottom: CGFloat = 1.0, side: CGFloat = 0.83
+        var path = Path()
+        path.move(to: p(0, top))
+        path.addCurve(to: p(side, 0), control1: p(a, -b), control2: p(b, -a))
+        path.addCurve(to: p(0, bottom), control1: p(b, a), control2: p(a, b))
+        path.addCurve(to: p(-side, 0), control1: p(-a, b), control2: p(-b, a))
+        path.addCurve(to: p(0, top), control1: p(-b, -a), control2: p(-a, -b))
+        path.closeSubpath()
+        return path
     }
 }
 

@@ -16,6 +16,7 @@ enum NorthstarChatStyle {
     static let soft = dyn(0xC9D3FF, 0x3D4870)
     static let label = dyn(0xAEB9E6, 0x5C6688)
     static let linkBlue = dyn(0x9EBFFF, 0x2C4FB0)        // links in replies
+    static let listening = dyn(0x3E64D6, 0x2C4FB0)       // the mic while it's listening (Northstar blue, not red)
     static let savedGreen = dyn(0xCFF5E3, 0x1E7A4C)
     static let warning = dyn(0xFFCCB3, 0xA0401E)         // "Couldn't save" lines
     // Surfaces
@@ -124,6 +125,39 @@ struct NorthstarReplyView: View {
 
     private enum CardState { case saving, saved, dismissed, failed }
 
+    /// 🔊 Hear this reply (or stop it).
+    private var speakButton: some View {
+        let voice = NorthstarVoice.shared
+        let speaking = voice.isSpeaking(text)
+        return Button {
+            if speaking { voice.stop() } else { voice.speak(text) }
+        } label: {
+            Label(speaking ? "Stop" : "Listen", systemImage: speaking ? "stop.circle" : "speaker.wave.2")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(NorthstarChatStyle.label)
+                .frame(minHeight: 32)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(speaking ? "Stop reading" : "Read this reply aloud")
+    }
+
+    /// 📋 Copy this reply (shows "Copied" for a moment).
+    @State private var copied = false
+    private var copyButton: some View {
+        Button {
+            UIPasteboard.general.string = text
+            copied = true
+            Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+        } label: {
+            Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(NorthstarChatStyle.label)
+                .frame(minHeight: 32)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(copied ? "Copied" : "Copy this reply")
+    }
+
     private var guiding: NorthstarInsight? {
         guard let insight, insight.isGuiding else { return nil }
         return insight
@@ -147,6 +181,15 @@ struct NorthstarReplyView: View {
                 .northstarReadingStyle()
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 18) {
+                speakButton
+                copyButton
+            }
+
+            if let schedule = insight?.schedule {
+                ScheduleCard(schedule: schedule)
+            }
 
             if let offer = insight?.subjectOffer {
                 SubjectOfferCard(offer: offer, state: subjectState, onKeep: onKeepSubject, onDismiss: onDismissSubject)

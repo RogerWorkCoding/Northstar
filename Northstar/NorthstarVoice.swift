@@ -1,72 +1,275 @@
 import Foundation
 import AVFoundation
+import Observation
+import Supabase
 
-enum NorthstarVoiceStyle: String, CaseIterable {
+// 🔊 Northstar's voice: reads replies aloud with the iPhone's own voices (free, private, works offline).
+// Settings → Voice: read replies aloud (on/off), which voice, and how fast.
+// The voice only changes the sound; it's always the same Northstar.
 
-    case calm = "Calm"
-    case friendly = "Friendly"
-    case professional = "Professional"
-    case mentor = "Mentor"
+/// The voices to choose from. Each uses the best voice of that accent on the phone
+/// (Premium, then Enhanced, then the standard one).
+nonisolated enum NorthstarVoiceChoice: String, CaseIterable, Identifiable, Sendable {
+    case calmUS, warmUK, brightAU
 
-    var identifier: String? {
+    var id: String { rawValue }
 
+    var label: String {
         switch self {
+        case .calmUS: return "Calm (US)"
+        case .warmUK: return "Warm (UK)"
+        case .brightAU: return "Bright (Australia)"
+        }
+    }
 
-        case .calm:
-            return AVSpeechSynthesisVoice(
-                language: "en-US"
-            )?.identifier
+    var language: String {
+        switch self {
+        case .calmUS: return "en-US"
+        case .warmUK: return "en-GB"
+        case .brightAU: return "en-AU"
+        }
+    }
 
-        case .friendly:
-            return AVSpeechSynthesisVoice(
-                language: "en-GB"
-            )?.identifier
+    /// The best installed voice for this accent.
+    var voice: AVSpeechSynthesisVoice? {
+        let voices = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == language }
+        func rank(_ q: AVSpeechSynthesisVoiceQuality) -> Int {
+            switch q {
+            case .premium: return 3
+            case .enhanced: return 2
+            default: return 1
+            }
+        }
+        // Skip novelty voices (Apple marks some with names like "Bells"); keep the clearest one.
+        let best = voices
+            .filter { !$0.voiceTraits.contains(.isNoveltyVoice) }
+            .max { rank($0.quality) < rank($1.quality) }
+        return best ?? AVSpeechSynthesisVoice(language: language)
+    }
 
-        case .professional:
-            return AVSpeechSynthesisVoice(
-                language: "en-US"
-            )?.identifier
-
-        case .mentor:
-            return AVSpeechSynthesisVoice(
-                language: "en-AU"
-            )?.identifier
+    /// "Premium" / "Enhanced" / "" for the label in Settings.
+    var qualityNote: String {
+        switch voice?.quality {
+        case .premium: return "Premium"
+        case .enhanced: return "Enhanced"
+        default: return ""
         }
     }
 }
 
-final class NorthstarVoice {
+/// A premium ElevenLabs voice (the list comes from the brain, so it can change without an app update).
+nonisolated struct PremiumVoice: Identifiable, Hashable, Sendable, Decodable {
+    let id: String
+    let name: String
+}
+
+nonisolated enum NorthstarVoiceSpeed: String, CaseIterable, Identifiable, Sendable {
+    case slower, normal, faster
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .slower: return "Slower"
+        case .normal: return "Normal"
+        case .faster: return "Faster"
+        }
+    }
+    var rate: Float {
+        switch self {
+        case .slower: return 0.42
+        case .normal: return 0.5
+        case .faster: return 0.56
+        }
+    }
+}
+
+@MainActor
+@Observable
+final class NorthstarVoice: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
 
     static let shared = NorthstarVoice()
 
-    private let synthesizer =
-        AVSpeechSynthesizer()
+    /// The text being read right now (so a reply's speaker button can show "stop").
+    private(set) var speakingText: String?
 
-    var selectedVoice:
-        NorthstarVoiceStyle = .calm
+    @ObservationIgnored private let synthesizer = AVSpeechSynthesizer()
+    @ObservationIgnored private var player: AVAudioPlayer?
+    @ObservationIgnored private var premiumTask: Task<Void, Never>?
+    /// True while a premium voice is being fetched (so a finished/cancelled event doesn't clear it).
+    @ObservationIgnored private var loadingPremium = false
 
-    func speak(_ text: String) {
+    override init() {
+        super.init()
+        synthesizer.delegate = self
+    }
 
-        let utterance =
-            AVSpeechUtterance(string: text)
+    /// Read replies aloud automatically? (Settings → Voice)
+    static var autoSpeak: Bool {
+        UserDefaults.standard.bool(forKey: SettingsKeys.speakReplies)
+    }
 
-        if let identifier =
-            selectedVoice.identifier {
+    static var choice: NorthstarVoiceChoice {
+        NorthstarVoiceChoice(rawValue: UserDefaults.standard.string(forKey: SettingsKeys.voice) ?? "") ?? .calmUS
+    }
 
-            utterance.voice =
-                AVSpeechSynthesisVoice(
-                    identifier: identifier
-                )
+    /// The chosen ElevenLabs voice id, or nil to use the phone's voices.
+    static var premiumVoiceId: String? {
+        let id = UserDefaults.standard.string(forKey: SettingsKeys.premiumVoice) ?? ""
+        return id.isEmpty ? nil : id
+    }
+
+    static var speed: NorthstarVoiceSpeed {
+        NorthstarVoiceSpeed(rawValue: UserDefaults.standard.string(forKey: SettingsKeys.voiceSpeed) ?? "") ?? .normal
+    }
+
+    /// Reads the text aloud (stops anything already playing first).
+    /// With a premium voice chosen, ElevenLabs speaks it; if that fails, the phone's voice does.
+    func speak(_ text: String, voice: NorthstarVoiceChoice? = nil) {
+        if voice == nil, let premium = Self.premiumVoiceId {
+            speakPremium(text, voiceId: premium)
+            return
         }
+        speakWithPhone(text, voice: voice)
+    }
 
-        utterance.rate = 0.48
+    /// Plays a premium voice saying the sample line.
+    func samplePremium(_ voice: PremiumVoice) {
+        speakPremium("Hi, I'm Northstar. Let's find your next step together.", voiceId: voice.id)
+    }
 
+    private func speakPremium(_ text: String, voiceId: String) {
+        let spoken = Self.speakable(text)
+        guard !spoken.isEmpty else { return }
+        stop()
+        speakingText = text
+        loadingPremium = true
+        premiumTask = Task { [weak self] in
+            do {
+                let data = try await Self.premiumAudio(spoken, voiceId: voiceId)
+                guard let self, !Task.isCancelled, self.speakingText == text else { return }
+                self.loadingPremium = false
+                let session = AVAudioSession.sharedInstance()
+                try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+                try? session.setActive(true)
+                let player = try AVAudioPlayer(data: data)
+                player.delegate = self
+                player.rate = 1
+                self.player = player
+                player.play()
+            } catch {
+                guard let self, !Task.isCancelled, self.speakingText == text else { return }
+                self.loadingPremium = false
+                print("Premium voice failed, using the phone's voice:", error.localizedDescription)
+                self.speakWithPhone(text, voice: nil)
+            }
+        }
+    }
+
+    nonisolated private struct SpeakRequest: Encodable, Sendable { let action = "speak"; let text: String; let voice: String }
+    nonisolated private struct ListRequest: Encodable, Sendable { let action = "voices" }
+    nonisolated private struct VoiceList: Decodable, Sendable { let voices: [PremiumVoice] }
+    nonisolated private struct VoiceError: Error {}
+
+    private static func premiumAudio(_ text: String, voiceId: String) async throws -> Data {
+        try await SupabaseManager.shared.client.functions.invoke(
+            "northstar-voice",
+            options: FunctionInvokeOptions(body: SpeakRequest(text: text, voice: voiceId))
+        ) { data, response in
+            guard response.statusCode == 200, response.value(forHTTPHeaderField: "Content-Type")?.contains("audio") == true,
+                  !data.isEmpty else { throw VoiceError() }
+            return data
+        }
+    }
+
+    /// The premium voices people can choose (empty until ElevenLabs is set up).
+    static func premiumVoices() async -> [PremiumVoice] {
+        let list: VoiceList? = try? await SupabaseManager.shared.client.functions.invoke(
+            "northstar-voice",
+            options: FunctionInvokeOptions(body: ListRequest())
+        )
+        return list?.voices ?? []
+    }
+
+    private func speakWithPhone(_ text: String, voice: NorthstarVoiceChoice?) {
+        let spoken = Self.speakable(text)
+        guard !spoken.isEmpty else { return }
+        stopAudio()
+
+        // Plays even when the ring/silent switch is on silent, and lowers music while speaking.
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+        try? session.setActive(true)
+
+        let utterance = AVSpeechUtterance(string: spoken)
+        utterance.voice = (voice ?? Self.choice).voice
+        utterance.rate = Self.speed.rate
+        utterance.postUtteranceDelay = 0.1
+        speakingText = text
         synthesizer.speak(utterance)
     }
 
+    /// A short sample for the voice picker.
+    func sample(_ voice: NorthstarVoiceChoice) {
+        speak("Hi, I'm Northstar. Let's find your next step together.", voice: voice)
+    }
+
     func stop() {
-        synthesizer.stopSpeaking(
-            at: .immediate
-        )
+        premiumTask?.cancel()
+        premiumTask = nil
+        loadingPremium = false
+        stopAudio()
+        speakingText = nil
+    }
+
+    private func stopAudio() {
+        if synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
+        player?.stop()
+        player = nil
+    }
+
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        Task { @MainActor in
+            self.player = nil
+            self.finished()
+        }
+    }
+
+    func isSpeaking(_ text: String) -> Bool { speakingText == text }
+
+    // MARK: AVSpeechSynthesizerDelegate
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in self.finished() }
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in self.finished() }
+    }
+
+    private func finished() {
+        guard !synthesizer.isSpeaking, player?.isPlaying != true, !loadingPremium else { return }
+        speakingText = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    /// The words only: no markdown stars, link addresses, bullets or emoji, so it sounds natural.
+    nonisolated static func speakable(_ text: String) -> String {
+        var s = text
+        // [**Name**](https://…) → Name
+        s = s.replacingOccurrences(of: #"\[([^\]]+)\]\([^)]+\)"#, with: "$1", options: .regularExpression)
+        // Bare links
+        s = s.replacingOccurrences(of: #"https?://\S+"#, with: "", options: .regularExpression)
+        // Bold, italics, headings, code ticks
+        s = s.replacingOccurrences(of: #"[*_`#]+"#, with: "", options: .regularExpression)
+        // Bullets at the start of a line → a pause
+        s = s.replacingOccurrences(of: #"(?m)^\s*[•\-–]\s+"#, with: "", options: .regularExpression)
+        // Dashes between parts of a line read as a short pause
+        s = s.replacingOccurrences(of: " — ", with: ", ")
+        // Emoji and symbols
+        s = String(s.unicodeScalars.filter { !($0.properties.isEmojiPresentation || ($0.properties.isEmoji && $0.value > 0x2000)) })
+        // Line breaks become sentence breaks
+        s = s.replacingOccurrences(of: #"\n+"#, with: ". ", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"\.\s*\."#, with: ".", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

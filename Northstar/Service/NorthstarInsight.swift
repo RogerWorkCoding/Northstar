@@ -52,6 +52,43 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     }
 
     /// A new subject Northstar offers to keep ("Keep this?").
+    /// A calendar event or reminder Northstar offers to add (added only when they tap Add).
+    nonisolated struct Schedule: Hashable, Sendable, Decodable {
+        let kind: String          // event | reminder
+        let title: String
+        let date: String          // YYYY-MM-DD (their local date)
+        let time: String          // HH:MM, 24-hour (their local time)
+        let minutes: Int?         // event length
+        let alertMinutes: Int?    // alert this many minutes before (events)
+        let location: String?
+        let repeatRule: String?   // daily | weekly | monthly | yearly
+        enum CodingKeys: String, CodingKey {
+            case kind, title, date, time, minutes, location
+            case alertMinutes = "alert_minutes"
+            case repeatRule = "repeat"
+        }
+        var isEvent: Bool { kind == "event" }
+
+        /// The start, in the phone's time zone.
+        var start: Date? {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.timeZone = .current
+            f.dateFormat = "yyyy-MM-dd HH:mm"
+            return f.date(from: "\(date) \(time)")
+        }
+
+        /// "Tomorrow at 3:00 PM" / "Fri, Oct 23 at 9:00 AM"
+        var whenText: String {
+            guard let start else { return "\(date) \(time)" }
+            let cal = Calendar.current
+            let t = start.formatted(date: .omitted, time: .shortened)
+            if cal.isDateInToday(start) { return "Today at \(t)" }
+            if cal.isDateInTomorrow(start) { return "Tomorrow at \(t)" }
+            return start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()) + " at \(t)"
+        }
+    }
+
     nonisolated struct SubjectOffer: Hashable, Sendable, Decodable {
         let title: String
         let goal: String?
@@ -166,6 +203,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     /// First reply of a chat only: a short name for it (2–5 words), used in History.
     let chatTitle: String?
     let subjectUpdate: SubjectUpdate?
+    /// A calendar event or reminder to offer (nil for most replies).
+    let schedule: Schedule?
 
     /// Approved design rule: stage, pills and save cards only show when
     /// Northstar is guiding. Quick questions get just the answer.
@@ -192,6 +231,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case subjectOffer = "subject_offer"
         case chatTitle = "chat_title"
         case subjectUpdate = "subject_update"
+        case schedule
     }
 
     init(from decoder: Decoder) throws {
@@ -222,5 +262,6 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         subjectOffer = try? c.decodeIfPresent(SubjectOffer.self, forKey: .subjectOffer)
         chatTitle = try? c.decodeIfPresent(String.self, forKey: .chatTitle)
         subjectUpdate = try? c.decodeIfPresent(SubjectUpdate.self, forKey: .subjectUpdate)
+        schedule = try? c.decodeIfPresent(Schedule.self, forKey: .schedule)
     }
 }

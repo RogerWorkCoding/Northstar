@@ -7,6 +7,7 @@ struct ContentView: View {
         case projects
         case discovery
         case learning
+        case voices
         case memory
         case documents
         case history
@@ -19,6 +20,8 @@ struct ContentView: View {
     @AppStorage(SettingsKeys.appearance) private var appearance = Appearance.automatic
     /// First-run welcome (shown once; About can show it again).
     @AppStorage(SettingsKeys.welcomed) private var welcomed = false
+    /// The one-time "New: Concierge" hint above the ask bar.
+    @AppStorage("ns.conciergeHintSeen") private var conciergeHintSeen = false
 
     private func applyWindowLook() {
         if viewModel.messages.isEmpty && navigationPath.isEmpty {
@@ -57,12 +60,16 @@ struct ContentView: View {
     @State private var navigationPath: [Destination] = []
     /// The saved chat this conversation belongs to (nil until the first message, or with memory off).
     @State private var currentChatId: UUID?
+    /// The chat that was open last time, so closing the app (even by mistake) never loses it.
+    /// Cleared only when they tap New chat (or the chat is deleted).
+    @AppStorage("ns.openChatId") private var openChatId = ""
     private let chatsService = ChatsService()
     @State private var speechRecognizer = SpeechRecognizer()
     @State private var appleAccount = AppleAccount.shared
     @State private var viewModel = ChatViewModel()
     @State private var isCameraPresented = false
     @State private var isPhotoLibraryPresented = false
+    @State private var isConciergePresented = false
     /// The photo picked in Apple's photo picker (Photo Library opens it straight away).
     @State private var photoItem: PhotosPickerItem?
     @State private var selectedImage: UIImage?
@@ -144,6 +151,11 @@ struct ContentView: View {
             CameraView(selectedImage: $selectedImage)
                 .ignoresSafeArea()
         }
+        .sheet(isPresented: $isConciergePresented) {
+            ConciergeView(memory: { await memoryForEngine() })
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
         // Photo Library opens Apple's own photo picker straight away: no extra screen in between.
         // It only sees the photo the person picks (no full library permission needed).
         .photosPicker(isPresented: $isPhotoLibraryPresented, selection: $photoItem, matching: .images)
@@ -194,7 +206,12 @@ struct ContentView: View {
             await SupabaseManager.shared.signInIfNeeded()
             loadProjectMemory()
             scheduleWelcomeMessageFade()
+            // Reopen the chat they were in, right where they left off.
+            if viewModel.messages.isEmpty, let id = UUID(uuidString: openChatId) {
+                openChat(id)
+            }
         }
+        .onChange(of: currentChatId) { openChatId = currentChatId?.uuidString ?? "" }
         // The home screen (star and mountains) is always Night, status bar included;
         // chats and other screens use Settings → Appearance.
         .onAppear { applyWindowLook() }
@@ -230,7 +247,7 @@ struct ContentView: View {
                     .foregroundStyle(NorthstarChatStyle.starGold)
                     .accessibilityHidden(true)
             } else {
-                NorthstarVisionStarMark(size: 16)
+                NorthstarVisionStarMark(size: 22)
                     .accessibilityHidden(true)
             }
 
@@ -240,8 +257,33 @@ struct ContentView: View {
                 .foregroundStyle(NorthstarChatStyle.soft)
                 .accessibilityAddTraits(.isHeader)
         }
+        .frame(maxWidth: .infinity)
+        .overlay(alignment: .trailing) { chatShareMenu }
         .padding(.top, 6)
         .padding(.bottom, 8)
+    }
+
+    /// 📄 Copy the whole chat, or share it as a document that opens in Word.
+    private var chatShareMenu: some View {
+        Menu {
+            Button {
+                UIPasteboard.general.string = ChatExport.plainText(ChatExport.lines(viewModel.messages))
+            } label: {
+                Label("Copy whole chat", systemImage: "doc.on.doc")
+            }
+            ShareLink(item: ChatDocument(lines: ChatExport.lines(viewModel.messages)),
+                      preview: SharePreview("Northstar chat")) {
+                Label("Share as document (Word)", systemImage: "doc.richtext")
+            }
+        } label: {
+            Image(systemName: "square.and.arrow.up")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(NorthstarChatStyle.soft)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .padding(.trailing, 12)
+        .accessibilityLabel("Copy or share this chat")
     }
 
     /// The large star + wordmark + welcome-message lockup, used only for the
@@ -253,7 +295,7 @@ struct ContentView: View {
             // Star + wordmark as one grouped lockup, tightly spaced so they
             // read as a single logo rather than two separate elements.
             VStack(spacing: 6) {
-                NorthstarVisionStarMark(size: 48)
+                NorthstarVisionStarMark(size: 72)
                     .accessibilityHidden(true)
 
                 Text("Northstar")
@@ -357,6 +399,12 @@ struct ContentView: View {
                         }
                     }
 
+                    if isThinking {
+                        NorthstarThinkingStar()
+                            .id("THINKING")
+                            .transition(.opacity)
+                    }
+
                     // Sized to the composer's real measured footprint (+16pt
                     // breathing room) rather than a fixed 1pt marker — this is
                     // what actually guarantees the last message clears the
@@ -376,13 +424,87 @@ struct ContentView: View {
             .onChange(of: viewModel.messages.count) {
                 scrollToLatestMessage(proxy)
             }
+            .onChange(of: isThinking) {
+                // Keep the thinking star in view, just above the ask bar.
+                guard isThinking else { return }
+                DispatchQueue.main.async {
+                    withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("CHAT_BOTTOM", anchor: .bottom) }
+                }
+            }
         }
     }
 
     private var promptArea: some View {
+        composerBox
+        .padding(.horizontal, 6)
+        .padding(.bottom, isPromptFocused ? 8 : 46)
+        .animation(.easeOut(duration: 0.2), value: isPromptFocused)
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
+            composerHeight = newHeight
+        }
+    }
+
+    /// Shown once so people know the bell is there; tapping it (or ✕) hides it for good.
+    private var conciergeHint: some View {
+        HStack(spacing: 8) {
+            Button {
+                conciergeHintSeen = true
+                isPromptFocused = false
+                isConciergePresented = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "bell.fill")
+                        .foregroundStyle(NorthstarChatStyle.starGold)
+                    Text("New: Concierge. Dinner, classes, fun and more.")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(NorthstarChatStyle.text)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the Concierge")
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) { conciergeHintSeen = true }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(NorthstarChatStyle.label)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Hide this tip")
+        }
+        .padding(.leading, 6)
+        .transition(.opacity)
+    }
+
+    /// 🛎 Opens the Concierge: dinner, fitness, fun, travel, errands, gifts. In the ask bar by the star, on every screen.
+    private var conciergeButton: some View {
+        Button {
+            isPromptFocused = false
+            conciergeHintSeen = true
+            isConciergePresented = true
+        } label: {
+            Image(systemName: "bell")
+                .font(.system(size: 17, weight: .light))
+                .foregroundStyle(NorthstarChatStyle.text)
+                .frame(width: 34, height: 34)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Concierge")
+        .accessibilityHint("Find dinner, classes, things to do, travel and more")
+    }
+
+    private var composerBox: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let selectedImage {
                 attachedPhoto(selectedImage)
+            } else if !conciergeHintSeen {
+                conciergeHint
             }
             promptRow
         }
@@ -401,13 +523,7 @@ struct ContentView: View {
                 .strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1)
         }
         .shadow(color: Color(red: 0.45, green: 0.55, blue: 1.0).opacity(0.18), radius: 16)
-        .padding(.horizontal, 6)
         .animation(.easeOut(duration: 0.2), value: selectedImage != nil)
-        .padding(.bottom, isPromptFocused ? 8 : 46)
-        .animation(.easeOut(duration: 0.2), value: isPromptFocused)
-        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
-            composerHeight = newHeight
-        }
     }
 
     /// The photo waiting to be sent: a small rounded thumbnail with an ✕ to remove it.
@@ -458,6 +574,9 @@ struct ContentView: View {
                     .frame(width: 34, height: 34)
             }
 
+            // The concierge bell sits next to the star on every screen (both are "places to go").
+            conciergeButton
+
             TextField("Ask Northstar...", text: $promptText, axis: .vertical)
                 .focused($isPromptFocused)
                 .foregroundStyle(NorthstarChatStyle.text)
@@ -469,7 +588,7 @@ struct ContentView: View {
             Button { toggleMicrophone() } label: {
                 Image(systemName: speechRecognizer.isRecording ? "stop.circle.fill" : "mic.fill")
                     .font(.system(size: 18))
-                    .foregroundStyle(speechRecognizer.isRecording ? .red : NorthstarChatStyle.text)
+                    .foregroundStyle(speechRecognizer.isRecording ? NorthstarChatStyle.listening : NorthstarChatStyle.text)
                     .frame(width: 34, height: 34)
             }
 
@@ -505,6 +624,9 @@ struct ContentView: View {
             },
             onLearning: {
                 open(.learning)
+            },
+            onVoices: {
+                open(.voices)
             },
             onMemory: {
                 open(.memory)
@@ -582,6 +704,9 @@ struct ContentView: View {
         case .learning:
             // 🎬 Videos: saved YouTube lessons and videos made in Northstar, in folders.
             VideoLibraryView()
+        case .voices:
+            // 🔊 Voices: read replies aloud, and choose the voice (premium or phone).
+            VoicesView()
         case .memory:
             // Search: find anything you've said (by words and meaning).
             NotesSearchView(onOpenChat: openChat)
@@ -638,6 +763,7 @@ struct ContentView: View {
     }
 
     private func toggleMicrophone() {
+        NorthstarVoice.shared.stop()   // never talk over them
         if speechRecognizer.isRecording {
             speechRecognizer.stopRecording()
             return
@@ -686,6 +812,7 @@ struct ContentView: View {
     }
 
     private func sendMessage() {
+        NorthstarVoice.shared.stop()
         // A photo waiting in the ask bar: send it with their words straight to the brain.
         if let photo = selectedImage, !isThinking {
             sendPhoto(photo)
@@ -1097,12 +1224,17 @@ struct ContentView: View {
             }
             let chatId = settings.memoryOn ? currentChatId : nil
 
+            // "What's on my calendar?": send the next 7 days (asks for Calendar access the first time).
+            let calendar = NorthstarCalendar.asksAboutSchedule(lastUser)
+                ? await NorthstarCalendar.shared.upcoming() : nil
+
             let answer = await engine.getReply(
                 for: viewModel.messages,
                 memory: memory,
                 corrections: corrections,
                 settings: settings,
-                chatId: chatId
+                chatId: chatId,
+                calendar: calendar
             )
             guard !Task.isCancelled else {
                 // Stopped before any reply: don't leave an empty chat in History.
@@ -1115,6 +1247,10 @@ struct ContentView: View {
                 )
                 isThinking = false
                 responseTask = nil
+                // Settings → Voice → Read replies aloud. Not in a crisis reply (the help card is read, not spoken).
+                if NorthstarVoice.autoSpeak, !answer.failed, answer.insight?.crisis != true {
+                    NorthstarVoice.shared.speak(answer.text)
+                }
             }
             // Keep this exchange in the saved chat (never blocks the reply).
             if let chatId, !lastUser.isEmpty, !answer.failed {
@@ -1202,6 +1338,7 @@ struct ContentView: View {
     }
 
     private func startNewChat() {
+        NorthstarVoice.shared.stop()
         responseTask?.cancel()
         responseTask = nil
         currentWorkflow = nil
