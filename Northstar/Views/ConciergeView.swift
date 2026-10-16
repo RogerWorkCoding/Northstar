@@ -229,42 +229,44 @@ struct ConciergeView: View {
     // MARK: Ask bar: the mic first
 
     private var askBar: some View {
+        // Same order as the main ask bar: words on the left, mic and send on the right.
         HStack(spacing: 10) {
-            Button { toggleMic() } label: {
-                Image(systemName: speech.isRecording ? "stop.fill" : "mic.fill")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(speech.isRecording ? .white : NorthstarChatStyle.onPrimary)
-                    .frame(width: 52, height: 52)
-                    .background(Circle().fill(speech.isRecording ? Color.red : NorthstarChatStyle.primaryFill))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(speech.isRecording ? "Stop and send" : "Speak")
-
             TextField(speech.isRecording ? "Listening…" : "Say or type what you want", text: $typed, axis: .vertical)
                 .focused($typing)
                 .lineLimit(1...3)
                 .foregroundStyle(NorthstarChatStyle.text)
                 .submitLabel(.send)
                 .onSubmit { ask(typed) }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(NorthstarChatStyle.card))
-                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
+
+            Button { toggleMic() } label: {
+                Image(systemName: speech.isRecording ? "stop.fill" : "mic.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(speech.isRecording ? .white : NorthstarChatStyle.onPrimary)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(speech.isRecording ? Color.red : NorthstarChatStyle.primaryFill))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(speech.isRecording ? "Stop and send" : "Speak")
 
             if !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !speech.isRecording {
                 Button { ask(typed) } label: {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(NorthstarChatStyle.onPrimary)
-                        .frame(width: 40, height: 40)
-                        .background(Circle().fill(NorthstarChatStyle.primaryFill))
+                        .frame(width: 44, height: 44)
+                        .background(Circle().fill(NorthstarChatStyle.sendFill))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Send")
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 10)
+        .padding(.leading, 16)
+        .padding(.trailing, 8)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 26, style: .continuous).fill(NorthstarChatStyle.card))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
         .padding(.bottom, 14)
         .background(NorthstarChatStyle.background)
     }
