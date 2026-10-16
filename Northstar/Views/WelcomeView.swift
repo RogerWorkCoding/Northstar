@@ -60,6 +60,11 @@ struct WelcomeView: View {
                 .tabViewStyle(.page(indexDisplayMode: .always))
                 .indexViewStyle(.page(backgroundDisplayMode: .interactive))
 
+                if page == lastPage {
+                    appleSignIn
+                        .transition(.opacity)
+                }
+
                 Button {
                     if page < lastPage {
                         withAnimation(reduceMotion ? nil : .easeInOut) { page += 1 }
@@ -115,21 +120,9 @@ struct WelcomeView: View {
         .frame(maxWidth: 520)
     }
 
-    private var memoryPage: some View {
-        VStack(spacing: 18) {
-            Text("Your memory is yours")
-                .font(.system(size: 32, weight: .light))
-                .multilineTextAlignment(.center)
-                .accessibilityAddTraits(.isHeader)
-            VStack(spacing: 8) {
-                Text("Northstar remembers only what you tell it or confirm.")
-                Text("See, change or delete it any time in Settings.")
-            }
-            .font(.system(size: 19))
-            .multilineTextAlignment(.center)
-            .foregroundStyle(.white.opacity(0.88))
-            .accessibilityElement(children: .combine)
-
+    /// Sign in with Apple, at the bottom just above Start (last page only).
+    private var appleSignIn: some View {
+        VStack(spacing: 8) {
             if account.isSignedInWithApple {
                 Label("Signed in with Apple", systemImage: "checkmark.circle.fill")
                     .font(.body.weight(.semibold))
@@ -153,7 +146,8 @@ struct WelcomeView: View {
                     }
                     .signInWithAppleButtonStyle(.white)
                     .frame(height: 50)
-                    .frame(maxWidth: 360)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(Capsule())   // matches the Start button
 
                     Text("Optional. Creates your free account, no password.\nKeeps your memory safe if you change phones.")
                         .multilineTextAlignment(.center)
@@ -169,6 +163,27 @@ struct WelcomeView: View {
                     .foregroundStyle(.white.opacity(0.85))
                     .multilineTextAlignment(.center)
             }
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 14)
+        .frame(maxWidth: 480)
+    }
+
+    private var memoryPage: some View {
+        VStack(spacing: 18) {
+            Text("Your memory is yours")
+                .font(.system(size: 32, weight: .light))
+                .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
+            VStack(spacing: 8) {
+                Text("Northstar remembers only what you tell it or confirm.")
+                Text("See, change or delete it any time in Settings.")
+            }
+            .font(.system(size: 19))
+            .multilineTextAlignment(.center)
+            .foregroundStyle(.white.opacity(0.88))
+            .accessibilityElement(children: .combine)
+
             Spacer(minLength: 0)
         }
         .padding(.top, 40)
