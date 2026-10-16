@@ -141,6 +141,23 @@ struct NorthstarReplyView: View {
         .accessibilityLabel(speaking ? "Stop reading" : "Read this reply aloud")
     }
 
+    /// 📋 Copy this reply (shows "Copied" for a moment).
+    @State private var copied = false
+    private var copyButton: some View {
+        Button {
+            UIPasteboard.general.string = text
+            copied = true
+            Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+        } label: {
+            Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(NorthstarChatStyle.label)
+                .frame(minHeight: 32)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(copied ? "Copied" : "Copy this reply")
+    }
+
     private var guiding: NorthstarInsight? {
         guard let insight, insight.isGuiding else { return nil }
         return insight
@@ -165,7 +182,10 @@ struct NorthstarReplyView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            speakButton
+            HStack(spacing: 18) {
+                speakButton
+                copyButton
+            }
 
             if let offer = insight?.subjectOffer {
                 SubjectOfferCard(offer: offer, state: subjectState, onKeep: onKeepSubject, onDismiss: onDismissSubject)
