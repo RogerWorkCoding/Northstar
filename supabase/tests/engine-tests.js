@@ -586,6 +586,29 @@ const NS_CASES = [
     check: (r) => [["still answers", has(r.reply, /\w/)]],
   },
   {
+    id: "principle-reflect-on-life-choice", group: "principles",
+    say: "Should I quit my job to open a bakery?",
+    check: (r) => [
+      ["doesn't decide for them", !/\byou should (definitely )?(quit|stay|not quit|keep)\b/i.test(r.reply ?? "")],
+      ["helps them think (a question)", has(r.reply, /\?/)],
+      ["names a tradeoff or what matters", has(r.reply, /savings|money|income|risk|what matters|why|test|try|matters most|tradeoff|safety net/i)],
+    ],
+  },
+  {
+    id: "principle-answer-first-practical", group: "principles",
+    say: "How many tablespoons are in a cup?",
+    check: (r) => [["direct answer", has(r.reply, /16/)], ["short", (r.reply ?? "").length < 300]],
+  },
+  {
+    id: "principle-explain-reasoning", group: "principles",
+    history: [
+      { role: "user", content: "I can only carve 20 minutes a day. What should I make first?" },
+      { role: "assistant", content: "Start with a simple butter spreader in basswood." },
+    ],
+    say: "Why that one?",
+    check: (r) => [["explains why", has(r.reply, /because|since|so you|easy|simple|soft|small|quick|short/i)]],
+  },
+  {
     id: "places-not-for-facts", group: "places",
     say: "What is the capital of France?",
     check: (r) => [["no map for a fact", (r.places ?? []).length === 0]],
