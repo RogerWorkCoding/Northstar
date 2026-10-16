@@ -1134,12 +1134,8 @@ struct ContentView: View {
             speechRecognizer.stopRecording()
         }
 
-        let firstLine = cleanedText
-            .components(separatedBy: .newlines)
-            .first?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let title = (firstLine?.isEmpty == false) ? firstLine! : "Northstar Document"
+        // A calm name, never the private first line ("Hi mom, …" → "Letter to Mom").
+        let title = DocumentNaming.calmName(for: cleanedText)
 
         do {
             let fileURL = try pdfService.createPDF(title: title, topic: cleanedText)

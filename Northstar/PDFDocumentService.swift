@@ -43,10 +43,17 @@ struct PDFDocumentService {
             withIntermediateDirectories: true
         )
 
-        let fileURL =
+        // Never overwrite an earlier document with the same name:
+        // "Letter to Mom", "Letter to Mom 2", …
+        var fileURL =
             northstarFolder.appendingPathComponent(
                 "\(safeTitle).pdf"
             )
+        var copy = 2
+        while FileManager.default.fileExists(atPath: fileURL.path) {
+            fileURL = northstarFolder.appendingPathComponent("\(safeTitle) \(copy).pdf")
+            copy += 1
+        }
 
         try renderer.writePDF(
             to: fileURL
@@ -201,5 +208,45 @@ struct PDFDocumentService {
         return cleaned.isEmpty
             ? "Northstar Document"
             : cleaned
+    }
+}
+
+// 📄 Calm document names. A document's first line is often private
+// ("Hi mom, it's been a hard day"), so it is never shown as the name.
+//   "Hi mom, …" / "Dear Sam, …"  → "Letter to Mom" / "Letter to Sam"
+//   a short title the person wrote → kept ("Project plan")
+//   anything else                  → "Note"
+enum DocumentNaming {
+
+    static func calmName(for text: String) -> String {
+        let firstLine = text
+            .components(separatedBy: .newlines)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !firstLine.isEmpty else { return "Note" }
+
+        if let name = greetingName(in: firstLine) {
+            return "Letter to \(name)"
+        }
+
+        let words = firstLine.split(whereSeparator: \.isWhitespace)
+        let looksLikeTitle = words.count <= 5
+            && !firstLine.contains(",")
+            && !firstLine.hasSuffix(".")
+            && !firstLine.hasSuffix("!")
+            && !firstLine.hasSuffix("?")
+        return looksLikeTitle ? firstLine : "Note"
+    }
+
+    /// "Hi mom, it's been…" → "Mom". Nil when the line isn't a greeting.
+    private static func greetingName(in line: String) -> String? {
+        let pattern = #"^(?i:hi|hello|hey|dear)\s+([A-Za-z][A-Za-z'\-]{0,24})\s*[,!.:\-—]"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+              let range = Range(match.range(at: 1), in: line) else { return nil }
+        let name = String(line[range])
+        let notNames: Set<String> = ["there", "you", "all", "everyone", "everybody", "guys", "friends", "folks"]
+        guard !notNames.contains(name.lowercased()) else { return nil }
+        return name.prefix(1).uppercased() + name.dropFirst().lowercased()
     }
 }
