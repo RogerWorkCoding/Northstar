@@ -1335,6 +1335,16 @@ Deno.serve(async (req) => {
         spentMicros += costMicros(data?.usage);
         const u = (data?.usage ?? {}) as Record<string, number>;
         console.log("usage", JSON.stringify({ in: u.input_tokens, out: u.output_tokens, cached: u.cache_read_input_tokens, wrote: u.cache_creation_input_tokens }));
+        // Rare slip: Claude writes the reply tool as plain text ("<invoke name=…>") instead of calling it.
+        // Ask once more rather than show that to the person.
+        const got = (data?.content ?? []) as Array<Record<string, unknown>>;
+        const slipped = !got.some((b) => b.type === "tool_use" && b.name === "northstar_reply") &&
+          got.some((b) => b.type === "text" && /<invoke\b|<parameter\b/.test(String(b.text ?? "")));
+        if (slipped && attempt === 1) {
+          console.log("reply tool written as text; asking again");
+          data = null;
+          continue;
+        }
       } else {
         const detail = (await res.text()).slice(0, 300);
         console.error("Claude error", res.status, "attempt", attempt, detail);
@@ -1416,7 +1426,11 @@ Deno.serve(async (req) => {
 
   // Fallback: plain text if the tool wasn't used.
   if (!tool) {
-    const text = blocks.filter((b) => b.type === "text").map((b) => str(b.text, 8000)).join("\n").trim();
+    let text = blocks.filter((b) => b.type === "text").map((b) => str(b.text, 8000)).join("\n").trim();
+    // If it slipped twice, keep only the reply words, never the tool markup.
+    if (/<invoke\b|<parameter\b/.test(text)) {
+      text = text.match(/<parameter name="reply">([\s\S]*?)<\/parameter>/)?.[1]?.trim() ?? "";
+    }
     const net = crisisNet(messages[messages.length - 1].content);
     return json({
       reply: cleanReply(text) || (net ? CRISIS_FALLBACK : "I'm here. Could you say that another way?"),
