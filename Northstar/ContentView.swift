@@ -247,7 +247,7 @@ struct ContentView: View {
                     .foregroundStyle(NorthstarChatStyle.starGold)
                     .accessibilityHidden(true)
             } else {
-                NorthstarVisionStarMark(size: 16)
+                NorthstarVisionStarMark(size: 22)
                     .accessibilityHidden(true)
             }
 
@@ -295,7 +295,7 @@ struct ContentView: View {
             // Star + wordmark as one grouped lockup, tightly spaced so they
             // read as a single logo rather than two separate elements.
             VStack(spacing: 6) {
-                NorthstarVisionStarMark(size: 48)
+                NorthstarVisionStarMark(size: 72)
                     .accessibilityHidden(true)
 
                 Text("Northstar")

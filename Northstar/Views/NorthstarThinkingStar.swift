@@ -13,9 +13,9 @@ struct NorthstarThinkingStar: View {
         HStack(spacing: 12) {
             ZStack {
                 rays
-                Image(systemName: "sparkle")
-                    .font(.system(size: 20, weight: .regular))
-                    .foregroundStyle(NorthstarChatStyle.starGold)
+                NorthstarStarShape()
+                    .fill(NorthstarChatStyle.starGold)
+                    .frame(width: 26, height: 26)
                     .rotationEffect(.degrees(reduceMotion ? 0 : (rock ? 25 : -25)))
                     .shadow(color: NorthstarChatStyle.starGold.opacity(glow ? 0.7 : 0.2), radius: glow ? 8 : 3)
             }

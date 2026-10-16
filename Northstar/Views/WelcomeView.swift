@@ -29,7 +29,7 @@ struct WelcomeView: View {
                 }
                 .padding(.horizontal, 20)
 
-                NorthstarVisionStarMark(size: 44)
+                NorthstarVisionStarMark(size: 64)
                     .padding(.top, 24)
                     .accessibilityHidden(true)
 
