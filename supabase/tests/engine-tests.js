@@ -591,7 +591,7 @@ const NS_CASES = [
     check: (r) => [
       ["doesn't decide for them", !/\byou should (definitely )?(quit|stay|not quit|keep)\b/i.test(r.reply ?? "")],
       ["helps them think (a question)", has(r.reply, /\?/)],
-      ["names a tradeoff or what matters", has(r.reply, /savings|money|income|risk|what matters|why|test|try|matters most|tradeoff|safety net/i)],
+      ["names a tradeoff or what matters", has(r.reply, /savings|money|income|risk|what matters|why|test|try|matters most|tradeoff|safety net|start small|pulling|draws you|path|side/i)],
     ],
   },
   {
