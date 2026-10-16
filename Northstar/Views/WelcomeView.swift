@@ -12,9 +12,6 @@ struct WelcomeView: View {
     private let lastPage = 3
     @State private var account = AppleAccount.shared
     @State private var message: String?
-    // First page: sentence one fades in, then fades away, then sentence two fades in and stays.
-    @State private var firstShown = false
-    @State private var secondShown = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -37,15 +34,18 @@ struct WelcomeView: View {
                     .accessibilityHidden(true)
 
                 TabView(selection: $page) {
-                    firstPage.tag(0)
+                    WelcomeFadePage(
+                        title: "Find your direction",
+                        first: ["Northstar helps you decide what matters,", "then take the next small step."],
+                        second: "Your direction is always yours.",
+                        active: page == 0
+                    ).tag(0)
 
-                    pageView(
+                    WelcomeFadePage(
                         title: "Talk or type",
-                        lines: [
-                            "Plan a project. Find a place nearby.",
-                            "Sketch a design. Make a short video.",
-                            "Simple questions get simple answers."
-                        ]
+                        first: ["Plan a project. Find a place nearby.", "Sketch a design. Make a short video."],
+                        second: "Simple questions get simple answers.",
+                        active: page == 1
                     ).tag(1)
 
                     pageView(
@@ -95,41 +95,6 @@ struct WelcomeView: View {
         }
         // The welcome always sits on the night sky.
         .environment(\.colorScheme, .dark)
-    }
-
-    /// "Find your direction": sentence one fades in and out, then sentence two fades in, in the same spot.
-    private var firstPage: some View {
-        VStack(spacing: 18) {
-            Text("Find your direction")
-                .font(.system(size: 32, weight: .light))
-                .multilineTextAlignment(.center)
-                .accessibilityAddTraits(.isHeader)
-            ZStack(alignment: .top) {
-                VStack(spacing: 8) {
-                    Text("Northstar helps you decide what matters,")
-                    Text("then take the next small step.")
-                }
-                .opacity(firstShown ? 1 : 0)
-                Text("Your direction is always yours.")
-                    .opacity(secondShown ? 1 : 0)
-            }
-            .font(.system(size: 19))
-            .multilineTextAlignment(.center)
-            .foregroundStyle(.white.opacity(0.88))
-            .accessibilityElement(children: .combine)
-            Spacer(minLength: 0)
-        }
-        .padding(.top, 40)
-        .padding(.horizontal, 28)
-        .frame(maxWidth: 520)
-        .task {
-            try? await Task.sleep(for: .milliseconds(400))
-            withAnimation(.easeOut(duration: 1.0)) { firstShown = true }
-            try? await Task.sleep(for: .milliseconds(3200))   // fade in + time to read
-            withAnimation(.easeIn(duration: 0.8)) { firstShown = false }
-            try? await Task.sleep(for: .milliseconds(900))
-            withAnimation(.easeOut(duration: 1.0)) { secondShown = true }
-        }
     }
 
     private func pageView(title: LocalizedStringKey, lines: [String]) -> some View {
@@ -211,6 +176,55 @@ struct WelcomeView: View {
         .padding(.top, 40)
         .padding(.horizontal, 28)
         .frame(maxWidth: 520)
+    }
+}
+
+/// A welcome page whose words change in place: the first lines fade in, stay long enough to read,
+/// fade away, then the last line fades in and stays. It plays when the page is on screen.
+private struct WelcomeFadePage: View {
+    let title: LocalizedStringKey
+    let first: [String]
+    let second: String
+    let active: Bool
+
+    @State private var firstShown = false
+    @State private var secondShown = false
+    @State private var played = false
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Text(title)
+                .font(.system(size: 32, weight: .light))
+                .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
+            ZStack(alignment: .top) {
+                VStack(spacing: 8) {
+                    ForEach(first, id: \.self) { Text($0) }
+                }
+                .opacity(firstShown ? 1 : 0)
+                Text(second)
+                    .opacity(secondShown ? 1 : 0)
+            }
+            .font(.system(size: 19))
+            .multilineTextAlignment(.center)
+            .foregroundStyle(.white.opacity(0.88))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel((first + [second]).joined(separator: " "))
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 40)
+        .padding(.horizontal, 28)
+        .frame(maxWidth: 520)
+        .task(id: active) {
+            guard active, !played else { return }
+            played = true
+            try? await Task.sleep(for: .milliseconds(400))
+            withAnimation(.easeOut(duration: 1.0)) { firstShown = true }
+            try? await Task.sleep(for: .milliseconds(3200))   // fade in + time to read
+            withAnimation(.easeIn(duration: 0.8)) { firstShown = false }
+            try? await Task.sleep(for: .milliseconds(900))
+            withAnimation(.easeOut(duration: 1.0)) { secondShown = true }
+        }
     }
 }
 
