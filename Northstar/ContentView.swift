@@ -112,15 +112,6 @@ struct ContentView: View {
                     promptArea
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // Home only: the concierge bell, quiet in the top-right corner (like Gemini's top buttons).
-                .overlay(alignment: .topTrailing) {
-                    if viewModel.messages.isEmpty && !isStarMenuPresented {
-                        conciergeButton
-                            .padding(.trailing, 16)
-                            .padding(.top, 6)
-                            .transition(.opacity)
-                    }
-                }
                 // Home (star and mountains) is always Night; chats follow Day or Night.
                 .environment(\.colorScheme, viewModel.messages.isEmpty ? .dark : colorScheme)
 
@@ -408,18 +399,17 @@ struct ContentView: View {
         }
     }
 
-    /// 🛎 Opens the Concierge: dinner, fitness, fun, rides, errands, gifts. Home only, top right.
+    /// 🛎 Opens the Concierge: dinner, fitness, fun, rides, errands, gifts. Home only, in the ask bar by the star.
     private var conciergeButton: some View {
         Button {
             isPromptFocused = false
             isConciergePresented = true
         } label: {
             Image(systemName: "bell")
-                .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(.white.opacity(0.92))
-                .frame(width: 44, height: 44)
-                .background(Circle().fill(.ultraThinMaterial))
-                .overlay(Circle().strokeBorder(.white.opacity(0.22), lineWidth: 1))
+                .font(.system(size: 17, weight: .light))
+                .foregroundStyle(NorthstarChatStyle.text)
+                .frame(width: 34, height: 34)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Concierge")
@@ -497,6 +487,11 @@ struct ContentView: View {
                     .font(.system(size: 18, weight: .light))
                     .foregroundStyle(NorthstarChatStyle.text)
                     .frame(width: 34, height: 34)
+            }
+
+            // Home only: the concierge bell sits next to the star (both are "places to go").
+            if viewModel.messages.isEmpty {
+                conciergeButton
             }
 
             TextField("Ask Northstar...", text: $promptText, axis: .vertical)
