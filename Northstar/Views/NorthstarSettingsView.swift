@@ -22,6 +22,7 @@ enum SettingsKeys {
     static let speakReplies  = "ns.voice.speakReplies"
     static let voice         = "ns.voice.choice"
     static let voiceSpeed    = "ns.voice.speed"
+    static let premiumVoice  = "ns.voice.premium"
 }
 
 /// Day (cream page, navy text) or Night (navy). Automatic follows the phone's setting.
@@ -79,6 +80,8 @@ struct NorthstarSettingsView: View {
     @AppStorage(SettingsKeys.speakReplies) private var speakReplies = false
     @AppStorage(SettingsKeys.voice) private var voiceChoice = NorthstarVoiceChoice.calmUS
     @AppStorage(SettingsKeys.voiceSpeed) private var voiceSpeed = NorthstarVoiceSpeed.normal
+    @AppStorage(SettingsKeys.premiumVoice) private var premiumVoice = ""
+    @State private var premiumVoices: [PremiumVoice] = []
 
     @State private var confirmDeleteAll = false
     @State private var moduleOn: Set<AppModule> = Set(AppModule.enabled)
@@ -193,11 +196,13 @@ struct NorthstarSettingsView: View {
                     HStack {
                         Button {
                             voiceChoice = choice
+                            premiumVoice = ""
                             NorthstarVoice.shared.sample(choice)
                         } label: {
                             HStack {
-                                Image(systemName: voiceChoice == choice ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(voiceChoice == choice ? Color.accentColor : .secondary)
+                                let picked = premiumVoice.isEmpty && voiceChoice == choice
+                                Image(systemName: picked ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(picked ? Color.accentColor : .secondary)
                                 Text(choice.label)
                                 if !choice.qualityNote.isEmpty {
                                     Text(choice.qualityNote).font(.caption).foregroundStyle(.secondary)
@@ -216,6 +221,35 @@ struct NorthstarSettingsView: View {
                         }
                         .buttonStyle(.borderless)
                         .accessibilityLabel("Hear \(choice.label)")
+                    }
+                }
+
+                // Premium voices (ElevenLabs): shown once they're set up in the brain.
+                ForEach(premiumVoices) { voice in
+                    HStack {
+                        Button {
+                            premiumVoice = voice.id
+                            NorthstarVoice.shared.samplePremium(voice)
+                        } label: {
+                            HStack {
+                                Image(systemName: premiumVoice == voice.id ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(premiumVoice == voice.id ? Color.accentColor : .secondary)
+                                Text(voice.name)
+                                Text("Premium").font(.caption).foregroundStyle(.secondary)
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            NorthstarVoice.shared.samplePremium(voice)
+                        } label: {
+                            Image(systemName: "play.circle")
+                                .font(.title3)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Hear \(voice.name)")
                     }
                 }
 
@@ -290,6 +324,7 @@ struct NorthstarSettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .task { premiumVoices = await NorthstarVoice.premiumVoices() }
         .task { await loadExport() }
         .task { await account.refresh() }
         .confirmationDialog("Sign out?", isPresented: $confirmSignOut, titleVisibility: .visible) {

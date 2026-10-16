@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Observation
+import Supabase
 
 // 🔊 Northstar's voice: reads replies aloud with the iPhone's own voices (free, private, works offline).
 // Settings → Voice: read replies aloud (on/off), which voice, and how fast.
@@ -56,6 +57,12 @@ nonisolated enum NorthstarVoiceChoice: String, CaseIterable, Identifiable, Senda
     }
 }
 
+/// A premium ElevenLabs voice (the list comes from the brain, so it can change without an app update).
+nonisolated struct PremiumVoice: Identifiable, Hashable, Sendable, Decodable {
+    let id: String
+    let name: String
+}
+
 nonisolated enum NorthstarVoiceSpeed: String, CaseIterable, Identifiable, Sendable {
     case slower, normal, faster
     var id: String { rawValue }
@@ -77,7 +84,7 @@ nonisolated enum NorthstarVoiceSpeed: String, CaseIterable, Identifiable, Sendab
 
 @MainActor
 @Observable
-final class NorthstarVoice: NSObject, AVSpeechSynthesizerDelegate {
+final class NorthstarVoice: NSObject, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
 
     static let shared = NorthstarVoice()
 
@@ -85,6 +92,10 @@ final class NorthstarVoice: NSObject, AVSpeechSynthesizerDelegate {
     private(set) var speakingText: String?
 
     @ObservationIgnored private let synthesizer = AVSpeechSynthesizer()
+    @ObservationIgnored private var player: AVAudioPlayer?
+    @ObservationIgnored private var premiumTask: Task<Void, Never>?
+    /// True while a premium voice is being fetched (so a finished/cancelled event doesn't clear it).
+    @ObservationIgnored private var loadingPremium = false
 
     override init() {
         super.init()
@@ -100,15 +111,88 @@ final class NorthstarVoice: NSObject, AVSpeechSynthesizerDelegate {
         NorthstarVoiceChoice(rawValue: UserDefaults.standard.string(forKey: SettingsKeys.voice) ?? "") ?? .calmUS
     }
 
+    /// The chosen ElevenLabs voice id, or nil to use the phone's voices.
+    static var premiumVoiceId: String? {
+        let id = UserDefaults.standard.string(forKey: SettingsKeys.premiumVoice) ?? ""
+        return id.isEmpty ? nil : id
+    }
+
     static var speed: NorthstarVoiceSpeed {
         NorthstarVoiceSpeed(rawValue: UserDefaults.standard.string(forKey: SettingsKeys.voiceSpeed) ?? "") ?? .normal
     }
 
     /// Reads the text aloud (stops anything already playing first).
+    /// With a premium voice chosen, ElevenLabs speaks it; if that fails, the phone's voice does.
     func speak(_ text: String, voice: NorthstarVoiceChoice? = nil) {
+        if voice == nil, let premium = Self.premiumVoiceId {
+            speakPremium(text, voiceId: premium)
+            return
+        }
+        speakWithPhone(text, voice: voice)
+    }
+
+    /// Plays a premium voice saying the sample line.
+    func samplePremium(_ voice: PremiumVoice) {
+        speakPremium("Hi, I'm Northstar. Let's find your next step together.", voiceId: voice.id)
+    }
+
+    private func speakPremium(_ text: String, voiceId: String) {
         let spoken = Self.speakable(text)
         guard !spoken.isEmpty else { return }
         stop()
+        speakingText = text
+        loadingPremium = true
+        premiumTask = Task { [weak self] in
+            do {
+                let data = try await Self.premiumAudio(spoken, voiceId: voiceId)
+                guard let self, !Task.isCancelled, self.speakingText == text else { return }
+                self.loadingPremium = false
+                let session = AVAudioSession.sharedInstance()
+                try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+                try? session.setActive(true)
+                let player = try AVAudioPlayer(data: data)
+                player.delegate = self
+                player.rate = 1
+                self.player = player
+                player.play()
+            } catch {
+                guard let self, !Task.isCancelled, self.speakingText == text else { return }
+                self.loadingPremium = false
+                print("Premium voice failed, using the phone's voice:", error.localizedDescription)
+                self.speakWithPhone(text, voice: nil)
+            }
+        }
+    }
+
+    nonisolated private struct SpeakRequest: Encodable, Sendable { let action = "speak"; let text: String; let voice: String }
+    nonisolated private struct ListRequest: Encodable, Sendable { let action = "voices" }
+    nonisolated private struct VoiceList: Decodable, Sendable { let voices: [PremiumVoice] }
+    nonisolated private struct VoiceError: Error {}
+
+    private static func premiumAudio(_ text: String, voiceId: String) async throws -> Data {
+        try await SupabaseManager.shared.client.functions.invoke(
+            "northstar-voice",
+            options: FunctionInvokeOptions(body: SpeakRequest(text: text, voice: voiceId))
+        ) { data, response in
+            guard response.statusCode == 200, response.value(forHTTPHeaderField: "Content-Type")?.contains("audio") == true,
+                  !data.isEmpty else { throw VoiceError() }
+            return data
+        }
+    }
+
+    /// The premium voices people can choose (empty until ElevenLabs is set up).
+    static func premiumVoices() async -> [PremiumVoice] {
+        let list: VoiceList? = try? await SupabaseManager.shared.client.functions.invoke(
+            "northstar-voice",
+            options: FunctionInvokeOptions(body: ListRequest())
+        )
+        return list?.voices ?? []
+    }
+
+    private func speakWithPhone(_ text: String, voice: NorthstarVoiceChoice?) {
+        let spoken = Self.speakable(text)
+        guard !spoken.isEmpty else { return }
+        stopAudio()
 
         // Plays even when the ring/silent switch is on silent, and lowers music while speaking.
         let session = AVAudioSession.sharedInstance()
@@ -129,8 +213,24 @@ final class NorthstarVoice: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     func stop() {
-        if synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
+        premiumTask?.cancel()
+        premiumTask = nil
+        loadingPremium = false
+        stopAudio()
         speakingText = nil
+    }
+
+    private func stopAudio() {
+        if synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
+        player?.stop()
+        player = nil
+    }
+
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        Task { @MainActor in
+            self.player = nil
+            self.finished()
+        }
     }
 
     func isSpeaking(_ text: String) -> Bool { speakingText == text }
@@ -146,7 +246,7 @@ final class NorthstarVoice: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     private func finished() {
-        guard !synthesizer.isSpeaking else { return }
+        guard !synthesizer.isSpeaking, player?.isPlaying != true, !loadingPremium else { return }
         speakingText = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
