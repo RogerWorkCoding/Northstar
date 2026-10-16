@@ -77,11 +77,6 @@ struct NorthstarSettingsView: View {
     @AppStorage(SettingsKeys.nickname) private var nickname = ""
     @AppStorage(SettingsKeys.easierFont) private var easierFont = false
     @AppStorage(SettingsKeys.appearance) private var appearance = Appearance.automatic
-    @AppStorage(SettingsKeys.speakReplies) private var speakReplies = false
-    @AppStorage(SettingsKeys.voice) private var voiceChoice = NorthstarVoiceChoice.calmUS
-    @AppStorage(SettingsKeys.voiceSpeed) private var voiceSpeed = NorthstarVoiceSpeed.normal
-    @AppStorage(SettingsKeys.premiumVoice) private var premiumVoice = ""
-    @State private var premiumVoices: [PremiumVoice] = []
 
     @State private var confirmDeleteAll = false
     @State private var moduleOn: Set<AppModule> = Set(AppModule.enabled)
@@ -187,83 +182,6 @@ struct NorthstarSettingsView: View {
                 Text("Day is a cream page with dark text, easiest for long reading and in sunlight. Night is the navy look. Automatic follows your iPhone. The home screen stays night sky.")
             }
 
-            // 1c. Voice: Northstar reads its replies aloud.
-            Section {
-                Toggle("Read replies aloud", isOn: $speakReplies)
-                    .onChange(of: speakReplies) { if !speakReplies { NorthstarVoice.shared.stop() } }
-
-                ForEach(NorthstarVoiceChoice.allCases) { choice in
-                    HStack {
-                        Button {
-                            voiceChoice = choice
-                            premiumVoice = ""
-                            NorthstarVoice.shared.sample(choice)
-                        } label: {
-                            HStack {
-                                let picked = premiumVoice.isEmpty && voiceChoice == choice
-                                Image(systemName: picked ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(picked ? Color.accentColor : .secondary)
-                                Text(choice.label)
-                                if !choice.qualityNote.isEmpty {
-                                    Text(choice.qualityNote).font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        Button {
-                            NorthstarVoice.shared.sample(choice)
-                        } label: {
-                            Image(systemName: "play.circle")
-                                .font(.title3)
-                                .frame(width: 44, height: 44)
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Hear \(choice.label)")
-                    }
-                }
-
-                // Premium voices (ElevenLabs): shown once they're set up in the brain.
-                ForEach(premiumVoices) { voice in
-                    HStack {
-                        Button {
-                            premiumVoice = voice.id
-                            NorthstarVoice.shared.samplePremium(voice)
-                        } label: {
-                            HStack {
-                                Image(systemName: premiumVoice == voice.id ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(premiumVoice == voice.id ? Color.accentColor : .secondary)
-                                Text(voice.name)
-                                Text("Premium").font(.caption).foregroundStyle(.secondary)
-                                Spacer()
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        Button {
-                            NorthstarVoice.shared.samplePremium(voice)
-                        } label: {
-                            Image(systemName: "play.circle")
-                                .font(.title3)
-                                .frame(width: 44, height: 44)
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Hear \(voice.name)")
-                    }
-                }
-
-                Picker("Speed", selection: $voiceSpeed) {
-                    ForEach(NorthstarVoiceSpeed.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: voiceSpeed) { NorthstarVoice.shared.sample(voiceChoice) }
-            } header: {
-                Text("Voice")
-            } footer: {
-                Text("When on, Northstar reads each reply aloud. Tap the speaker on any reply to hear it again, or to stop. For the most natural sound, download a Premium voice in iPhone Settings → Accessibility → Spoken Content → Voices → English.")
-            }
-
             // 2. How Northstar talks to you
             Section {
                 TextField("What should Northstar call you?", text: $preferredName)
@@ -324,7 +242,6 @@ struct NorthstarSettingsView: View {
             }
         }
         .navigationTitle("Settings")
-        .task { premiumVoices = await NorthstarVoice.premiumVoices() }
         .task { await loadExport() }
         .task { await account.refresh() }
         .confirmationDialog("Sign out?", isPresented: $confirmSignOut, titleVisibility: .visible) {

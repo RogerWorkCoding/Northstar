@@ -10,6 +10,7 @@ struct StarMenuView: View {
     var onProjects: () -> Void = {}
     var onDiscovery: () -> Void = {}
     var onLearning: () -> Void = {}
+    var onVoices: () -> Void = {}
     var onMemory: () -> Void = {}
     var onDocuments: () -> Void = {}
     var onHistory: () -> Void = {}
@@ -68,6 +69,12 @@ struct StarMenuView: View {
                     title: "Videos",
                     systemImage: "play.rectangle.on.rectangle",
                     action: onLearning
+                )
+
+                menuButton(
+                    title: "Voices",
+                    systemImage: "waveform",
+                    action: onVoices
                 )
 
                 sectionDivider

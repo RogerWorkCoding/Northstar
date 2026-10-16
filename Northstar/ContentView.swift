@@ -7,6 +7,7 @@ struct ContentView: View {
         case projects
         case discovery
         case learning
+        case voices
         case memory
         case documents
         case history
@@ -578,6 +579,9 @@ struct ContentView: View {
             onLearning: {
                 open(.learning)
             },
+            onVoices: {
+                open(.voices)
+            },
             onMemory: {
                 open(.memory)
             },
@@ -654,6 +658,9 @@ struct ContentView: View {
         case .learning:
             // 🎬 Videos: saved YouTube lessons and videos made in Northstar, in folders.
             VideoLibraryView()
+        case .voices:
+            // 🔊 Voices: read replies aloud, and choose the voice (premium or phone).
+            VoicesView()
         case .memory:
             // Search: find anything you've said (by words and meaning).
             NotesSearchView(onOpenChat: openChat)
