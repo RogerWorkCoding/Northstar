@@ -17,12 +17,14 @@ struct WelcomeView: View {
         VStack(spacing: 0) {
                 HStack {
                     Spacer()
-                    if page < 2 {
-                        Button("Skip") { onDone() }
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.85))
-                            .frame(minWidth: 44, minHeight: 44)
-                    }
+                    // Always takes its space (hidden on the last page) so the star never jumps.
+                    Button("Skip") { onDone() }
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .frame(minWidth: 44, minHeight: 44)
+                        .opacity(page < 2 ? 1 : 0)
+                        .disabled(page >= 2)
+                        .accessibilityHidden(page >= 2)
                 }
                 .padding(.horizontal, 20)
 
@@ -91,7 +93,6 @@ struct WelcomeView: View {
 
     private func pageView(title: String, lines: [String]) -> some View {
         VStack(spacing: 18) {
-            Spacer(minLength: 12)
             Text(title)
                 .font(.system(size: 32, weight: .light))
                 .multilineTextAlignment(.center)
@@ -103,15 +104,15 @@ struct WelcomeView: View {
             .multilineTextAlignment(.center)
             .foregroundStyle(.white.opacity(0.88))
             .accessibilityElement(children: .combine)
-            Spacer(minLength: 40)
+            Spacer(minLength: 0)
         }
+        .padding(.top, 40)
         .padding(.horizontal, 28)
         .frame(maxWidth: 520)
     }
 
     private var memoryPage: some View {
         VStack(spacing: 18) {
-            Spacer(minLength: 12)
             Text("Your memory is yours")
                 .font(.system(size: 32, weight: .light))
                 .multilineTextAlignment(.center)
@@ -150,7 +151,8 @@ struct WelcomeView: View {
                     .frame(height: 50)
                     .frame(maxWidth: 360)
 
-                    Text("Optional. Keeps your memory safe if you change phones.")
+                    Text("Optional. Creates your free account, no password.\nKeeps your memory safe if you change phones.")
+                        .multilineTextAlignment(.center)
                         .font(.footnote)
                         .foregroundStyle(.white.opacity(0.75))
                 }
@@ -163,8 +165,9 @@ struct WelcomeView: View {
                     .foregroundStyle(.white.opacity(0.85))
                     .multilineTextAlignment(.center)
             }
-            Spacer(minLength: 40)
+            Spacer(minLength: 0)
         }
+        .padding(.top, 40)
         .padding(.horizontal, 28)
         .frame(maxWidth: 520)
     }
