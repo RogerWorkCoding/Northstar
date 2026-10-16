@@ -84,12 +84,6 @@ struct StarMenuView: View {
                     action: onDocuments
                 )
 
-                menuButton(
-                    title: "History",
-                    systemImage: "clock.arrow.circlepath",
-                    action: onHistory
-                )
-
                 sectionDivider
 
                 menuButton(

@@ -34,6 +34,37 @@ nonisolated struct SavedVideo: Identifiable, Hashable, Sendable, Decodable {
     var isYouTube: Bool { source == "youtube" }
 }
 
+/// A video the person made in Northstar (saved to Videos or not): Video history.
+nonisolated struct MadeVideo: Identifiable, Hashable, Sendable {
+    let id: UUID
+    let prompt: String
+    let seconds: Int
+    let storagePath: String
+    let createdAt: String
+
+    /// A short name from the prompt: its first sentence, up to about 60 characters.
+    var title: String {
+        let first = prompt.split(whereSeparator: { ".!?\n".contains($0) }).first.map(String.init) ?? prompt
+        let clean = first.trimmingCharacters(in: .whitespacesAndNewlines)
+        if clean.count <= 60 { return clean.isEmpty ? "Video" : clean }
+        let cut = clean.prefix(60)
+        return (cut.lastIndex(of: " ").map { String(cut[..<$0]) } ?? String(cut)) + "…"
+    }
+
+    /// "Today 6:04 PM", "Yesterday 7:34 PM" or "Oct 13".
+    var when: String {
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter()
+        guard let date = iso.date(from: createdAt) ?? plain.date(from: createdAt) else { return "" }
+        let cal = Calendar.current
+        let time = date.formatted(date: .omitted, time: .shortened)
+        if cal.isDateInToday(date) { return "Today \(time)" }
+        if cal.isDateInYesterday(date) { return "Yesterday \(time)" }
+        return date.formatted(.dateTime.month(.abbreviated).day())
+    }
+}
+
 /// Something that can be saved: a YouTube lesson or a video made in Northstar.
 nonisolated enum VideoToSave: Hashable, Sendable {
     case youtube(id: String, title: String)
@@ -156,6 +187,35 @@ struct VideoLibraryService {
 
     func deleteVideo(_ id: UUID) async throws {
         try await client.from("saved_videos").delete().eq("id", value: id.uuidString).execute()
+    }
+
+    // MARK: Video history
+
+    /// Every video the person made that finished (newest first), saved to Videos or not,
+    /// so a paid video is never lost if the app closes before Save is tapped.
+    func madeVideos() async throws -> [MadeVideo] {
+        let rows: [MadeRow] = try await client.from("video_jobs")
+            .select("id, prompt, seconds, storage_path, created_at")
+            .eq("status", value: "done")
+            .order("created_at", ascending: false)
+            .limit(200)
+            .execute().value
+        return rows.compactMap { row in
+            row.storage_path.map { MadeVideo(id: row.id, prompt: row.prompt, seconds: row.seconds, storagePath: $0, createdAt: row.created_at) }
+        }
+    }
+
+    nonisolated private struct MadeRow: Decodable, Sendable {
+        let id: UUID
+        let prompt: String
+        let seconds: Int
+        let storage_path: String?
+        let created_at: String
+    }
+
+    /// A short-lived link to play a made video straight from its file.
+    func playURL(storagePath path: String) async throws -> URL {
+        try await client.storage.from("videos").createSignedURL(path: path, expiresIn: 3600)
     }
 
     /// A short-lived link to play a video the person made.
