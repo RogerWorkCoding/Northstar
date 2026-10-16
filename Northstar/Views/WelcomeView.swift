@@ -1,14 +1,15 @@
 import SwiftUI
 import AuthenticationServices
 
-// ✦ First-run welcome: three short pages on the night sky, shown once.
-// 1. What Northstar is. 2. What you can ask. 3. Your memory is yours (+ optional Sign in with Apple).
+// ✦ First-run welcome: four short pages on the night sky, shown once.
+// 1. What Northstar is. 2. What you can ask. 3. The Concierge (the bell). 4. Your memory is yours (+ optional Sign in with Apple).
 // Big text, one idea per page, always skippable. Settings → About can show it again later.
 
 struct WelcomeView: View {
     var onDone: () -> Void
 
     @State private var page = 0
+    private let lastPage = 3
     @State private var account = AppleAccount.shared
     @State private var message: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -22,9 +23,9 @@ struct WelcomeView: View {
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.85))
                         .frame(minWidth: 44, minHeight: 44)
-                        .opacity(page < 2 ? 1 : 0)
-                        .disabled(page >= 2)
-                        .accessibilityHidden(page >= 2)
+                        .opacity(page < lastPage ? 1 : 0)
+                        .disabled(page >= lastPage)
+                        .accessibilityHidden(page >= lastPage)
                 }
                 .padding(.horizontal, 20)
 
@@ -51,19 +52,28 @@ struct WelcomeView: View {
                         ]
                     ).tag(1)
 
-                    memoryPage.tag(2)
+                    pageView(
+                        title: "\(Image(systemName: "bell")) Your concierge",
+                        lines: [
+                            "Tap the bell for dinner, classes,",
+                            "things to do, rides and more, near you.",
+                            "You choose. Northstar never books or pays without you."
+                        ]
+                    ).tag(2)
+
+                    memoryPage.tag(3)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .always))
                 .indexViewStyle(.page(backgroundDisplayMode: .interactive))
 
                 Button {
-                    if page < 2 {
+                    if page < lastPage {
                         withAnimation(reduceMotion ? nil : .easeInOut) { page += 1 }
                     } else {
                         onDone()
                     }
                 } label: {
-                    Text(page < 2 ? "Continue" : "Start")
+                    Text(page < lastPage ? "Continue" : "Start")
                         .font(.headline)
                         .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
                         .frame(maxWidth: .infinity, minHeight: 52)
@@ -91,7 +101,7 @@ struct WelcomeView: View {
         .environment(\.colorScheme, .dark)
     }
 
-    private func pageView(title: String, lines: [String]) -> some View {
+    private func pageView(title: LocalizedStringKey, lines: [String]) -> some View {
         VStack(spacing: 18) {
             Text(title)
                 .font(.system(size: 32, weight: .light))
