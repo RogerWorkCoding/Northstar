@@ -48,13 +48,11 @@ struct WelcomeView: View {
                         active: page == 1
                     ).tag(1)
 
-                    pageView(
+                    WelcomeFadePage(
                         title: "\(Image(systemName: "bell")) Your concierge",
-                        lines: [
-                            "Tap the bell for dinner, classes,",
-                            "things to do, rides and more, near you.",
-                            "You choose. Northstar never books or pays without you."
-                        ]
+                        first: ["Tap the bell for dinner, classes,", "things to do, rides and more, near you."],
+                        second: "You choose.\nNorthstar never books or pays without you.",
+                        active: page == 2
                     ).tag(2)
 
                     memoryPage.tag(3)
