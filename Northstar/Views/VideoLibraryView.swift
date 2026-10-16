@@ -24,6 +24,8 @@ struct VideoLibraryView: View {
     @State private var playingMade: PlayItem?
     /// The folder (or "move up" row) a dragged item is hovering over, for the highlight.
     @State private var dropTarget: String?
+    /// How many videos the person has made (top level only): shows the Video history row.
+    @State private var madeCount = 0
 
     private let library = VideoLibraryService()
 
@@ -57,7 +59,7 @@ struct VideoLibraryView: View {
             } else if failed {
                 message(icon: "exclamationmark.triangle", title: "Couldn't load your videos",
                         detail: "Check your connection and try again.")
-            } else if subfolders.isEmpty && videosHere.isEmpty {
+            } else if subfolders.isEmpty && videosHere.isEmpty && !(folder == nil && madeCount > 0) {
                 message(icon: "film.stack", title: folder == nil ? "No saved videos yet" : "This folder is empty",
                         detail: folder == nil
                             ? "When Northstar shows a video, tap Save to keep it here. Make folders to organize them."
@@ -138,6 +140,9 @@ struct VideoLibraryView: View {
                         .accessibilityLabel("Move up to \(parentName)")
                         .accessibilityHint("Drop a video or folder here to move it out of this folder")
                 }
+                if folder == nil && madeCount > 0 {
+                    historyRow
+                }
                 if !subfolders.isEmpty {
                     header("Folders").padding(.top, 8)
                     ForEach(subfolders) { sub in
@@ -198,6 +203,30 @@ struct VideoLibraryView: View {
             if isOver { dropTarget = sub.id.uuidString } else if dropTarget == sub.id.uuidString { dropTarget = nil }
         }
         .accessibilityHint("Hold and drag videos or folders here to move them in")
+    }
+
+    /// Top of Videos: every video made in Northstar, saved or not.
+    private var historyRow: some View {
+        NavigationLink {
+            VideoHistoryView()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "clock.arrow.circlepath").foregroundStyle(NorthstarChatStyle.linkBlue)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Video history").foregroundStyle(NorthstarChatStyle.text)
+                    Text("Every video you've made").font(.caption).foregroundStyle(NorthstarChatStyle.label)
+                }
+                Spacer()
+                Text("\(madeCount)").font(.footnote).foregroundStyle(NorthstarChatStyle.label)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(NorthstarChatStyle.label)
+            }
+            .padding(.horizontal, 14)
+            .frame(minHeight: 56)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(card(highlight: false))
+        .accessibilityHint("Shows every video you made, including ones not saved yet")
     }
 
     private func card(highlight: Bool, faint: Bool = false) -> some View {
@@ -335,6 +364,7 @@ struct VideoLibraryView: View {
             async let v = library.videos()
             (folders, videos) = try await (f, v)
             failed = false
+            if folder == nil { madeCount = (try? await library.madeVideos().count) ?? madeCount }
         } catch {
             failed = true
         }
@@ -363,9 +393,10 @@ struct VideoLibraryView: View {
 }
 
 /// Pick where to move something: the top level or any folder (not into itself).
-private struct MovePicker: View {
+struct MovePicker: View {
     let folders: [VideoFolder]
     let excluding: Set<UUID>
+    var title = "Move to…"
     let onPick: (UUID?) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -381,7 +412,7 @@ private struct MovePicker: View {
                     }
                 }
             }
-            .navigationTitle("Move to…")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
