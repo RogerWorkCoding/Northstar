@@ -327,7 +327,7 @@ struct ConciergeView: View {
         task = Task {
             let settings = EngineSettings.current
             let remembered = settings.memoryOn ? await memory() : []
-            let answer = await engine.getReply(for: turns, memory: remembered, settings: settings)
+            let answer = await engine.getReply(for: turns, memory: remembered, settings: settings, source: "concierge")
             guard !Task.isCancelled else { return }
             working = false
             turns.append(MessageModel(role: .assistant, content: answer.text, insight: answer.insight))

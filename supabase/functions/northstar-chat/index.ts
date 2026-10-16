@@ -506,6 +506,15 @@ const REPLY_TOOL = {
         },
         required: ["action"],
       },
+      topic: {
+        type: "string",
+        enum: ["travel", "food", "health", "fitness", "work", "projects", "learning", "home", "money", "creative", "tech", "people", "pets", "fun", "shopping", "faith", "other"],
+        description: "Always: the one general topic of their message (for anonymous counts; never their words).",
+      },
+      unmet: {
+        type: "string",
+        description: "Only when they asked Northstar to DO something it can't do yet (e.g. 'book a table', 'send a text', 'order food', 'set an alarm', 'read my email'): a 2–5 word generic description of that ability, with no names, places or personal details. Empty otherwise.",
+      },
       note: {
         type: "string",
         description: "One line worth finding later, in their words; empty for small talk, quick questions or anything personal.",
@@ -891,6 +900,33 @@ async function overLimit(userId: string | null): Promise<"user" | "global" | nul
   }
 }
 
+// ---- Insights: anonymous counts so Northstar Labs can see what helps and what's missing ----
+// Never their words: only a general topic, which features were used, and (when Northstar
+// couldn't help) a short generic name for the missing ability. The person is a one-way code.
+const TOPICS = new Set(["travel", "food", "health", "fitness", "work", "projects", "learning", "home", "money", "creative", "tech", "people", "pets", "fun", "shopping", "faith", "other"]);
+async function whoCode(userId: string | null): Promise<string | null> {
+  if (!userId) return null;
+  const data = new TextEncoder().encode("northstar-insights:" + userId);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash)).slice(0, 12).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function logInsight(row: {
+  userId: string | null; features: string[]; topic: string; unmet: string; failed: boolean; ms: number;
+}): Promise<void> {
+  try {
+    const topic = TOPICS.has(row.topic) ? row.topic : "other";
+    const unmet = row.unmet.toLowerCase().replace(/[^a-z ]/g, "").replace(/\s+/g, " ").trim().slice(0, 40) || null;
+    const { error } = await serviceDb().from("insight_events").insert({
+      who: await whoCode(row.userId),
+      features: [...new Set(row.features)].slice(0, 8),
+      topic, unmet, failed: row.failed, ms: Math.min(row.ms, 600_000),
+    });
+    if (error) throw error;
+  } catch (e) {
+    console.error("insight skipped:", String((e as Error)?.message ?? e).slice(0, 160));
+  }
+}
+
 async function recordUsage(userId: string | null, micros: number): Promise<void> {
   try {
     const { error } = await serviceDb().rpc("add_usage", { p_user: userId, p_cost_micros: Math.min(micros, 10_000_000) });
@@ -1207,6 +1243,7 @@ function safeVisual(v: unknown): { kind: "svg"; title: string; svg: string } | n
 }
 
 Deno.serve(async (req) => {
+  const startedAt = Date.now();
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Use POST." }, 405);
 
@@ -1585,6 +1622,28 @@ Deno.serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     const rt = (globalThis as any).EdgeRuntime;
     if (rt?.waitUntil) rt.waitUntil(job); else await job;
+  }
+
+  // Anonymous counts for Northstar Labs' insights (after the reply is on its way).
+  {
+    const feats: string[] = [];
+    const src = str(body.source, 20);
+    if (src === "concierge") feats.push("concierge");
+    if (photo) feats.push("photo");
+    if (found.size > 0) feats.push("web");
+    if (Array.isArray(tool.places) && tool.places.length) feats.push("places");
+    if (tool.schedule || Array.isArray(body.calendar)) feats.push("calendar");
+    if (Array.isArray(tool.shots) && tool.shots.length) feats.push("video");
+    if (visual) feats.push("design");
+    if (Array.isArray(tool.code) && tool.code.length) feats.push("code");
+    for (const m of modulesFrom(body.settings)) feats.push("module:" + m);
+    if (feats.length === 0 || (feats.length && feats.every((f) => f.startsWith("module:")))) feats.unshift("chat");
+    later(logInsight({
+      userId: usageUser, features: feats,
+      topic: crisis || personal ? "other" : str(tool.topic, 20),
+      unmet: crisis ? "" : str(tool.unmet, 60),
+      failed: false, ms: Date.now() - startedAt,
+    }));
   }
 
   return json({

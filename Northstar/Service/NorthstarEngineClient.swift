@@ -55,6 +55,8 @@ struct NorthstarEngineClient {
         let image: Photo?
         /// Their next 7 days of calendar, only when they asked about their schedule.
         let calendar: [CalendarLine]?
+        /// Where the question came from ("concierge"), for anonymous feature counts.
+        let source: String?
     }
 
     /// One calendar item sent when they ask about their schedule ("Today 2:00 PM: Vet").
@@ -86,7 +88,8 @@ struct NorthstarEngineClient {
         corrections: [String] = [],
         settings: EngineSettings? = nil,
         chatId: UUID? = nil,
-        calendar: [CalendarLine]? = nil
+        calendar: [CalendarLine]? = nil,
+        source: String? = nil
     ) async -> EngineReply {
         let settingsPayload = settings.map {
             SettingsPayload(
@@ -129,7 +132,8 @@ struct NorthstarEngineClient {
                         image: messages.last(where: { $0.role == .user })?.image.map {
                             Photo(media_type: "image/jpeg", data: $0.base64EncodedString())
                         },
-                        calendar: calendar
+                        calendar: calendar,
+                        source: source
                     )
                 )
             )
