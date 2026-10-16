@@ -63,6 +63,7 @@ struct ContentView: View {
     @State private var viewModel = ChatViewModel()
     @State private var isCameraPresented = false
     @State private var isPhotoLibraryPresented = false
+    @State private var isConciergePresented = false
     /// The photo picked in Apple's photo picker (Photo Library opens it straight away).
     @State private var photoItem: PhotosPickerItem?
     @State private var selectedImage: UIImage?
@@ -143,6 +144,15 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $isCameraPresented) {
             CameraView(selectedImage: $selectedImage)
                 .ignoresSafeArea()
+        }
+        .sheet(isPresented: $isConciergePresented) {
+            ConciergeView { request in
+                isConciergePresented = false
+                promptText = request
+                sendMessage()
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
         // Photo Library opens Apple's own photo picker straight away: no extra screen in between.
         // It only sees the photo the person picks (no full library permission needed).
@@ -380,6 +390,43 @@ struct ContentView: View {
     }
 
     private var promptArea: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            composerBox
+            // Home only: the concierge bell sits beside the ask bar, where the thumb already is.
+            if viewModel.messages.isEmpty {
+                conciergeButton
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, 6)
+        .animation(.easeOut(duration: 0.2), value: viewModel.messages.isEmpty)
+        .padding(.bottom, isPromptFocused ? 8 : 46)
+        .animation(.easeOut(duration: 0.2), value: isPromptFocused)
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
+            composerHeight = newHeight
+        }
+    }
+
+    /// 🛎 Opens the Concierge: dinner, fitness, fun, rides, errands, gifts.
+    private var conciergeButton: some View {
+        Button {
+            isPromptFocused = false
+            isConciergePresented = true
+        } label: {
+            Image(systemName: "bell")
+                .font(.system(size: 21, weight: .regular))
+                .foregroundStyle(NorthstarChatStyle.onPrimary)
+                .frame(width: 58, height: 58)
+                .background(Circle().fill(NorthstarChatStyle.primaryFill))
+                .overlay(Circle().strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
+                .shadow(color: Color(red: 0.45, green: 0.55, blue: 1.0).opacity(0.25), radius: 14)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Concierge")
+        .accessibilityHint("Find dinner, classes, things to do, rides and more")
+    }
+
+    private var composerBox: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let selectedImage {
                 attachedPhoto(selectedImage)
@@ -401,13 +448,7 @@ struct ContentView: View {
                 .strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1)
         }
         .shadow(color: Color(red: 0.45, green: 0.55, blue: 1.0).opacity(0.18), radius: 16)
-        .padding(.horizontal, 6)
         .animation(.easeOut(duration: 0.2), value: selectedImage != nil)
-        .padding(.bottom, isPromptFocused ? 8 : 46)
-        .animation(.easeOut(duration: 0.2), value: isPromptFocused)
-        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
-            composerHeight = newHeight
-        }
     }
 
     /// The photo waiting to be sent: a small rounded thumbnail with an ✕ to remove it.
