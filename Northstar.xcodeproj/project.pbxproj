@@ -326,6 +326,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Northstar uses the camera only when you take a photo to ask about it.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "When you use the Concierge, Northstar uses your location to find places near you. Only your city is sent, never your exact spot.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Northstar listens only while the microphone button is on, so you can talk instead of type.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Northstar saves videos and images to your Photos only when you choose Save.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Northstar turns what you say into text so it can answer you.";
@@ -365,6 +366,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Northstar uses the camera only when you take a photo to ask about it.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "When you use the Concierge, Northstar uses your location to find places near you. Only your city is sent, never your exact spot.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Northstar listens only while the microphone button is on, so you can talk instead of type.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Northstar saves videos and images to your Photos only when you choose Save.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Northstar turns what you say into text so it can answer you.";

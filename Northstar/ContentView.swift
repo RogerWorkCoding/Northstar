@@ -148,11 +148,7 @@ struct ContentView: View {
                 .ignoresSafeArea()
         }
         .sheet(isPresented: $isConciergePresented) {
-            ConciergeView { request in
-                isConciergePresented = false
-                promptText = request
-                sendMessage()
-            }
+            ConciergeView(memory: { await memoryForEngine() })
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
