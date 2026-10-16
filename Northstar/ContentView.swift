@@ -153,6 +153,7 @@ struct ContentView: View {
                 if let data = try? await item.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {
                     selectedImage = image
+                    isPromptFocused = true
                 }
                 photoItem = nil
             }
@@ -331,7 +332,7 @@ struct ContentView: View {
                 LazyVStack(spacing: 20) {
                     ForEach(viewModel.messages) { message in
                         if message.role == .user {
-                            UserMessageView(text: message.content)
+                            UserMessageView(text: message.content, image: message.image)
                         } else {
                             NorthstarReplyView(
                                 text: message.content,
@@ -379,6 +380,71 @@ struct ContentView: View {
     }
 
     private var promptArea: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let selectedImage {
+                attachedPhoto(selectedImage)
+            }
+            promptRow
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 16)
+        .background {
+            // Frosted glass: the scene blurs through, with a soft white tint.
+            ZStack {
+                Rectangle().fill(.ultraThinMaterial)
+                NorthstarChatStyle.cardStrong
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1)
+        }
+        .shadow(color: Color(red: 0.45, green: 0.55, blue: 1.0).opacity(0.18), radius: 16)
+        .padding(.horizontal, 6)
+        .animation(.easeOut(duration: 0.2), value: selectedImage != nil)
+        .padding(.bottom, isPromptFocused ? 8 : 46)
+        .animation(.easeOut(duration: 0.2), value: isPromptFocused)
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
+            composerHeight = newHeight
+        }
+    }
+
+    /// The photo waiting to be sent: a small rounded thumbnail with an ✕ to remove it.
+    private func attachedPhoto(_ image: UIImage) -> some View {
+        HStack(spacing: 10) {
+            ZStack(alignment: .topTrailing) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 64, height: 64)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
+                    .accessibilityLabel("Attached photo")
+                Button {
+                    self.selectedImage = nil
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(NorthstarChatStyle.onPrimary)
+                        .frame(width: 22, height: 22)
+                        .background(Circle().fill(NorthstarChatStyle.primaryFill))
+                        .frame(width: 44, height: 44)   // easy to tap
+                        .contentShape(Rectangle())
+                }
+                .offset(x: 14, y: -14)
+                .accessibilityLabel("Remove photo")
+            }
+            Text("Ask about this photo")
+                .font(.footnote)
+                .foregroundStyle(NorthstarChatStyle.label)
+        }
+        .padding(.leading, 6)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private var promptRow: some View {
         HStack(spacing: 10) {
             Button {
                 isPromptFocused = false
@@ -416,27 +482,6 @@ struct ContentView: View {
                     .frame(width: 34, height: 34)
                     .background { Circle().fill(NorthstarChatStyle.sendFill) }
             }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 16)
-        .background {
-            // Frosted glass: the scene blurs through, with a soft white tint.
-            ZStack {
-                Rectangle().fill(.ultraThinMaterial)
-                NorthstarChatStyle.cardStrong
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1)
-        }
-        .shadow(color: Color(red: 0.45, green: 0.55, blue: 1.0).opacity(0.18), radius: 16)
-        .padding(.horizontal, 6)
-        .padding(.bottom, isPromptFocused ? 8 : 46)
-        .animation(.easeOut(duration: 0.2), value: isPromptFocused)
-        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
-            composerHeight = newHeight
         }
     }
 
@@ -641,6 +686,11 @@ struct ContentView: View {
     }
 
     private func sendMessage() {
+        // A photo waiting in the ask bar: send it with their words straight to the brain.
+        if let photo = selectedImage, !isThinking {
+            sendPhoto(photo)
+            return
+        }
         let question = cleanedPrompt
         guard !question.isEmpty, !isThinking else { return }
         
@@ -879,6 +929,39 @@ struct ContentView: View {
             currentWorkflow = nil
             webDesignStep = 0
         }
+    }
+
+    /// Sends the attached photo (made small first) with what they typed, or a simple question.
+    private func sendPhoto(_ photo: UIImage) {
+        if speechRecognizer.isRecording { speechRecognizer.stopRecording() }
+        isPromptFocused = false
+        let typed = cleanedPrompt
+        let question = typed.isEmpty ? "What do you see in this photo?" : typed
+        guard let data = Self.smallJPEG(photo) else {
+            appendAssistantMessage("I couldn't read that photo. Please try another one.")
+            selectedImage = nil
+            return
+        }
+        // A photo question is always a normal chat (not a document or website flow).
+        currentWorkflow = nil
+        viewModel.messages.append(MessageModel(role: .user, content: question, image: data))
+        promptText = ""
+        selectedImage = nil
+        requestGeminiResponse()
+    }
+
+    /// Longest side at most 1280 points and JPEG, so it uploads fast and costs little.
+    private static func smallJPEG(_ image: UIImage) -> Data? {
+        let maxSide: CGFloat = 1280
+        let size = image.size
+        let scale = min(1, maxSide / max(size.width, size.height, 1))
+        let target = CGSize(width: (size.width * scale).rounded(), height: (size.height * scale).rounded())
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let resized = UIGraphicsImageRenderer(size: target, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: target))
+        }
+        return resized.jpegData(compressionQuality: 0.75)
     }
 
     private func appendUserMessage(_ content: String) {
