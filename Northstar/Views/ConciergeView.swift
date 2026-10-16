@@ -24,6 +24,7 @@ struct ConciergeView: View {
     @State private var speech = SpeechRecognizer()
     @State private var micMessage: String?
     @State private var task: Task<Void, Never>?
+    @State private var silence: Task<Void, Never>?
     @FocusState private var typing: Bool
 
     private let engine = NorthstarEngineClient()
@@ -83,7 +84,20 @@ struct ConciergeView: View {
                 if service != nil { askBar }
             }
         }
-        .onChange(of: speech.transcript) { if speech.isRecording { typed = speech.transcript } }
+        .onChange(of: speech.transcript) {
+            guard speech.isRecording else { return }
+            typed = speech.transcript
+            // Hands-free: when they stop talking for a moment, send it.
+            silence?.cancel()
+            let heard = speech.transcript
+            silence = Task {
+                try? await Task.sleep(for: .seconds(1.8))
+                guard !Task.isCancelled, speech.isRecording, speech.transcript == heard,
+                      !heard.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                speech.stopRecording()
+                ask(heard)
+            }
+        }
         .onDisappear {
             task?.cancel()
             if speech.isRecording { speech.stopRecording() }
@@ -301,6 +315,9 @@ struct ConciergeView: View {
 
     private func ask(_ text: String) {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Always turn the mic off when something is sent (by voice, keyboard or a quick answer).
+        silence?.cancel()
+        if speech.isRecording { speech.stopRecording() }
         guard !clean.isEmpty, !working else { return }
         typed = ""
         typing = false
@@ -323,8 +340,10 @@ struct ConciergeView: View {
     private func toggleMic() {
         NorthstarVoice.shared.stop()
         if speech.isRecording {
+            silence?.cancel()
+            let words = typed
             speech.stopRecording()
-            ask(typed)
+            ask(words)
             return
         }
         Task {
