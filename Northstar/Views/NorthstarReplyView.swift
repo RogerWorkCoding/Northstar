@@ -124,6 +124,22 @@ struct NorthstarReplyView: View {
 
     private enum CardState { case saving, saved, dismissed, failed }
 
+    /// 🔊 Hear this reply (or stop it).
+    private var speakButton: some View {
+        let voice = NorthstarVoice.shared
+        let speaking = voice.isSpeaking(text)
+        return Button {
+            if speaking { voice.stop() } else { voice.speak(text) }
+        } label: {
+            Label(speaking ? "Stop" : "Listen", systemImage: speaking ? "stop.circle" : "speaker.wave.2")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(NorthstarChatStyle.label)
+                .frame(minHeight: 32)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(speaking ? "Stop reading" : "Read this reply aloud")
+    }
+
     private var guiding: NorthstarInsight? {
         guard let insight, insight.isGuiding else { return nil }
         return insight
@@ -147,6 +163,8 @@ struct NorthstarReplyView: View {
                 .northstarReadingStyle()
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            speakButton
 
             if let offer = insight?.subjectOffer {
                 SubjectOfferCard(offer: offer, state: subjectState, onKeep: onKeepSubject, onDismiss: onDismissSubject)

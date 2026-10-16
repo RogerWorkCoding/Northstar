@@ -638,6 +638,7 @@ struct ContentView: View {
     }
 
     private func toggleMicrophone() {
+        NorthstarVoice.shared.stop()   // never talk over them
         if speechRecognizer.isRecording {
             speechRecognizer.stopRecording()
             return
@@ -686,6 +687,7 @@ struct ContentView: View {
     }
 
     private func sendMessage() {
+        NorthstarVoice.shared.stop()
         // A photo waiting in the ask bar: send it with their words straight to the brain.
         if let photo = selectedImage, !isThinking {
             sendPhoto(photo)
@@ -1115,6 +1117,10 @@ struct ContentView: View {
                 )
                 isThinking = false
                 responseTask = nil
+                // Settings → Voice → Read replies aloud. Not in a crisis reply (the help card is read, not spoken).
+                if NorthstarVoice.autoSpeak, !answer.failed, answer.insight?.crisis != true {
+                    NorthstarVoice.shared.speak(answer.text)
+                }
             }
             // Keep this exchange in the saved chat (never blocks the reply).
             if let chatId, !lastUser.isEmpty, !answer.failed {
@@ -1202,6 +1208,7 @@ struct ContentView: View {
     }
 
     private func startNewChat() {
+        NorthstarVoice.shared.stop()
         responseTask?.cancel()
         responseTask = nil
         currentWorkflow = nil

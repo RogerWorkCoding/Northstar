@@ -19,6 +19,9 @@ enum SettingsKeys {
     static let easierFont    = "ns.reading.easierFont"
     static let appearance    = "ns.appearance"
     static let welcomed      = "ns.welcomed"
+    static let speakReplies  = "ns.voice.speakReplies"
+    static let voice         = "ns.voice.choice"
+    static let voiceSpeed    = "ns.voice.speed"
 }
 
 /// Day (cream page, navy text) or Night (navy). Automatic follows the phone's setting.
@@ -73,6 +76,9 @@ struct NorthstarSettingsView: View {
     @AppStorage(SettingsKeys.nickname) private var nickname = ""
     @AppStorage(SettingsKeys.easierFont) private var easierFont = false
     @AppStorage(SettingsKeys.appearance) private var appearance = Appearance.automatic
+    @AppStorage(SettingsKeys.speakReplies) private var speakReplies = false
+    @AppStorage(SettingsKeys.voice) private var voiceChoice = NorthstarVoiceChoice.calmUS
+    @AppStorage(SettingsKeys.voiceSpeed) private var voiceSpeed = NorthstarVoiceSpeed.normal
 
     @State private var confirmDeleteAll = false
     @State private var moduleOn: Set<AppModule> = Set(AppModule.enabled)
@@ -176,6 +182,52 @@ struct NorthstarSettingsView: View {
                 Text("Appearance")
             } footer: {
                 Text("Day is a cream page with dark text, easiest for long reading and in sunlight. Night is the navy look. Automatic follows your iPhone. The home screen stays night sky.")
+            }
+
+            // 1c. Voice: Northstar reads its replies aloud.
+            Section {
+                Toggle("Read replies aloud", isOn: $speakReplies)
+                    .onChange(of: speakReplies) { if !speakReplies { NorthstarVoice.shared.stop() } }
+
+                ForEach(NorthstarVoiceChoice.allCases) { choice in
+                    HStack {
+                        Button {
+                            voiceChoice = choice
+                            NorthstarVoice.shared.sample(choice)
+                        } label: {
+                            HStack {
+                                Image(systemName: voiceChoice == choice ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(voiceChoice == choice ? Color.accentColor : .secondary)
+                                Text(choice.label)
+                                if !choice.qualityNote.isEmpty {
+                                    Text(choice.qualityNote).font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            NorthstarVoice.shared.sample(choice)
+                        } label: {
+                            Image(systemName: "play.circle")
+                                .font(.title3)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Hear \(choice.label)")
+                    }
+                }
+
+                Picker("Speed", selection: $voiceSpeed) {
+                    ForEach(NorthstarVoiceSpeed.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: voiceSpeed) { NorthstarVoice.shared.sample(voiceChoice) }
+            } header: {
+                Text("Voice")
+            } footer: {
+                Text("When on, Northstar reads each reply aloud. Tap the speaker on any reply to hear it again, or to stop. For the most natural sound, download a Premium voice in iPhone Settings → Accessibility → Spoken Content → Voices → English.")
             }
 
             // 2. How Northstar talks to you
