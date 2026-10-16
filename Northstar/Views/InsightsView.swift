@@ -73,9 +73,9 @@ struct InsightsView: View {
                         .font(.footnote)
                         .foregroundStyle(NorthstarChatStyle.label)
 
-                    bars("Can't do that yet", report.unmet, empty: "Nothing yet. When people ask for something Northstar can't do, it shows here.")
+                    bars("What they ask about", report.topics.map { .init(name: $0.name.capitalized, count: $0.count) }, empty: "No questions yet.")
+                    bars("Can't do that yet", report.unmet.map { .init(name: $0.name.capitalized, count: $0.count) }, empty: "Nothing yet. When people ask for something Northstar can't do, it shows here.")
                     bars("What they use", report.features.map { .init(name: friendly($0.name), count: $0.count) }, empty: "No questions yet.")
-                    bars("Topics", report.topics.map { .init(name: $0.name.capitalized, count: $0.count) }, empty: "No questions yet.")
 
                     if report.failed > 0 {
                         Label("\(report.failed) replies failed", systemImage: "exclamationmark.triangle")

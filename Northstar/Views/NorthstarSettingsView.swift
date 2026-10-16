@@ -87,6 +87,8 @@ struct NorthstarSettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var exportText = "[]"
     @State private var statusMessage: String?
+    /// Northstar Labs only: filled in when this account is the owner.
+    @State private var insights: InsightsReport?
 
     private let memoryService = MemoryService()
     private let notesService = NotesService()
@@ -95,6 +97,29 @@ struct NorthstarSettingsView: View {
 
     var body: some View {
         Form {
+            // Owner only: the Insights report (what people ask, what Northstar can't do yet).
+            if let insights {
+                Section {
+                    NavigationLink {
+                        InsightsView(report: insights)
+                    } label: {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Insights")
+                                Text("\(insights.people) people · \(insights.questions) questions this week")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "chart.bar.fill").foregroundStyle(NorthstarChatStyle.linkBlue)
+                        }
+                    }
+                } header: {
+                    Text("Northstar Labs")
+                } footer: {
+                    Text("Only you see this. Anonymous counts, never anyone's words.")
+                }
+            }
+
             // 0. Account: Sign in with Apple keeps memory safe across phones.
             Section {
                 if account.isSignedInWithApple {
@@ -244,6 +269,7 @@ struct NorthstarSettingsView: View {
         .navigationTitle("Settings")
         .task { await loadExport() }
         .task { await account.refresh() }
+        .task { insights = await InsightsService.load(days: 7) }
         .confirmationDialog("Sign out?", isPresented: $confirmSignOut, titleVisibility: .visible) {
             Button("Sign out", role: .destructive) {
                 Task {

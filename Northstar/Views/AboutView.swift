@@ -5,8 +5,6 @@ import SwiftUI
 
 struct AboutView: View {
     @AppStorage(SettingsKeys.welcomed) private var welcomed = true
-    /// Northstar Labs only: filled in when this account is an admin.
-    @State private var insights: InsightsReport?
     /// Set these when they exist; the rows only show once they're filled in.
     private let privacyURL: URL? = URL(string: "https://mynorthstarlabs.com/privacy.html")
     private let contactEmail: String? = "rogwar51@gmail.com"   // switch to hello@mynorthstarlabs.com when it is set up
@@ -117,17 +115,6 @@ struct AboutView: View {
                         }
                     }
 
-                    if let insights {
-                        NavigationLink {
-                            InsightsView(report: insights)
-                        } label: {
-                            Label("Insights (Northstar Labs)", systemImage: "chart.bar")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(NorthstarChatStyle.linkBlue)
-                                .frame(maxWidth: .infinity, minHeight: 44)
-                        }
-                    }
-
                     Button {
                         welcomed = false   // the welcome opens over the app
                     } label: {
@@ -153,7 +140,6 @@ struct AboutView: View {
         }
         .navigationTitle("About")
         .navigationBarTitleDisplayMode(.inline)
-        .task { insights = await InsightsService.load(days: 7) }
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
