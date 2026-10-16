@@ -326,6 +326,8 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Northstar uses the camera only when you take a photo to ask about it.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Northstar adds appointments you ask for, and reads your next 7 days only when you ask about your schedule.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Northstar adds reminders you ask for. It never adds anything without you tapping Add.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "When you use the Concierge, Northstar uses your location to find places near you. Only your city is sent, never your exact spot.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Northstar listens only while the microphone button is on, so you can talk instead of type.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Northstar saves videos and images to your Photos only when you choose Save.";
@@ -366,6 +368,8 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Northstar uses the camera only when you take a photo to ask about it.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Northstar adds appointments you ask for, and reads your next 7 days only when you ask about your schedule.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "Northstar adds reminders you ask for. It never adds anything without you tapping Add.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "When you use the Concierge, Northstar uses your location to find places near you. Only your city is sent, never your exact spot.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Northstar listens only while the microphone button is on, so you can talk instead of type.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Northstar saves videos and images to your Photos only when you choose Save.";

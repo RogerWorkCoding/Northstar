@@ -1224,12 +1224,17 @@ struct ContentView: View {
             }
             let chatId = settings.memoryOn ? currentChatId : nil
 
+            // "What's on my calendar?": send the next 7 days (asks for Calendar access the first time).
+            let calendar = NorthstarCalendar.asksAboutSchedule(lastUser)
+                ? await NorthstarCalendar.shared.upcoming() : nil
+
             let answer = await engine.getReply(
                 for: viewModel.messages,
                 memory: memory,
                 corrections: corrections,
                 settings: settings,
-                chatId: chatId
+                chatId: chatId,
+                calendar: calendar
             )
             guard !Task.isCancelled else {
                 // Stopped before any reply: don't leave an empty chat in History.

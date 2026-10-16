@@ -53,6 +53,15 @@ struct NorthstarEngineClient {
         let chat_id: String?
         /// A photo attached to the latest message, if any (only the newest photo is sent).
         let image: Photo?
+        /// Their next 7 days of calendar, only when they asked about their schedule.
+        let calendar: [CalendarLine]?
+    }
+
+    /// One calendar item sent when they ask about their schedule ("Today 2:00 PM: Vet").
+    nonisolated struct CalendarLine: Encodable, Sendable {
+        let title: String
+        let when: String
+        let location: String?
     }
 
     nonisolated private struct Reply: Decodable, Sendable {
@@ -76,7 +85,8 @@ struct NorthstarEngineClient {
         memory: [MemoryItem] = [],
         corrections: [String] = [],
         settings: EngineSettings? = nil,
-        chatId: UUID? = nil
+        chatId: UUID? = nil,
+        calendar: [CalendarLine]? = nil
     ) async -> EngineReply {
         let settingsPayload = settings.map {
             SettingsPayload(
@@ -118,7 +128,8 @@ struct NorthstarEngineClient {
                         chat_id: chatId?.uuidString,
                         image: messages.last(where: { $0.role == .user })?.image.map {
                             Photo(media_type: "image/jpeg", data: $0.base64EncodedString())
-                        }
+                        },
+                        calendar: calendar
                     )
                 )
             )

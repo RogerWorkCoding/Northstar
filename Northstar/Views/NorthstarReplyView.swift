@@ -187,6 +187,10 @@ struct NorthstarReplyView: View {
                 copyButton
             }
 
+            if let schedule = insight?.schedule {
+                ScheduleCard(schedule: schedule)
+            }
+
             if let offer = insight?.subjectOffer {
                 SubjectOfferCard(offer: offer, state: subjectState, onKeep: onKeepSubject, onDismiss: onDismissSubject)
             }
