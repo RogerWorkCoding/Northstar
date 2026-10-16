@@ -112,6 +112,15 @@ struct ContentView: View {
                     promptArea
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Home only: the concierge bell, quiet in the top-right corner (like Gemini's top buttons).
+                .overlay(alignment: .topTrailing) {
+                    if viewModel.messages.isEmpty && !isStarMenuPresented {
+                        conciergeButton
+                            .padding(.trailing, 16)
+                            .padding(.top, 6)
+                            .transition(.opacity)
+                    }
+                }
                 // Home (star and mountains) is always Night; chats follow Day or Night.
                 .environment(\.colorScheme, viewModel.messages.isEmpty ? .dark : colorScheme)
 
@@ -390,16 +399,8 @@ struct ContentView: View {
     }
 
     private var promptArea: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            composerBox
-            // Home only: the concierge bell sits beside the ask bar, where the thumb already is.
-            if viewModel.messages.isEmpty {
-                conciergeButton
-                    .transition(.scale.combined(with: .opacity))
-            }
-        }
+        composerBox
         .padding(.horizontal, 6)
-        .animation(.easeOut(duration: 0.2), value: viewModel.messages.isEmpty)
         .padding(.bottom, isPromptFocused ? 8 : 46)
         .animation(.easeOut(duration: 0.2), value: isPromptFocused)
         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
@@ -407,19 +408,18 @@ struct ContentView: View {
         }
     }
 
-    /// 🛎 Opens the Concierge: dinner, fitness, fun, rides, errands, gifts.
+    /// 🛎 Opens the Concierge: dinner, fitness, fun, rides, errands, gifts. Home only, top right.
     private var conciergeButton: some View {
         Button {
             isPromptFocused = false
             isConciergePresented = true
         } label: {
             Image(systemName: "bell")
-                .font(.system(size: 21, weight: .regular))
-                .foregroundStyle(NorthstarChatStyle.onPrimary)
-                .frame(width: 58, height: 58)
-                .background(Circle().fill(NorthstarChatStyle.primaryFill))
-                .overlay(Circle().strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
-                .shadow(color: Color(red: 0.45, green: 0.55, blue: 1.0).opacity(0.25), radius: 14)
+                .font(.system(size: 17, weight: .regular))
+                .foregroundStyle(.white.opacity(0.92))
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(.ultraThinMaterial))
+                .overlay(Circle().strokeBorder(.white.opacity(0.22), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Concierge")
