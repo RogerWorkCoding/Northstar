@@ -38,6 +38,12 @@ struct NorthstarEngineClient {
         let timezone: String
     }
 
+    /// One photo sent with the latest message (base64 JPEG).
+    nonisolated private struct Photo: Encodable, Sendable {
+        let media_type: String
+        let data: String
+    }
+
     nonisolated private struct Request: Encodable, Sendable {
         let messages: [Turn]
         let memory: [MemoryItem]
@@ -45,6 +51,8 @@ struct NorthstarEngineClient {
         let settings: SettingsPayload?
         /// The saved chat this message belongs to (so notes can open their chat).
         let chat_id: String?
+        /// A photo attached to the latest message, if any (only the newest photo is sent).
+        let image: Photo?
     }
 
     nonisolated private struct Reply: Decodable, Sendable {
@@ -107,7 +115,10 @@ struct NorthstarEngineClient {
                         memory: Array(memory.prefix(20)),
                         corrections: Array(corrections.prefix(10)),
                         settings: settingsPayload,
-                        chat_id: chatId?.uuidString
+                        chat_id: chatId?.uuidString,
+                        image: messages.last(where: { $0.role == .user })?.image.map {
+                            Photo(media_type: "image/jpeg", data: $0.base64EncodedString())
+                        }
                     )
                 )
             )

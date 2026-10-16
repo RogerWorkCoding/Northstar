@@ -49,10 +49,30 @@ enum NorthstarChatStyle {
 /// Your message: one soft blue bubble on the right.
 struct UserMessageView: View {
     let text: String
+    /// A photo they attached, shown above their words.
+    var image: Data? = nil
 
     var body: some View {
         HStack {
             Spacer(minLength: 60)
+            VStack(alignment: .trailing, spacing: 6) {
+                if let image, let ui = UIImage(data: image) {
+                    Image(uiImage: ui)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 200, height: 200)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
+                        .accessibilityLabel("Your photo")
+                }
+                bubble
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var bubble: some View {
             Text(text)
                 .font(.system(size: 17))
                 .lineSpacing(3)
@@ -67,8 +87,6 @@ struct UserMessageView: View {
                     )
                     .fill(NorthstarChatStyle.userBubble)
                 )
-        }
-        .padding(.horizontal, 20)
     }
 }
 

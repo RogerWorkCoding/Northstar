@@ -574,6 +574,18 @@ const NS_CASES = [
     check: (r) => [["still Northstar", has(r.reply, /northstar/i)], ["no videos", (r.videos ?? []).length === 0]],
   },
   {
+    id: "photo-sees-image", group: "photos",
+    image: { media_type: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAABt+uBvAAAApElEQVR4nO3QMQ0AMAzAsCEpf1ADMwZ7m8NSAEQ+d0afzvpBPECAAAECFA4QIECAAIUDBAgQIEDhAAECBAhQOECAAAECFA4QIECAAIUDBAgQIEDhAAECBAhQOECAAAECFA4QIECAAIUDBAgQIEDhAAECBAhQOECAAAECFA4QIECAAIUDBAgQIEDhAAECBAhQOECAAAECFA4QIECAAIUDBAgQoM0eMcZiSiv2Au4AAAAASUVORK5CYII=" },
+    say: "What color is this?",
+    check: (r) => [["sees the photo (red)", has(r.reply, /red/i)]],
+  },
+  {
+    id: "photo-bad-ignored", group: "photos",
+    image: { media_type: "text/html", data: "PHNjcmlwdD4=" },
+    say: "Hi there",
+    check: (r) => [["still answers", has(r.reply, /\w/)]],
+  },
+  {
     id: "places-not-for-facts", group: "places",
     say: "What is the capital of France?",
     check: (r) => [["no map for a fact", (r.places ?? []).length === 0]],
@@ -727,6 +739,7 @@ async function nsCall(c) {
       memory: c.memory ?? [],
       corrections: c.corrections ?? [],
       settings: { ...SETTINGS, ...(c.settings ?? {}) },
+      ...(c.image ? { image: c.image } : {}),
     }),
   });
   const r = await res.json().catch(() => ({ error: "not JSON" }));
