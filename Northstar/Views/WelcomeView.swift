@@ -12,7 +12,7 @@ struct WelcomeView: View {
     private let lastPage = 3
     @State private var account = AppleAccount.shared
     @State private var message: String?
-    // First page: the two sentences fade in one after the other.
+    // First page: sentence one fades in, then fades away, then sentence two fades in and stays.
     @State private var firstShown = false
     @State private var secondShown = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -97,23 +97,21 @@ struct WelcomeView: View {
         .environment(\.colorScheme, .dark)
     }
 
-    /// "Find your direction": sentence one fades in, then sentence two.
+    /// "Find your direction": sentence one fades in and out, then sentence two fades in, in the same spot.
     private var firstPage: some View {
         VStack(spacing: 18) {
             Text("Find your direction")
                 .font(.system(size: 32, weight: .light))
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
-            VStack(spacing: 8) {
+            ZStack(alignment: .top) {
                 VStack(spacing: 8) {
                     Text("Northstar helps you decide what matters,")
                     Text("then take the next small step.")
                 }
                 .opacity(firstShown ? 1 : 0)
-                .offset(y: firstShown || reduceMotion ? 0 : 6)
                 Text("Your direction is always yours.")
                     .opacity(secondShown ? 1 : 0)
-                    .offset(y: secondShown || reduceMotion ? 0 : 6)
             }
             .font(.system(size: 19))
             .multilineTextAlignment(.center)
@@ -127,7 +125,9 @@ struct WelcomeView: View {
         .task {
             try? await Task.sleep(for: .milliseconds(400))
             withAnimation(.easeOut(duration: 1.0)) { firstShown = true }
-            try? await Task.sleep(for: .milliseconds(1600))
+            try? await Task.sleep(for: .milliseconds(3200))   // fade in + time to read
+            withAnimation(.easeIn(duration: 0.8)) { firstShown = false }
+            try? await Task.sleep(for: .milliseconds(900))
             withAnimation(.easeOut(duration: 1.0)) { secondShown = true }
         }
     }
