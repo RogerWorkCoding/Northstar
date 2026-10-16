@@ -257,7 +257,7 @@ struct ConciergeView: View {
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(speech.isRecording ? .white : NorthstarChatStyle.onPrimary)
                     .frame(width: 44, height: 44)
-                    .background(Circle().fill(speech.isRecording ? Color.red : NorthstarChatStyle.primaryFill))
+                    .background(Circle().fill(speech.isRecording ? NorthstarChatStyle.listening : NorthstarChatStyle.primaryFill))
             }
             .buttonStyle(.plain)
             .accessibilityLabel(speech.isRecording ? "Stop and send" : "Speak")

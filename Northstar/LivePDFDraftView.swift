@@ -50,7 +50,7 @@ struct LivePDFDraftView: View {
             Circle()
                 .fill(
                     isRecording
-                    ? Color.red
+                    ? NorthstarChatStyle.listening
                     : Color.secondary
                 )
                 .frame(width: 8, height: 8)
@@ -139,7 +139,7 @@ struct LivePDFDraftView: View {
                 .padding(.vertical, 14)
                 .background(
                     isRecording
-                    ? Color.red
+                    ? NorthstarChatStyle.listening
                     : Color.white.opacity(0.16)
                 )
                 .clipShape(

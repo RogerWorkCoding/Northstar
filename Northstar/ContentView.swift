@@ -542,7 +542,7 @@ struct ContentView: View {
             Button { toggleMicrophone() } label: {
                 Image(systemName: speechRecognizer.isRecording ? "stop.circle.fill" : "mic.fill")
                     .font(.system(size: 18))
-                    .foregroundStyle(speechRecognizer.isRecording ? .red : NorthstarChatStyle.text)
+                    .foregroundStyle(speechRecognizer.isRecording ? NorthstarChatStyle.listening : NorthstarChatStyle.text)
                     .frame(width: 34, height: 34)
             }
 
