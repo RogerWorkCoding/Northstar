@@ -366,6 +366,12 @@ struct ContentView: View {
                         }
                     }
 
+                    if isThinking {
+                        NorthstarThinkingView()
+                            .id("THINKING")
+                            .transition(.opacity)
+                    }
+
                     // Sized to the composer's real measured footprint (+16pt
                     // breathing room) rather than a fixed 1pt marker — this is
                     // what actually guarantees the last message clears the
@@ -384,6 +390,13 @@ struct ContentView: View {
             .onTapGesture { isPromptFocused = false }
             .onChange(of: viewModel.messages.count) {
                 scrollToLatestMessage(proxy)
+            }
+            .onChange(of: isThinking) {
+                // Keep the thinking star in view, just above the ask bar.
+                guard isThinking else { return }
+                DispatchQueue.main.async {
+                    withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("CHAT_BOTTOM", anchor: .bottom) }
+                }
             }
         }
     }
