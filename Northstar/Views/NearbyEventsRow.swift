@@ -62,7 +62,8 @@ enum NearbyEvents {
                                                              lng: (center.longitude * 100).rounded() / 100))
             )
             let events = reply.events ?? []
-            cached = (city, Date(), events)
+            // Remember only a real list, so an empty answer can be tried again soon.
+            if !events.isEmpty { cached = (city, Date(), events) }
             return events
         } catch {
             return []
@@ -137,6 +138,90 @@ struct NearbyEventsRow: View {
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(NorthstarChatStyle.card))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Shows tickets, directions and add to calendar")
+    }
+}
+
+/// The Events tile: every event nearby, as big image cards, soonest first.
+struct NearbyEventsList: View {
+    @State private var events: [NearbyEvent] = []
+    @State private var loading = true
+    @State private var open: NearbyEvent?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Happening near you")
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(NorthstarChatStyle.text)
+                .accessibilityAddTraits(.isHeader)
+
+            if loading {
+                HStack(spacing: 10) {
+                    ProgressView().tint(NorthstarChatStyle.text)
+                    Text("Finding events near you…").foregroundStyle(NorthstarChatStyle.soft)
+                }
+                .padding(.vertical, 8)
+            } else if events.isEmpty {
+                Text("I couldn't find events near you right now. If Location is off for Northstar, turn it on in iPhone Settings, then try again.")
+                    .font(.body)
+                    .foregroundStyle(NorthstarChatStyle.soft)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Try again") { Task { await load() } }
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(NorthstarChatStyle.linkBlue)
+                    .frame(minHeight: 44)
+            } else {
+                ForEach(events) { e in
+                    Button { open = e } label: { card(e) }
+                        .buttonStyle(.plain)
+                }
+                Text("Events from " + Set(events.compactMap(\.source)).sorted().joined(separator: " and "))
+                    .font(.caption2)
+                    .foregroundStyle(NorthstarChatStyle.label)
+            }
+        }
+        .task { await load() }
+        .sheet(item: $open) { e in
+            NearbyEventSheet(event: e)
+                .presentationDetents([.medium, .large])
+        }
+    }
+
+    private func load() async {
+        loading = true
+        events = await NearbyEvents.load()
+        loading = false
+    }
+
+    private func card(_ e: NearbyEvent) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            AsyncImage(url: e.image) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() } else { NorthstarChatStyle.card }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 170)
+            .clipped()
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(e.name)
+                    .font(.headline)
+                    .foregroundStyle(NorthstarChatStyle.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text([e.whenText, [e.venue, e.city].filter { !$0.isEmpty }.joined(separator: ", "),
+                      e.miles.map { String(format: $0 < 10 ? "%.1f mi" : "%.0f mi", $0) }]
+                    .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.footnote)
+                    .foregroundStyle(NorthstarChatStyle.soft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(NorthstarChatStyle.card))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
         .accessibilityElement(children: .combine)
         .accessibilityHint("Shows tickets, directions and add to calendar")
     }

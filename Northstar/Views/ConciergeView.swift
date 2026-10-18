@@ -43,7 +43,7 @@ struct ConciergeView: View {
         let quick: [String]
         var kind: Kind = .places
 
-        enum Kind { case places, dinner, shopping, home, lookUp }
+        enum Kind { case places, dinner, shopping, home, lookUp, events }
     }
 
     private let services: [Service] = [
@@ -56,6 +56,8 @@ struct ConciergeView: View {
         .init(id: "fun", title: "Fun", icon: "sparkles",
               request: "Find 3 fun things to do near me this week.",
               quick: ["Outdoors", "With kids", "Date night", "Free", "Saturday"]),
+        .init(id: "events", title: "Events", icon: "ticket",
+              request: "", quick: [], kind: .events),
         .init(id: "fitness", title: "Fitness", icon: "figure.yoga",
               request: "Find 3 fitness classes or gyms near me.",
               quick: ["Yoga", "Pilates", "Beginners", "Mornings", "Evenings"]),
@@ -94,7 +96,7 @@ struct ConciergeView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                if service != nil { askBar }
+                if service != nil, service?.kind != .events { askBar }
             }
         }
         .onChange(of: speech.transcript) {
@@ -169,29 +171,12 @@ struct ConciergeView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            LazyVGrid(columns: columns, spacing: 10) {
-                ForEach(services) { s in
-                    Button { start(s) } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: s.icon)
-                                .font(.system(size: 20))
-                                .foregroundStyle(NorthstarChatStyle.linkBlue)
-                                .frame(width: 28)
-                            Text(s.title)
-                                .font(.body.weight(.medium))
-                                .foregroundStyle(NorthstarChatStyle.text)
-                                .multilineTextAlignment(.leading)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.horizontal, 14)
-                        .frame(maxWidth: .infinity, minHeight: 64)
-                        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(NorthstarChatStyle.card))
-                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+            // Pairs in the grid; Look It Up gets the full width underneath (9 tiles would leave one alone).
+            VStack(spacing: 10) {
+                LazyVGrid(columns: columns, spacing: 10) {
+                    ForEach(services.filter { $0.kind != .lookUp }) { s in tile(s) }
                 }
+                ForEach(services.filter { $0.kind == .lookUp }) { s in tile(s) }
             }
 
             NearbyEventsRow()
@@ -204,11 +189,36 @@ struct ConciergeView: View {
         }
     }
 
+    private func tile(_ s: Service) -> some View {
+        Button { start(s) } label: {
+            HStack(spacing: 10) {
+                Image(systemName: s.icon)
+                    .font(.system(size: 20))
+                    .foregroundStyle(NorthstarChatStyle.linkBlue)
+                    .frame(width: 28)
+                Text(s.title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(NorthstarChatStyle.text)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, minHeight: 64)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(NorthstarChatStyle.card))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: Results
 
     private var results: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if working {
+            if service?.kind == .events {
+                NearbyEventsList()
+            } else if working {
                 HStack(spacing: 10) {
                     ProgressView().tint(NorthstarChatStyle.text)
                     Text("Looking for good options…")
@@ -243,8 +253,13 @@ struct ConciergeView: View {
                 SourcesRow(sources: sources)
             }
 
-            if let service, !working {
+            if let service, service.kind != .events, !working {
                 quickAnswers(service)
+            }
+
+            // Fun also shows what's happening nearby.
+            if service?.id == "fun", !working {
+                NearbyEventsRow()
             }
 
             Label("Northstar never books or pays without you.", systemImage: "hand.raised")
@@ -338,6 +353,7 @@ struct ConciergeView: View {
         turns = []
         clearResults()
         booking = .init()
+        if s.kind == .events { return }  // a list of real events, no chat needed
         if s.kind == .lookUp {
             line = "What should I look up? Say it or type it."
             typing = true
