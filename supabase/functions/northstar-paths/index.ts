@@ -1,7 +1,10 @@
 // Northstar — Path Forward (the last onboarding screen, and an empty chat later)
 // The person writes a few words ("I'm overwhelmed with work"); this suggests 3 to 5 ways forward.
 // They are outcomes, never apps, connectors or menu items. Fast model, one tool call, about a second.
-//   { text } → { heard, tone, paths: [{ label, icon, opener }] }   or   { crisis: true }
+//   { text } → { heard, tone, paths: [{ label, icon, opener, kind, connector? }] }   or   { crisis: true }
+// A path is a capability (Northstar helps right now) or, rarely, a connector that would make the answer
+// better. Connectors look the same, appear at most once, never alone, and only from NS_CONNECTORS:
+// the ones that really work in the app (comma list of ids, e.g. "calendar,microsoft365"). Empty = none.
 // Crisis words never get bubbles: the app opens chat, where Northstar's crisis help answers.
 // Their words are used for this answer only. Nothing is stored here.
 
@@ -14,6 +17,21 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
 const MODEL = Deno.env.get("NORTHSTAR_PATHS_MODEL") ?? "claude-haiku-5-5";
+
+// Every connector Northstar may one day offer: id → how it's shown and what it helps with.
+const CONNECTOR_INFO: Record<string, { name: string; icon: string; helps: string }> = {
+  calendar: { name: "Calendar", icon: "calendar", helps: "meetings, schedules, planning a day or week" },
+  contacts: { name: "Contacts", icon: "person.2", helps: "texting or calling a person by name" },
+  microsoft365: { name: "Microsoft 365", icon: "envelope", helps: "work email, meetings, Word and Excel documents" },
+  google: { name: "Google Workspace", icon: "envelope", helps: "Gmail, Google Calendar, Docs and Drive" },
+  notion: { name: "Notion", icon: "book", helps: "notes, wikis and project pages" },
+  github: { name: "GitHub", icon: "folder", helps: "software projects and code" },
+  figma: { name: "Figma", icon: "paintbrush", helps: "design files" },
+  dropbox: { name: "Dropbox", icon: "folder", helps: "stored files" },
+  spotify: { name: "Spotify", icon: "sparkles", helps: "music for the moment" },
+};
+// Only connectors that really work in the app are ever offered.
+const LIVE_CONNECTORS = (Deno.env.get("NS_CONNECTORS") ?? "").split(",").map((c) => c.trim()).filter((c) => c in CONNECTOR_INFO);
 
 // Same crisis words as the chat brain (kept in step with northstar-chat).
 const CRISIS = [
@@ -56,6 +74,7 @@ const TOOL = {
             label: { type: "string", description: "2-3 words, at most 22 characters, verb first, sentence case, in their language. e.g. Plan my week" },
             icon: { type: "string", enum: [...ICONS] },
             opener: { type: "string", description: "Northstar's first chat line for this path: under 25 words, names the path, ends with exactly one question." },
+            connector: { type: "string", description: "Only for a connector path: its id from the list you were given. Leave out for everything else." },
           },
           required: ["label", "icon", "opener"],
         },
@@ -72,7 +91,8 @@ Rules:
 - Each path a different kind of help: plan, do, understand, and when feelings show up, "Talk it through".
 - Labels: 2-3 words, verb first, sentence case, in the person's language. "Plan my week", not "Weekly Planning".
 - No diagnosis, no assumptions beyond their words. "I'm tired all the time" -> "Look at my sleep", never a medical guess.
-- tone: practical (tasks, goals, wanting to learn or improve), personal (feelings show up: include "Talk it through"), vague ("idk", "not sure": include "Explore Northstar"), direct ONLY for one concrete thing to fetch or look up right now ("find sushi tonight", "weather tomorrow"). A goal like "I want to learn something new" is practical, never direct.
+- tone: practical (tasks, goals, wanting to learn or improve), personal (feelings show up: include "Talk it through"), vague ("idk", "not sure": include "Explore Northstar"), direct (one concrete thing to do or look up now, like "find sushi tonight": the first path does exactly that). Every tone still gets 3 to 5 paths.
+- Lead with helping: at least 3 paths are things Northstar can do right now, with nothing to connect.
 - Opener: warm, plain, under 25 words, ends with one question.`;
 
 const recent = new Map<string, number[]>();
@@ -97,6 +117,12 @@ Deno.serve(async (req) => {
   const key = (Deno.env.get("ANTHROPIC_API_KEY") ?? "").match(/sk-ant-[A-Za-z0-9_-]{20,}/)?.[0];
   if (!key) return json({ heard: "", tone: "practical", paths: FALLBACK, fallback: true });
 
+  // Connectors the model may suggest: only the live ones, and only when they make this answer better.
+  const connectorNote = LIVE_CONNECTORS.length
+    ? `\n\n(Connectors that work: ${LIVE_CONNECTORS.map((c) => `${c} = ${CONNECTOR_INFO[c].name}, for ${CONNECTOR_INFO[c].helps}`).join("; ")}. ` +
+      `Add AT MOST ONE as the last path, labeled "Connect <name>", only if it would clearly improve the outcome for this request. Usually add none.)`
+    : "";
+
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -105,22 +131,34 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: MODEL, max_tokens: 600, system: RULES, tools: [TOOL],
         tool_choice: { type: "tool", name: "ways_forward" },
-        messages: [{ role: "user", content: text }],
+        messages: [{ role: "user", content: text + connectorNote }],
       }),
     });
     if (!res.ok) throw new Error(`Claude ${res.status}`);
     const data = await res.json();
     const out = (data?.content ?? []).find((b: { type: string }) => b.type === "tool_use")?.input ?? {};
     const seen = new Set<string>();
-    const paths = (Array.isArray(out.paths) ? out.paths : [])
-      .map((p: Record<string, unknown>) => ({
-        label: String(p?.label ?? "").replace(/\s+/g, " ").trim().slice(0, 30),
-        icon: ICONS.has(String(p?.icon)) ? String(p.icon) : "sparkle",
-        opener: String(p?.opener ?? "").trim().slice(0, 200),
-      }))
-      .filter((p: { label: string }) => p.label && !seen.has(p.label.toLowerCase()) && seen.add(p.label.toLowerCase()))
-      .slice(0, 5);
-    if (paths.length < 3) throw new Error("too few paths");
+    type Path = { label: string; icon: string; opener: string; kind: "capability" | "connector"; connector?: string };
+    const all: Path[] = (Array.isArray(out.paths) ? out.paths : [])
+      .map((p: Record<string, unknown>): Path => {
+        const c = String(p?.connector ?? "");
+        const live = LIVE_CONNECTORS.includes(c);
+        return {
+          label: live ? `Connect ${CONNECTOR_INFO[c].name}` : String(p?.label ?? "").replace(/\s+/g, " ").trim().slice(0, 30),
+          icon: live ? CONNECTOR_INFO[c].icon : ICONS.has(String(p?.icon)) ? String(p.icon) : "sparkle",
+          opener: String(p?.opener ?? "").trim().slice(0, 200),
+          kind: live ? "connector" : "capability",
+          ...(live ? { connector: c } : {}),
+        };
+      })
+      // A "Connect …" label without a live connector behind it is dropped: never promise what doesn't work.
+      .filter((p: Path) => p.kind === "connector" || !/^connect\b/i.test(p.label))
+      .filter((p: Path) => p.label && !seen.has(p.label.toLowerCase()) && seen.add(p.label.toLowerCase()));
+    const capabilities = all.filter((p) => p.kind === "capability").slice(0, 5);
+    const connector = all.find((p) => p.kind === "connector");
+    // Never connector-only, never one bubble: at least 3 ways Northstar helps now, at most 1 connector, 5 in all.
+    if (capabilities.length < 3) throw new Error("too few paths");
+    const paths = connector ? [...capabilities.slice(0, 4), connector] : capabilities;
     return json({
       heard: String(out.heard ?? "").replace(/["“”]/g, "").trim().slice(0, 60),
       tone: ["practical", "personal", "vague", "direct"].includes(out.tone) ? out.tone : "practical",

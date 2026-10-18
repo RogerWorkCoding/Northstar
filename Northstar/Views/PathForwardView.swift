@@ -2,8 +2,10 @@ import SwiftUI
 import Supabase
 
 // ✦ Path Forward: the last onboarding screen (and later, an empty chat).
-// One calm question, then 3–5 "ways forward" float around a big star. Tap one, or drag it into the star,
-// and chat opens on that path. These are outcomes, never menus or connectors.
+// The person always goes first: only the star and one question, no options until they've said something.
+// Then 3–5 ways forward, written from THEIR words, float around a big star. Tap one, or drag it into the star,
+// and chat opens on that path. Most are things Northstar can do now; at most one may be a connector
+// (looks the same), and only one that really works in the app. Never a menu, never connector-only.
 // Drag the sky to move all the bubbles (like Apple Watch); they settle back around the star.
 // Always skippable. Their words are used for this answer only; nothing is saved.
 
@@ -19,6 +21,9 @@ nonisolated struct PathOption: Identifiable, Hashable, Sendable, Decodable {
     let label: String
     let icon: String
     let opener: String
+    /// "capability" (Northstar helps now) or "connector" (connect an app for a better answer).
+    var kind: String? = nil
+    var connector: String? = nil
 }
 
 @MainActor
@@ -86,7 +91,6 @@ struct PathForwardView: View {
     private let starSize: CGFloat = 150                // the star's full size, in the middle
     private let bubble: CGFloat = 82
     private let somethingElse = "Something else"
-    private let starters = ["Too much to do", "A project", "Learn something", "My health", "Just exploring"]
 
     private let gold = Color(red: 1.0, green: 0.84, blue: 0.55)
     private let lavender = Color(red: 0.72, green: 0.70, blue: 1.0)
@@ -188,7 +192,7 @@ struct PathForwardView: View {
                     .lineLimit(1...3)
                     .focused($typing)
                     .submitLabel(.go)
-                    .onSubmit { start() }
+                    .onSubmit { if hasWords { start() } }
                 Button { toggleMic() } label: {
                     Image(systemName: speech.isRecording ? "stop.circle.fill" : "mic")
                         .font(.title3)
@@ -201,22 +205,9 @@ struct PathForwardView: View {
             .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.10)))
             .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(.white.opacity(0.18)))
 
-            ChipFlow(spacing: 8) {
-                ForEach(starters, id: \.self) { s in
-                    Button { text = s } label: {
-                        Text(s)
-                            .font(.subheadline.weight(.medium))
-                            .padding(.horizontal, 14)
-                            .frame(minHeight: 40)
-                            .background(Capsule().fill(.white.opacity(text == s ? 0.22 : 0.08)))
-                            .overlay(Capsule().strokeBorder(.white.opacity(0.2)))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
             Spacer(minLength: 12)
 
+            // Appears once they've said something: the person always goes first.
             Button { start() } label: {
                 Text("Continue")
                     .font(.headline)
@@ -226,12 +217,18 @@ struct PathForwardView: View {
             }
             .buttonStyle(.plain)
             .padding(.bottom, 28)
+            .opacity(hasWords ? 1 : 0)
+            .disabled(!hasWords)
+            .accessibilityHidden(!hasWords)
+            .animation(.easeInOut(duration: 0.3), value: hasWords)
         }
         .padding(.horizontal, 24)
         .frame(maxWidth: 480)
         .frame(maxWidth: .infinity)
         .transition(.opacity)
     }
+
+    private var hasWords: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     // MARK: Choosing
 
@@ -430,8 +427,8 @@ struct PathForwardView: View {
             async let answer = PathService.ways(for: words)
             try? await Task.sleep(for: .seconds(reduceMotion ? 0.3 : 1.3))
             let r = await answer
-            // Crisis words or one clear request: no bubbles, straight to chat.
-            if r.crisis == true || r.tone == "direct" { finish(.words(words)); return }
+            // Crisis words: no bubbles, straight to chat, where Northstar's crisis help answers.
+            if r.crisis == true { finish(.words(words)); return }
             reply = r
             paths = Array((r.paths ?? PathService.fallback).prefix(5))
             withAnimation(.easeInOut(duration: 0.3)) { phase = .choosing }
@@ -497,46 +494,5 @@ struct PathForwardView: View {
             guard await speech.requestPermissions() else { return }
             try? speech.startRecording()
         }
-    }
-}
-
-/// Chips that wrap onto the next line when they run out of room.
-private struct ChipFlow: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = arrange(width: proposal.width ?? .infinity, subviews: subviews)
-        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
-        return CGSize(width: proposal.width ?? rows.map(\.width).max() ?? 0, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var y = bounds.minY
-        for row in arrange(width: bounds.width, subviews: subviews) {
-            var x = bounds.minX + (bounds.width - row.width) / 2
-            for i in row.items {
-                let s = subviews[i].sizeThatFits(.unspecified)
-                subviews[i].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(s))
-                x += s.width + spacing
-            }
-            y += row.height + spacing
-        }
-    }
-
-    private func arrange(width: CGFloat, subviews: Subviews) -> [(items: [Int], width: CGFloat, height: CGFloat)] {
-        var rows: [(items: [Int], width: CGFloat, height: CGFloat)] = []
-        var current: (items: [Int], width: CGFloat, height: CGFloat) = ([], 0, 0)
-        for i in subviews.indices {
-            let s = subviews[i].sizeThatFits(.unspecified)
-            let add = current.items.isEmpty ? s.width : current.width + spacing + s.width
-            if add > width, !current.items.isEmpty {
-                rows.append(current)
-                current = ([i], s.width, s.height)
-            } else {
-                current = (current.items + [i], add, max(current.height, s.height))
-            }
-        }
-        if !current.items.isEmpty { rows.append(current) }
-        return rows
     }
 }
