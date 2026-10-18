@@ -8,6 +8,15 @@ import Supabase
 nonisolated struct InsightsReport: Decodable, Sendable {
     nonisolated struct Item: Decodable, Sendable, Hashable { let name: String; let count: Int }
     nonisolated struct Cost: Decodable, Sendable, Hashable { let day: String; let requests: Int; let dollars: Double }
+    /// A tester's anonymous note from Settings › Feedback.
+    nonisolated struct Note: Decodable, Sendable, Hashable {
+        let at: String
+        let rating: Int?
+        let kind: String
+        let message: String
+        let appVersion: String?
+        enum CodingKeys: String, CodingKey { case at, rating, kind, message; case appVersion = "app_version" }
+    }
     let days: Int
     let people: Int
     let peopleToday: Int
@@ -19,9 +28,10 @@ nonisolated struct InsightsReport: Decodable, Sendable {
     let failed: Int
     let medianSeconds: Double
     let cost: [Cost]
+    let feedback: [Note]?
 
     enum CodingKeys: String, CodingKey {
-        case days, people, questions, features, topics, unmet, failed, cost
+        case days, people, questions, features, topics, unmet, failed, cost, feedback
         case peopleToday = "people_today"
         case questionsToday = "questions_today"
         case medianSeconds = "median_seconds"
@@ -77,12 +87,14 @@ struct InsightsView: View {
                     bars("Can't do that yet", report.unmet.map { .init(name: $0.name.capitalized, count: $0.count) }, empty: "Nothing yet. When people ask for something Northstar can't do, it shows here.")
                     bars("What they use", report.features.map { .init(name: friendly($0.name), count: $0.count) }, empty: "No questions yet.")
 
+                    feedbackSection
+
                     if report.failed > 0 {
                         Label("\(report.failed) replies failed", systemImage: "exclamationmark.triangle")
                             .foregroundStyle(NorthstarChatStyle.warning)
                     }
 
-                    Text("Anonymous counts only. Northstar never shows anyone's words here.")
+                    Text("Anonymous counts only. The only words shown are feedback testers chose to send.")
                         .font(.footnote)
                         .foregroundStyle(NorthstarChatStyle.label)
                 }
@@ -96,6 +108,40 @@ struct InsightsView: View {
         .navigationTitle("Insights")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: days) { Task { await reload() } }
+    }
+
+    /// What testers said (Settings › Feedback), newest first.
+    private var feedbackSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("WHAT TESTERS SAY")
+                .font(.caption.weight(.semibold)).tracking(2)
+                .foregroundStyle(NorthstarChatStyle.label)
+            let notes = report.feedback ?? []
+            if notes.isEmpty {
+                Text("No feedback yet. Testers can send it from Settings, anonymously.")
+                    .font(.subheadline).foregroundStyle(NorthstarChatStyle.soft)
+            }
+            ForEach(notes, id: \.self) { n in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Text(n.kind.capitalized).font(.caption.weight(.semibold))
+                        if let r = n.rating { Text(String(repeating: "★", count: r)).font(.caption) }
+                        Spacer()
+                        Text([String(n.at.prefix(10)), n.appVersion].compactMap { $0 }.joined(separator: " · "))
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(NorthstarChatStyle.label)
+                    Text(n.message)
+                        .font(.subheadline)
+                        .foregroundStyle(NorthstarChatStyle.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(NorthstarChatStyle.card))
+            }
+        }
     }
 
     private func reload() async {

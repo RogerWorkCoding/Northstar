@@ -89,6 +89,8 @@ struct NorthstarSettingsView: View {
     @State private var statusMessage: String?
     /// Northstar Labs only: filled in when this account is the owner.
     @State private var insights: InsightsReport?
+    @State private var showFeedback = false
+    @State private var showConcierge = false
 
     private let memoryService = MemoryService()
     private let notesService = NotesService()
@@ -118,6 +120,38 @@ struct NorthstarSettingsView: View {
                 } footer: {
                     Text("Only you see this. Anonymous counts, never anyone's words.")
                 }
+            }
+
+            // Concierge (also the bell on Home) and Feedback for testers.
+            Section {
+                Button { showConcierge = true } label: {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Concierge").foregroundStyle(.primary)
+                            Text("Dinner, shopping, rides, home help").font(.footnote).foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "bell").foregroundStyle(NorthstarChatStyle.starGold)
+                    }
+                }
+                Button { showFeedback = true } label: {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Send feedback").foregroundStyle(.primary)
+                            Text("Anonymous. Tell us what works and what doesn't.").font(.footnote).foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "bubble.left.and.text.bubble.right").foregroundStyle(NorthstarChatStyle.linkBlue)
+                    }
+                }
+            } header: {
+                Text("Concierge & feedback")
+            }
+            .sheet(isPresented: $showFeedback) { FeedbackView() }
+            .sheet(isPresented: $showConcierge) {
+                ConciergeView()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
 
             // 0. Account: Sign in with Apple keeps memory safe across phones.

@@ -3,6 +3,7 @@
 // topics, and what they asked for that Northstar can't do yet. Never anyone's words.
 //
 //   { days?: 1..90 }  → { allowed: true, report: {...} }   (admins only)
+// The report also carries testers' anonymous feedback notes (they chose to send those words).
 //   anyone else       → { allowed: false }                  (so the app hides the screen)
 //
 // Admins are the Supabase user ids listed (comma separated) in the NS_ADMIN_USERS secret.
@@ -53,11 +54,13 @@ Deno.serve(async (req) => {
     const today = new Date().toISOString().slice(0, 10);
     const db = serviceDb();
 
-    const [{ data: rows, error }, { data: cost }, { data: users }] = await Promise.all([
+    const [{ data: rows, error }, { data: cost }, { data: users }, { data: notes }] = await Promise.all([
       db.from("insight_events").select("at, who, features, topic, unmet, failed, ms")
         .gte("at", since.toISOString()).order("at", { ascending: false }).limit(20000),
       db.from("usage_global").select("day, requests, cost_micros").gte("day", sinceDay).order("day"),
       db.from("usage_daily").select("user_id, day").gte("day", sinceDay),
+      db.from("feedback").select("created_at, rating, kind, message, app_version")
+        .gte("created_at", since.toISOString()).order("created_at", { ascending: false }).limit(100),
     ]);
     if (error) throw error;
     const list = rows ?? [];
@@ -84,6 +87,9 @@ Deno.serve(async (req) => {
         unmet: count(list.map((r) => r.unmet).filter(Boolean) as string[]).slice(0, 15),
         failed: list.filter((r) => r.failed).length,
         median_seconds: msList.length ? Math.round(msList[Math.floor(msList.length / 2)] / 100) / 10 : 0,
+        feedback: (notes ?? []).map((n: Record<string, unknown>) => ({
+          at: n.created_at, rating: n.rating ?? null, kind: n.kind, message: n.message, app_version: n.app_version ?? null,
+        })),
         cost: (cost ?? []).map((c: { day: string; requests: number; cost_micros: number }) => ({
           day: c.day, requests: c.requests, dollars: Math.round(c.cost_micros / 10_000) / 100,
         })),
