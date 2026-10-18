@@ -5,7 +5,7 @@ import MapKit
 // Pick what you need (Dinner, Shopping, Home…). Northstar works in the background and the picks appear
 // here as cards: places with a small map and buttons (Reserve, Call, Ride, Order), products with a View
 // button, or a short answer with sources (Look It Up). Need more? Tap the mic and say it, or tap a quick
-// answer ("For 4", "Saturday"). Urgent Help opens real help right away (911 first), with no AI.
+// answer ("For 4", "Saturday"). Below the tiles: images of events happening nearby.
 // Northstar shows options; you choose. It never books or pays.
 
 struct ConciergeView: View {
@@ -25,7 +25,7 @@ struct ConciergeView: View {
     @State private var sources: [NorthstarInsight.Source] = []
     @State private var answer = ""        // Look It Up: the full answer
     @State private var booking = NorthstarInsight.Booking()
-    @State private var showUrgent = false
+
     @State private var typed = ""
     @State private var speech = SpeechRecognizer()
     @State private var micMessage: String?
@@ -116,7 +116,6 @@ struct ConciergeView: View {
             if speech.isRecording { speech.stopRecording() }
             NorthstarVoice.shared.stop()
         }
-        .fullScreenCover(isPresented: $showUrgent) { UrgentHelpView() }
         .alert("Voice input", isPresented: Binding(get: { micMessage != nil }, set: { if !$0 { micMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -195,29 +194,7 @@ struct ConciergeView: View {
                 }
             }
 
-            // Urgent Help: always last and always the same, so it's easy to find in a hurry.
-            Button { showUrgent = true } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "cross.case.fill")
-                        .font(.system(size: 20))
-                        .frame(width: 28)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Urgent Help").font(.body.weight(.semibold))
-                        Text("911, nearest ER, urgent care, pharmacy")
-                            .font(.footnote)
-                            .opacity(0.9)
-                    }
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right").font(.footnote.weight(.semibold))
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .frame(maxWidth: .infinity, minHeight: 64)
-                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(UrgentHelpView.red))
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Opens 911, the nearest emergency room, urgent care and pharmacy")
+            NearbyEventsRow()
 
             Label("Northstar never books or pays without you.", systemImage: "hand.raised")
                 .font(.footnote)
