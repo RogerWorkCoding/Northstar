@@ -16,6 +16,7 @@ struct StarMenuView: View {
     var onHistory: () -> Void = {}
     var onSettings: () -> Void = {}
     var onAbout: () -> Void = {}
+    var onFeedback: () -> Void = {}
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -103,6 +104,13 @@ struct StarMenuView: View {
                     title: "About Northstar",
                     systemImage: "info.circle",
                     action: onAbout
+                )
+
+                // Testers: feedback is one tap away, never hidden in Settings.
+                menuButton(
+                    title: "Send Feedback",
+                    systemImage: "bubble.left.and.text.bubble.right",
+                    action: onFeedback
                 )
 
                 Spacer()

@@ -123,7 +123,7 @@ struct WelcomeView: View {
             VStack(spacing: 8) {
                 Text("Northstar remembers only what you tell it or confirm.")
                 Text("See, change or delete it any time in Settings.")
-                Text("Testing Northstar? Tell us what you think in Settings › Send feedback. It's anonymous.")
+                Text("Testing Northstar? Tap ✦ › Send Feedback any time. It's anonymous.")
                     .font(.subheadline)
                     .opacity(0.8)
                     .padding(.top, 8)

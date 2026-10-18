@@ -65,6 +65,7 @@ struct ContentView: View {
     @AppStorage("ns.openChatId") private var openChatId = ""
     /// ✦ The one-time "Keep your memory safe" card (after the 3rd thing kept).
     @State private var showKeepSafe = false
+    @State private var isFeedbackPresented = false
     private let chatsService = ChatsService()
     @State private var speechRecognizer = SpeechRecognizer()
     @State private var appleAccount = AppleAccount.shared
@@ -156,6 +157,7 @@ struct ContentView: View {
             CameraView(selectedImage: $selectedImage)
                 .ignoresSafeArea()
         }
+        .sheet(isPresented: $isFeedbackPresented) { FeedbackView() }
         .sheet(isPresented: $isConciergePresented) {
             ConciergeView(memory: { await memoryForEngine() })
             .presentationDetents([.large])
@@ -656,6 +658,9 @@ struct ContentView: View {
             },
             onAbout: {
                 open(.about)
+            },
+            onFeedback: {
+                isFeedbackPresented = true
             }
         )
         .transition(
