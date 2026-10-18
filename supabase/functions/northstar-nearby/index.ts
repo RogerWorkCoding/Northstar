@@ -5,8 +5,11 @@
 // Secrets: TICKETMASTER_KEY (developer.ticketmaster.com) and/or SEATGEEK_CLIENT_ID (seatgeek.com/account/develop).
 // Results are kept for 1 hour per city so it stays fast and well inside the free limits.
 
-const TM_KEY = Deno.env.get("TICKETMASTER_KEY") ?? "";
-const SG_ID = Deno.env.get("SEATGEEK_CLIENT_ID") ?? "";
+// Trimmed: a pasted key often brings a stray space or line break with it.
+const TM_KEY = (Deno.env.get("TICKETMASTER_KEY") ?? "").trim();
+const SG_ID = (Deno.env.get("SEATGEEK_CLIENT_ID") ?? "").replace(/^client id:\s*/i, "").trim();
+// What each service last answered (a status, never a key), returned as `check` for troubleshooting.
+const check: Record<string, string> = {};
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -35,6 +38,7 @@ async function ticketmaster(lat: number, lng: number): Promise<Event[]> {
     size: "40", startDateTime: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), locale: "*",
   }).toString();
   const res = await fetch(url);
+  check.ticketmaster = String(res.status);
   if (!res.ok) return [];
   const raw = ((await res.json())?._embedded?.events ?? []) as Array<Record<string, any>>;
   const out: Event[] = [];
@@ -66,8 +70,13 @@ async function seatgeek(lat: number, lng: number): Promise<Event[]> {
     sort: "datetime_local.asc", "datetime_utc.gte": new Date().toISOString().slice(0, 19),
   }).toString();
   const res = await fetch(url);
-  if (!res.ok) return [];
+  check.seatgeek = String(res.status);
+  if (!res.ok) {
+    check.seatgeek += " " + (await res.text()).slice(0, 120).replace(SG_ID, "…");
+    return [];
+  }
   const raw = ((await res.json())?.events ?? []) as Array<Record<string, any>>;
+  check.seatgeek += ` · ${raw.length} found`;
   const out: Event[] = [];
   for (const e of raw) {
     const p = (e.performers ?? []).find((x: Record<string, any>) => /^https:/.test(String(x?.image ?? "")));
@@ -102,11 +111,11 @@ Deno.serve(async (req) => {
   const la = Math.round(lat * 100) / 100, ln = Math.round(lng * 100) / 100;
   const key = `${la},${ln}`;
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < 60 * 60 * 1000) return json({ events: hit.events });
+  if (hit && Date.now() - hit.at < 60 * 60 * 1000) return json({ events: hit.events, check: { ...check, cached: "yes" } });
 
   const [tm, sg] = await Promise.all([
     ticketmaster(la, ln).catch(() => [] as Event[]),
-    seatgeek(la, ln).catch(() => [] as Event[]),
+    seatgeek(la, ln).catch((e) => { check.seatgeek = "error " + String(e).slice(0, 80); return [] as Event[]; }),
   ]);
   // One card per show: the same name on the same day counts once (Ticketmaster first).
   const seen = new Set<string>();
@@ -118,6 +127,7 @@ Deno.serve(async (req) => {
     merged.push(e);
     if (merged.length === 10) break;
   }
-  cache.set(key, { at: Date.now(), events: merged });
-  return json({ events: merged });
+  // Only keep results worth keeping, so a hiccup doesn't hide events for an hour.
+  if (merged.length) cache.set(key, { at: Date.now(), events: merged });
+  return json({ events: merged, check });
 });
