@@ -151,7 +151,7 @@ struct ContentView: View {
             }
         }
         .fullScreenCover(isPresented: Binding(get: { !welcomed }, set: { if !$0 { welcomed = true } })) {
-            WelcomeView { welcomed = true }
+            WelcomeView { choice in startFromPath(choice) }
         }
         .fullScreenCover(isPresented: $isCameraPresented) {
             CameraView(selectedImage: $selectedImage)
@@ -1130,6 +1130,31 @@ struct ContentView: View {
         } catch {
             print("Save suggestion failed:", error.localizedDescription)
             return nil
+        }
+    }
+
+    /// Path Forward finished: close the welcome without the slide (the chat sits on the same sky),
+    /// then start the chat on the path they chose, in their own words.
+    private func startFromPath(_ choice: PathChoice) {
+        var quiet = Transaction()
+        quiet.disablesAnimations = true
+        withTransaction(quiet) { welcomed = true }
+        let first: String
+        switch choice {
+        case .skip:
+            return
+        case .words(let words):
+            first = words
+        case .path(let label, let words):
+            let start = "Let's start with \u{201C}\(label)\u{201D}."
+            first = words.isEmpty ? start : words + "\n\n" + start
+        }
+        guard !first.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !isThinking else { return }
+            appendUserMessage(first)
+            requestGeminiResponse()
         }
     }
 

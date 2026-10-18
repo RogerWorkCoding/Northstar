@@ -5,20 +5,49 @@ import SwiftUI
 // No sign-in here: everyone gets a private account in the background; Sign in with Apple (to keep memory
 // on a new phone) is optional, in Settings.
 // Big text, one idea per page, always skippable. Settings → About can show it again later.
+// After the last page comes Path Forward: "What's on your mind?" and a few ways forward around the star.
 
 struct WelcomeView: View {
-    var onDone: () -> Void
+    var onDone: (PathChoice) -> Void
 
     @State private var page = 0
+    @State private var paths = false
     private let lastPage = 3
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        ZStack {
+            if paths {
+                PathForwardView(onDone: onDone)
+                    .transition(.opacity)
+            } else {
+                pages
+                    .transition(.opacity)
+            }
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The sky sits BEHIND the layout, so the picture never changes the layout's size.
+        .background {
+            ZStack {
+                NorthstarVisionLandscapeBackground()
+                // A soft veil so the words always read clearly over the sky.
+                LinearGradient(colors: [Color.black.opacity(0.15), Color.black.opacity(0.55)],
+                               startPoint: .top, endPoint: .bottom)
+            }
+            .ignoresSafeArea()
+            .accessibilityHidden(true)
+        }
+        // The welcome always sits on the night sky.
+        .environment(\.colorScheme, .dark)
+    }
+
+    private var pages: some View {
         VStack(spacing: 0) {
                 HStack {
                     Spacer()
                     // Always takes its space (hidden on the last page) so the star never jumps.
-                    Button("Skip") { onDone() }
+                    Button("Skip") { onDone(.skip) }
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.85))
                         .frame(minWidth: 44, minHeight: 44)
@@ -63,10 +92,10 @@ struct WelcomeView: View {
                     if page < lastPage {
                         withAnimation(reduceMotion ? nil : .easeInOut) { page += 1 }
                     } else {
-                        onDone()
+                        withAnimation(.easeInOut(duration: reduceMotion ? 0.2 : 0.5)) { paths = true }
                     }
                 } label: {
-                    Text(page < lastPage ? "Continue" : "Start")
+                    Text("Continue")
                         .font(.headline)
                         .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
                         .frame(maxWidth: .infinity, minHeight: 52)
@@ -77,21 +106,6 @@ struct WelcomeView: View {
                 .padding(.bottom, 28)
                 .frame(maxWidth: 480)
             }
-        .foregroundStyle(.white)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // The sky sits BEHIND the layout, so the picture never changes the layout's size.
-        .background {
-            ZStack {
-                NorthstarVisionLandscapeBackground()
-                // A soft veil so the words always read clearly over the sky.
-                LinearGradient(colors: [Color.black.opacity(0.15), Color.black.opacity(0.55)],
-                               startPoint: .top, endPoint: .bottom)
-            }
-            .ignoresSafeArea()
-            .accessibilityHidden(true)
-        }
-        // The welcome always sits on the night sky.
-        .environment(\.colorScheme, .dark)
     }
 
     private func pageView(title: LocalizedStringKey, lines: [String]) -> some View {
@@ -191,5 +205,5 @@ private struct WelcomeFadePage: View {
 }
 
 #Preview {
-    WelcomeView(onDone: {})
+    WelcomeView(onDone: { _ in })
 }
