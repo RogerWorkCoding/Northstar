@@ -143,7 +143,7 @@ struct NearbyEventsRow: View {
     }
 }
 
-/// The Events tile: every event nearby, as big image cards, soonest first.
+/// The Events tile: every event nearby as big image cards you swipe left and right, soonest first.
 struct NearbyEventsList: View {
     @State private var events: [NearbyEvent] = []
     @State private var loading = true
@@ -172,10 +172,22 @@ struct NearbyEventsList: View {
                     .foregroundStyle(NorthstarChatStyle.linkBlue)
                     .frame(minHeight: 44)
             } else {
-                ForEach(events) { e in
-                    Button { open = e } label: { card(e) }
-                        .buttonStyle(.plain)
+                // Swipe left and right, one big image card at a time (the next one peeks in).
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 12) {
+                        ForEach(events) { e in
+                            Button { open = e } label: { card(e) }
+                                .buttonStyle(.plain)
+                                .containerRelativeFrame(.horizontal) { width, _ in width * 0.86 }
+                        }
+                    }
+                    .scrollTargetLayout()
                 }
+                .scrollTargetBehavior(.viewAligned)
+                .scrollClipDisabled()
+                Text("Swipe for more · \(events.count) events")
+                    .font(.footnote)
+                    .foregroundStyle(NorthstarChatStyle.soft)
                 Text("Events from " + Set(events.compactMap(\.source)).sorted().joined(separator: " and "))
                     .font(.caption2)
                     .foregroundStyle(NorthstarChatStyle.label)
@@ -200,7 +212,7 @@ struct NearbyEventsList: View {
                 if let image = phase.image { image.resizable().scaledToFill() } else { NorthstarChatStyle.card }
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 170)
+            .frame(height: 220)
             .clipped()
             .accessibilityHidden(true)
 
@@ -208,13 +220,13 @@ struct NearbyEventsList: View {
                 Text(e.name)
                     .font(.headline)
                     .foregroundStyle(NorthstarChatStyle.text)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2, reservesSpace: true)
                 Text([e.whenText, [e.venue, e.city].filter { !$0.isEmpty }.joined(separator: ", "),
                       e.miles.map { String(format: $0 < 10 ? "%.1f mi" : "%.0f mi", $0) }]
                     .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(.footnote)
                     .foregroundStyle(NorthstarChatStyle.soft)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2, reservesSpace: true)
             }
             .padding(12)
         }
