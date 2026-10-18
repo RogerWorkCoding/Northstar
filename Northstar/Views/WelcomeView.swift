@@ -1,8 +1,9 @@
 import SwiftUI
-import AuthenticationServices
 
 // ✦ First-run welcome: four short pages on the night sky, shown once.
-// 1. What Northstar is. 2. What you can ask. 3. The Concierge (the bell). 4. Your memory is yours (+ optional Sign in with Apple).
+// 1. What Northstar is. 2. What you can ask. 3. The Concierge (the bell). 4. Your memory is yours.
+// No sign-in here: everyone gets a private account in the background; Sign in with Apple (to keep memory
+// on a new phone) is optional, in Settings.
 // Big text, one idea per page, always skippable. Settings → About can show it again later.
 
 struct WelcomeView: View {
@@ -10,8 +11,6 @@ struct WelcomeView: View {
 
     @State private var page = 0
     private let lastPage = 3
-    @State private var account = AppleAccount.shared
-    @State private var message: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -59,11 +58,6 @@ struct WelcomeView: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .always))
                 .indexViewStyle(.page(backgroundDisplayMode: .interactive))
-
-                if page == lastPage {
-                    appleSignIn
-                        .transition(.opacity)
-                }
 
                 Button {
                     if page < lastPage {
@@ -118,55 +112,6 @@ struct WelcomeView: View {
         .padding(.top, 40)
         .padding(.horizontal, 28)
         .frame(maxWidth: 520)
-    }
-
-    /// Sign in with Apple, at the bottom just above Start (last page only).
-    private var appleSignIn: some View {
-        VStack(spacing: 8) {
-            if account.isSignedInWithApple {
-                Label("Signed in with Apple", systemImage: "checkmark.circle.fill")
-                    .font(.body.weight(.semibold))
-                    .padding(.top, 8)
-            } else {
-                VStack(spacing: 8) {
-                    SignInWithAppleButton(.signIn) { request in
-                        account.prepare(request)
-                    } onCompletion: { result in
-                        Task {
-                            do {
-                                try await account.finish(result)
-                                message = account.cameBack
-                                    ? "Welcome back. Your memory and chats are here again."
-                                    : "Signed in. Your memory is safe if you change phones."
-                            } catch {
-                                if (error as? ASAuthorizationError)?.code == .canceled { return }
-                                message = "Couldn't sign in. You can try later in Settings."
-                            }
-                        }
-                    }
-                    .signInWithAppleButtonStyle(.white)
-                    .frame(height: 50)
-                    .frame(maxWidth: .infinity)
-                    .clipShape(Capsule())   // matches the Start button
-
-                    Text("Optional. Creates your free account, no password.\nKeeps your memory safe if you change phones.")
-                        .multilineTextAlignment(.center)
-                        .font(.footnote)
-                        .foregroundStyle(.white.opacity(0.75))
-                }
-                .padding(.top, 8)
-            }
-
-            if let message {
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.85))
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.bottom, 14)
-        .frame(maxWidth: 480)
     }
 
     private var memoryPage: some View {
