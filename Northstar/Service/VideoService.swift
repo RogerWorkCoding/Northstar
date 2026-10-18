@@ -108,7 +108,7 @@ struct VideoService {
 }
 
 /// Keeps video jobs alive while the chat scrolls (a card can leave the screen and come back).
-/// One clip at a time; keyed by the shot's prompt.
+/// Keyed by the shot's prompt. Several shots can be made at once for a full video.
 @MainActor
 @Observable
 final class VideoStore {
@@ -116,13 +116,20 @@ final class VideoStore {
 
     private(set) var files: [String: URL] = [:]
     private(set) var problems: [String: String] = [:]
-    private(set) var making: String?
+    /// Shots being made right now.
+    private(set) var making: Set<String> = []
     /// Where each made video is kept in storage (for saving it to the Videos library).
     private(set) var storagePaths: [String: String] = [:]
+    /// Full videos (all the shots joined), keyed by their shots' prompts.
+    private(set) var films: [String: URL] = [:]
+    private(set) var filmProblems: [String: String] = [:]
+    private(set) var makingFilm: String?
     @ObservationIgnored private var players: [String: AVPlayer] = [:]
 
     private let service = VideoService()
     private init() {}
+
+    var busy: Bool { !making.isEmpty || makingFilm != nil }
 
     func player(for prompt: String) -> AVPlayer? {
         guard let file = files[prompt] else { return nil }
@@ -132,19 +139,95 @@ final class VideoStore {
         return player
     }
 
+    func filmPlayer(for key: String) -> AVPlayer? {
+        guard let file = films[key] else { return nil }
+        if let existing = players["film:" + key] { return existing }
+        let player = AVPlayer(url: file)
+        players["film:" + key] = player
+        return player
+    }
+
+    static func filmKey(_ shots: [NorthstarInsight.Shot]) -> String {
+        shots.map(\.prompt).joined(separator: "\u{1F}")
+    }
+
     func make(prompt: String, seconds: Int) {
-        guard making == nil, files[prompt] == nil else { return }
+        guard !busy, files[prompt] == nil else { return }
+        Task { await makeOne(prompt: prompt, seconds: seconds) }
+    }
+
+    private func makeOne(prompt: String, seconds: Int) async {
+        guard files[prompt] == nil, !making.contains(prompt) else { return }
         problems[prompt] = nil
-        making = prompt
-        Task {
-            do {
-                let made = try await service.make(prompt: prompt, seconds: seconds)
-                storagePaths[prompt] = made.storagePath
-                files[prompt] = made.file
-            } catch {
-                problems[prompt] = error.localizedDescription
-            }
-            making = nil
+        making.insert(prompt)
+        do {
+            let made = try await service.make(prompt: prompt, seconds: seconds)
+            storagePaths[prompt] = made.storagePath
+            files[prompt] = made.file
+        } catch {
+            problems[prompt] = error.localizedDescription
         }
+        making.remove(prompt)
+    }
+
+    /// 🎬 Full video: makes every shot that isn't made yet (all at once), then joins them in order.
+    func makeFilm(_ shots: [NorthstarInsight.Shot]) {
+        let key = Self.filmKey(shots)
+        guard !busy, films[key] == nil, shots.count >= 2 else { return }
+        filmProblems[key] = nil
+        makingFilm = key
+        Task {
+            await withTaskGroup(of: Void.self) { group in
+                for shot in shots where files[shot.prompt] == nil {
+                    let prompt = shot.prompt, seconds = shot.seconds
+                    group.addTask { await self.makeOne(prompt: prompt, seconds: seconds) }
+                }
+            }
+            let clips = shots.compactMap { files[$0.prompt] }
+            if clips.count == shots.count {
+                do {
+                    films[key] = try await FilmJoiner.join(clips)
+                } catch {
+                    filmProblems[key] = "The shots are made, but joining them didn't work. You can still play each one below."
+                }
+            } else {
+                filmProblems[key] = shots.compactMap { problems[$0.prompt] }.first
+                    ?? "Some shots didn't work. Try again, or make them one at a time."
+            }
+            makingFilm = nil
+        }
+    }
+}
+
+/// Joins clips one after another into a single video on the phone (no extra cost).
+enum FilmJoiner {
+    static func join(_ clips: [URL]) async throws -> URL {
+        let film = AVMutableComposition()
+        guard let video = film.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+            throw VideoError.message("Couldn't join the shots.")
+        }
+        let audio = film.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+        var at = CMTime.zero
+        for url in clips {
+            let asset = AVURLAsset(url: url)
+            let length = try await asset.load(.duration)
+            let range = CMTimeRange(start: .zero, duration: length)
+            if let v = try await asset.loadTracks(withMediaType: .video).first {
+                try video.insertTimeRange(range, of: v, at: at)
+                if at == .zero { video.preferredTransform = try await v.load(.preferredTransform) }
+            }
+            if let a = try await asset.loadTracks(withMediaType: .audio).first {
+                try audio?.insertTimeRange(range, of: a, at: at)
+            }
+            at = CMTimeAdd(at, length)
+        }
+        guard let export = AVAssetExportSession(asset: film, presetName: AVAssetExportPresetHighestQuality) else {
+            throw VideoError.message("Couldn't join the shots.")
+        }
+        let folder = URL.documentsDirectory.appending(path: "Videos", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appending(path: "Northstar-film-\(UUID().uuidString.prefix(8)).mp4")
+        try await export.export(to: file, as: .mp4)
+        return file
     }
 }

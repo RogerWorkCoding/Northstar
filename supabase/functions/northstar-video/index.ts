@@ -35,7 +35,8 @@ const RESOLUTION = Deno.env.get("NS_VEO_RESOLUTION") === "1080p" ? "1080p" : "72
 const PRICE_PER_SECOND = Number(Deno.env.get("NS_VEO_DOLLARS_PER_SECOND") ?? 0.05) * 1_000_000;
 
 const LIMITS = {
-  userVideos: Number(Deno.env.get("NS_USER_DAILY_VIDEOS") ?? 3),
+  // 6 clips: enough for two full videos (3 shots each) a day.
+  userVideos: Number(Deno.env.get("NS_USER_DAILY_VIDEOS") ?? 6),
   userCostMicros: Number(Deno.env.get("NS_USER_DAILY_DOLLARS") ?? 2) * 1_000_000,
   globalCostMicros: Number(Deno.env.get("NS_GLOBAL_DAILY_DOLLARS") ?? 25) * 1_000_000,
 };

@@ -833,6 +833,18 @@ const NS_CASES = [
       ["no products", (r.products ?? []).length === 0],
     ],
   },
+  // 🎬 Full video: shots planned to join into one ~20 second video.
+  {
+    id: "video-full-length", group: "video-full",
+    say: "Make a short promo video for my bakery: warm, cozy, morning light, fresh bread coming out of the oven.",
+    check: (r) => {
+      const total = (r.shots ?? []).reduce((a, s) => a + (s.seconds ?? 0), 0);
+      return [
+        ["2–4 shots", (r.shots ?? []).length >= 2 && (r.shots ?? []).length <= 4],
+        ["15–24 seconds in total", total >= 14 && total <= 24],
+      ];
+    },
+  },
   // ✦ "What Northstar used" line at the end of answers.
   {
     id: "used-design", group: "used-line",

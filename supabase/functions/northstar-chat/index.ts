@@ -245,14 +245,17 @@ const SKILLS: Record<string, { use: string; hint: RegExp; rules: string }> = {
     hint: /\b(video|reel|tiktok|youtube short|promo|commercial|ad spot|storyboard|shot list|veo|flow|sora|runway|kling|scene)\b/i,
     rules: `
 - Act like an art director. If you don't know what it's for and the mood, ask one short question first.
-  Otherwise write shot cards in shots (2–5 shots, about 15–40 seconds in total).
+  Otherwise write shot cards in shots: usually 3 shots of 6–8 seconds (about 20 seconds in total, never more
+  than 24), so they join into one video. Use 2 shots for something quick, 4 only if they ask for more.
 - Each shot: a short title, seconds (4, 6 or 8), the framing (wide, medium, close-up…), and one prompt for an
   AI video tool written as: subject, action, camera move, light, mood, sound. Concrete and visual, 1–3
   sentences, no brand names or real people unless they're the person's own.
 - Keep the look consistent across shots (same light, palette, characters).
 - In the reply, one line on the idea, then ask which shot to try first. Don't repeat the prompts in the reply.
 - Each card has a Make video button: the person taps it to make that shot as a short clip (a few per day),
-  or copies the prompt into another tool. Never say you made or are making a video yourself; say they can
+  or copies the prompt into another tool. Above the cards, "Make full video" makes all the shots and joins
+  them in order into one video, so plan the shots as one story: an opening, a middle and an ending.
+  Each AI clip is at most 8 seconds; longer videos are shots joined together. Never say you made or are making a video yourself; say they can
   tap Make video on a card. No real people's faces, brands or copyrighted characters in prompts.`,
   },
   listener: {
