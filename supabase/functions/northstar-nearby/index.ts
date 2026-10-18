@@ -62,6 +62,19 @@ async function ticketmaster(lat: number, lng: number): Promise<Event[]> {
   return out;
 }
 
+// Northstar's own event cards (night sky, one per kind of event), served from the public repo.
+const CARDS = "https://cdn.jsdelivr.net/gh/RogerWorkCoding/Northstar@8cc9b4d8747c7e1837b1320b1f9585d8f2a5b844/assets/events/";
+function cardFor(e: Record<string, any>): string {
+  const kinds = [String(e.type ?? ""), ...((e.taxonomies ?? []) as Array<Record<string, any>>).map((t) => String(t?.name ?? ""))]
+    .join(" ").toLowerCase();
+  const kind = /comedy/.test(kinds) ? "comedy"
+    : /theater|theatre|broadway|musical|opera|ballet|dance|classical/.test(kinds) ? "theater"
+    : /concert|music|festival|band/.test(kinds) ? "music"
+    : /sport|nba|nfl|mlb|nhl|mls|ncaa|wnba|soccer|football|baseball|basketball|hockey|tennis|golf|racing|fight|boxing|mma|wrestling|rodeo/.test(kinds) ? "sports"
+    : "events";
+  return `${CARDS}${kind}.jpg`;
+}
+
 async function seatgeek(lat: number, lng: number): Promise<Event[]> {
   if (!SG_ID) return [];
   const url = new URL("https://api.seatgeek.com/2/events");
@@ -82,11 +95,11 @@ async function seatgeek(lat: number, lng: number): Promise<Event[]> {
   const pic = (x: Record<string, any>) =>
     [x?.image, x?.images?.huge, x?.images?.banner, x?.images?.["1200x525"], x?.images?.["800x320"]]
       .map((u) => String(u ?? "")).find((u) => /^https?:\/\//.test(u))?.replace(/^http:/, "https:");
-  const skipped = { image: 0, link: 0, date: 0 };
+  const skipped = { link: 0, date: 0 };
   for (const e of raw) {
-    const img = (e.performers ?? []).map(pic).find(Boolean);
+    // SeatGeek's free plan sends no pictures: use Northstar's night-sky card for that kind of event.
+    const img = (e.performers ?? []).map(pic).find(Boolean) ?? cardFor(e);
     const local = String(e.datetime_local ?? "");
-    if (!img) { skipped.image++; continue; }
     if (!/^https:/.test(String(e.url ?? ""))) { skipped.link++; continue; }
     if (!/^\d{4}-\d{2}-\d{2}/.test(local)) { skipped.date++; continue; }
     const loc = e.venue?.location;
@@ -101,10 +114,7 @@ async function seatgeek(lat: number, lng: number): Promise<Event[]> {
       source: "SeatGeek",
     });
   }
-  if (out.length < raw.length) {
-    const p0 = (raw[0]?.performers ?? [])[0] ?? {};
-    check.seatgeek += ` · skipped ${JSON.stringify(skipped)} · image fields: ${Object.keys(p0.images ?? {}).join(",") || "none"}, image=${String(p0.image ?? "none").slice(0, 60)}`;
-  }
+  if (out.length < raw.length) check.seatgeek += ` · skipped ${JSON.stringify(skipped)}`;
   return out;
 }
 
