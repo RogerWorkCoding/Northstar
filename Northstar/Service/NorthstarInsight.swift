@@ -147,6 +147,17 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     nonisolated struct Place: Hashable, Sendable, Decodable {
         let name: String
         let area: String
+        /// Concierge: one line on why it fits this person.
+        var why: String? = nil
+        /// Concierge: something happening today, with where it came from and how fresh.
+        var tonight: Tonight? = nil
+
+        nonisolated struct Tonight: Hashable, Sendable, Decodable {
+            let text: String
+            let source: String
+            let posted: String
+            let url: URL
+        }
     }
 
     /// A product to compare (Concierge shopping): name, price, store, rating, why, and its page.

@@ -826,6 +826,19 @@ const NS_CASES = [
     ],
   },
   {
+    id: "concierge-tonight", group: "concierge",
+    source: "concierge",
+    say: "Find me 3 good places for dinner near me tonight. I'm in Petaluma, CA.",
+    check: (r) => {
+      const t = (r.places ?? []).map((p) => p.tonight).filter(Boolean);
+      return [
+        ["places given", (r.places ?? []).length >= 2],
+        ["why for you on places", (r.places ?? []).some((p) => (p.why ?? "").length > 3)],
+        ["any special has a real source", t.every((x) => /^https:\/\//.test(x.url) && x.source && x.posted)],
+      ];
+    },
+  },
+  {
     id: "concierge-emergency", group: "concierge",
     source: "concierge",
     say: "My dad is having chest pain and his arm feels numb, where is the nearest hospital? We're in Petaluma, CA.",

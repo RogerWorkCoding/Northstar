@@ -511,6 +511,18 @@ const REPLY_TOOL = {
           properties: {
             name: { type: "string", description: "Name as on a map, e.g. 'Electrify America'." },
             area: { type: "string", description: "Street, neighborhood or city, e.g. 'Petaluma, CA'." },
+            why: { type: "string", description: "Concierge only: one short line on why it fits THIS person's request, e.g. 'quiet, good for 4, vegetarian pasta'. Empty otherwise." },
+            tonight: {
+              type: "object",
+              description: "Concierge only: a special, happy hour, live music or event happening today, ONLY if a web_search result posted in the last 7 days (or a stated weekly event on today's weekday) says so. Omit when not found. Never invent.",
+              properties: {
+                text: { type: "string", description: "Short, e.g. 'Half-price wine until 7 PM', 'Live jazz at 8'." },
+                source: { type: "string", description: "Where it came from, e.g. 'their Instagram', 'their website', 'Petaluma events calendar'." },
+                posted: { type: "string", description: "How fresh: 'today', 'Oct 16', 'every Tuesday'." },
+                url: { type: "string", description: "The page it came from, exactly as in a web_search result." },
+              },
+              required: ["text", "source", "posted", "url"],
+            },
           },
           required: ["name", "area"],
         },
@@ -654,6 +666,14 @@ const CONCIERGE_RULES = `Concierge screen
   Ride, Order, Directions) and your products as cards with a View button. So keep the reply to 1–2 short
   lines and never list the options in the reply text; the cards show them.
 - Always give real options: up to 3 places for anything local, or the top 3 products for shopping.
+- Be a concierge, not a search engine. For dinner, drinks and fun, also search for what's happening TODAY at
+  your picks: specials, happy hours, live music, trivia, events. Choose places by fit first (what they asked,
+  open at that time, close enough), then quality; a special only breaks ties and never puts a place on the list
+  by itself. When a web result posted in the last 7 days (or a weekly event on today's weekday) shows one, put
+  it in that place's tonight with the source, how fresh, and the result's URL. Never invent or guess a special;
+  if none is found, leave tonight out. Lead the reply with the best real reason in one line (e.g. "Street
+  Social has half-price wine tonight, and Cucina has a $45 prix fixe."). Give each place a short why for
+  this person.
 - Ask at most one missing detail at a time (city, how many people, day, time, budget), in a few words.
 - Northstar can't book, order or pay. Never say something is booked, reserved or ordered. Say "Tap Reserve
   to book" or "Tap Call and I'll show you what to say."
@@ -703,18 +723,33 @@ function bookingFrom(raw: unknown) {
   return party || date || time ? { party, date, time } : null;
 }
 
-/** Places for the map card: up to 5, each a name and an area, no repeats. */
-function placesFrom(raw: unknown): { name: string; area: string }[] {
+type PlaceOut = { name: string; area: string; why?: string; tonight?: { text: string; source: string; posted: string; url: string } };
+
+/** Places for the map card: up to 5, each a name and an area, no repeats. In Concierge a place may carry
+ *  "why for you" and a "tonight" special; a special is kept only with a real link from the web search. */
+function placesFrom(raw: unknown, found: Map<string, string> = new Map()): PlaceOut[] {
   if (!Array.isArray(raw)) return [];
+  const hosts = new Set([...found.keys()].map((u) => new URL(u).hostname));
   const seen = new Set<string>();
-  const out: { name: string; area: string }[] = [];
-  for (const p of raw) {
-    const name = str((p as { name?: unknown })?.name, 80);
-    const area = str((p as { area?: unknown })?.area, 120);
+  const out: PlaceOut[] = [];
+  for (const p of raw as Array<Record<string, unknown>>) {
+    const name = str(p?.name, 80);
+    const area = str(p?.area, 120);
     const key = `${name}|${area}`.toLowerCase();
     if (!name || !area || seen.has(key)) continue;
     seen.add(key);
-    out.push({ name, area });
+    const place: PlaceOut = { name, area };
+    const why = str(p.why, 90);
+    if (why) place.why = why;
+    const t = p.tonight as Record<string, unknown> | undefined;
+    if (t && typeof t === "object") {
+      const url = str(t.url, 500);
+      let real = false;
+      try { real = found.has(url) || (url.startsWith("https://") && hosts.has(new URL(url).hostname)); } catch { real = false; }
+      const text = str(t.text, 80), source = str(t.source, 60), posted = str(t.posted, 30);
+      if (real && text && source && posted) place.tonight = { text, source, posted, url };
+    }
+    out.push(place);
     if (out.length === 5) break;
   }
   return out;
@@ -1758,6 +1793,7 @@ Deno.serve(async (req) => {
     if (found.size > 0) feats.push("web");
     if (Array.isArray(tool.places) && tool.places.length) feats.push("places");
     if (Array.isArray(tool.products) && tool.products.length) feats.push("products");
+    if (Array.isArray(tool.places) && tool.places.some((p: Record<string, unknown>) => p?.tonight)) feats.push("tonight");
     if (tool.schedule || Array.isArray(body.calendar)) feats.push("calendar");
     if (Array.isArray(tool.shots) && tool.shots.length) feats.push("video");
     if (visual) feats.push("design");
@@ -1790,7 +1826,7 @@ Deno.serve(async (req) => {
     // A calendar event or reminder the app offers to add (only added when they tap Add).
     schedule: crisis ? null : scheduleFrom(tool.schedule),
     // Real places to show on a map (the app finds them in Apple Maps).
-    places: personal || crisis ? [] : placesFrom(tool.places),
+    places: personal || crisis ? [] : placesFrom(tool.places, found),
     // "What Northstar used" for the quiet line at the end of the answer (never in personal or crisis moments).
     used: personal || crisis ? null : usedFrom(str(tool.skill, 20), modulesFrom(body.settings)),
     // Shopping cards (real links from the web search only).

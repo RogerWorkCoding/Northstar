@@ -49,7 +49,7 @@ struct ConciergeView: View {
     private let services: [Service] = [
         .init(id: "dinner", title: "Dinner", icon: "fork.knife",
               request: "Find me 3 good places for dinner near me.",
-              quick: ["For 2", "For 4", "Tonight", "Saturday", "7pm", "Delivery", "Quieter", "Cheaper"], kind: .dinner),
+              quick: ["Date night", "With kids", "Catch up with friends", "Quick bite", "For 4", "Saturday", "Delivery"], kind: .dinner),
         .init(id: "shopping", title: "Shopping", icon: "cart",
               request: "Help me shop. Ask me what I'm looking for, then compare the top 3 with prices.",
               quick: ["A gift", "Under $50", "Under $100", "Best rated", "Buy local"], kind: .shopping),
@@ -256,6 +256,17 @@ struct ConciergeView: View {
     }
 
     private func quickAnswers(_ s: Service) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if s.kind == .dinner, !places.isEmpty {
+                Text("What's the night about?")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(NorthstarChatStyle.soft)
+            }
+            quickChips(s)
+        }
+    }
+
+    private func quickChips(_ s: Service) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(s.quick, id: \.self) { q in

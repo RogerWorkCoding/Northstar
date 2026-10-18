@@ -77,6 +77,17 @@ struct ConciergePicks: View {
                 .foregroundStyle(NorthstarChatStyle.soft)
                 .lineLimit(2)
 
+            if let t = p.place.tonight {
+                tonightBlock(t)
+            }
+
+            if let why = p.place.why, !why.isEmpty {
+                Text("Why for you: \(why)")
+                    .font(.subheadline)
+                    .foregroundStyle(NorthstarChatStyle.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             HStack(spacing: 8) {
                 switch kind {
                 case .dinner:
@@ -97,6 +108,35 @@ struct ConciergePicks: View {
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(NorthstarChatStyle.card))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
         .accessibilityElement(children: .contain)
+    }
+
+    /// ✦ TONIGHT: the special, then where it came from and how fresh (tap to check the source).
+    private func tonightBlock(_ t: NorthstarInsight.Place.Tonight) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkle")
+                Text("TONIGHT").tracking(1.5)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(NorthstarChatStyle.starGold)
+            Text(t.text)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(NorthstarChatStyle.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Button { openURL(t.url) } label: {
+                HStack(spacing: 4) {
+                    Text("From \(t.source) · \(t.posted.lowercased() == "today" ? "posted today" : t.posted)")
+                    Image(systemName: "arrow.up.right").font(.caption2.weight(.semibold))
+                }
+                .font(.footnote)
+                .foregroundStyle(NorthstarChatStyle.label)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the source to check it")
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NorthstarChatStyle.cardStrong))
     }
 
     /// Ride, directions and (for dinner) delivery.
