@@ -90,6 +90,9 @@ struct ContentView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isWelcomeMessageVisible = true
+    /// Launch screen (approved): star, wordmark, tagline and mountains only, no ask bar.
+    /// The bar fades in when the tagline fades out (first open only, not after New Chat).
+    @State private var launching = true
 
     // The composer's real, measured footprint (bar + its own bottom margin),
     // used to pad the scroll content directly instead of trusting
@@ -338,6 +341,7 @@ struct ContentView: View {
         isWelcomeMessageVisible = true
         Task {
             try? await Task.sleep(for: .seconds(2.75))
+            withAnimation(.easeOut(duration: reduceMotion ? 0.15 : 0.6)) { launching = false }
             guard viewModel.messages.isEmpty else { return }
             withAnimation(.easeOut(duration: reduceMotion ? 0.15 : 0.6)) {
                 isWelcomeMessageVisible = false
@@ -443,6 +447,9 @@ struct ContentView: View {
 
     private var promptArea: some View {
         composerBox
+        .opacity(launching ? 0 : 1)
+        .allowsHitTesting(!launching)
+        .accessibilityHidden(launching)
         .padding(.horizontal, 6)
         .padding(.bottom, isPromptFocused ? 8 : 46)
         .animation(.easeOut(duration: 0.2), value: isPromptFocused)
