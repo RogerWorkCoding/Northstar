@@ -1139,22 +1139,25 @@ struct ContentView: View {
         var quiet = Transaction()
         quiet.disablesAnimations = true
         withTransaction(quiet) { welcomed = true }
-        let first: String
         switch choice {
         case .skip:
             return
         case .words(let words):
-            first = words
-        case .path(let label, let words):
-            let start = "Let's start with \u{201C}\(label)\u{201D}."
-            first = words.isEmpty ? start : words + "\n\n" + start
-        }
-        guard !first.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        Task {
-            try? await Task.sleep(for: .milliseconds(350))
-            guard !isThinking else { return }
-            appendUserMessage(first)
-            requestGeminiResponse()
+            // "Something else" or crisis words: Northstar answers their own words.
+            guard !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            Task {
+                try? await Task.sleep(for: .milliseconds(350))
+                guard !isThinking else { return }
+                appendUserMessage(words)
+                requestGeminiResponse()
+            }
+        case .path(_, let words, let opener):
+            // Northstar speaks first, on the path they chose. Their words stay above it as context.
+            Task {
+                try? await Task.sleep(for: .milliseconds(350))
+                if !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { appendUserMessage(words) }
+                appendAssistantMessage(opener)
+            }
         }
     }
 

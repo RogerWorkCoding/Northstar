@@ -13,7 +13,7 @@ import Supabase
 enum PathChoice: Equatable {
     case skip
     case words(String)                       // "Something else", a direct request, or crisis words
-    case path(label: String, words: String)
+    case path(label: String, words: String, opener: String)
 }
 
 nonisolated struct PathOption: Identifiable, Hashable, Sendable, Decodable {
@@ -88,8 +88,8 @@ struct PathForwardView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
 
-    private let starSize: CGFloat = 150                // the star's full size, in the middle
-    private let bubble: CGFloat = 82
+    private let starSize: CGFloat = 190                // the star's full size, in the middle
+    private let bubble: CGFloat = 78
     private let somethingElse = "Something else"
 
     private let gold = Color(red: 1.0, green: 0.84, blue: 0.55)
@@ -240,7 +240,9 @@ struct PathForwardView: View {
 
     @ViewBuilder
     private func choosingLayer(center: CGPoint, size: CGSize) -> some View {
-        let heard = (reply?.heard ?? "").isEmpty ? text.trimmingCharacters(in: .whitespacesAndNewlines) : (reply?.heard ?? "")
+        // Their exact words, never a rewording.
+        let said = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let heard = said.count > 60 ? String(said.prefix(57)) + "\u{2026}" : said
         VStack(spacing: 6) {
             Spacer().frame(height: 44 + 12)
             Text(reply?.fallback == true ? "Here are a few places to start." : "Here are a few ways forward.")
@@ -287,7 +289,7 @@ struct PathForwardView: View {
                         let d = hypot(at.x - center.x, at.y - center.y)
                         // Apple Watch feel: bigger near the star, smaller toward the edges.
                         let fisheye = reduceMotion ? 1 : max(0.7, min(1.08, 1.3 - d / (size.width * 0.9)))
-                        bubbleView(p, quiet: p.label == somethingElse)
+                        bubbleView(p, quiet: p.label == somethingElse, index: i)
                             .scaleEffect(scale(for: p, fisheye: fisheye))
                             .opacity(opacity(for: p, index: i))
                             .position(at)
@@ -304,39 +306,56 @@ struct PathForwardView: View {
         }
     }
 
-    private func bubbleView(_ p: PathOption, quiet: Bool) -> some View {
+    /// Frosted glass: a deep navy body lit from above, a soft sheen, a gold-to-lavender rim and a faint glow.
+    private func bubbleView(_ p: PathOption, quiet: Bool, index: Int) -> some View {
         let isPicked = picked == p
+        // Each bubble leans a little warmer or cooler, so they feel like different lights, not buttons.
+        let tint = [lavender, gold, Color(red: 0.62, green: 0.80, blue: 1.0), lavender, gold, lavender][index % 6]
         return ZStack {
-            Circle().fill(glass.opacity(quiet ? 0.45 : 0.62))
-            Circle().fill(RadialGradient(colors: [lavender.opacity(0.28), .clear], center: .topLeading,
-                                         startRadius: 2, endRadius: bubble * 0.8))
+            Circle().fill(LinearGradient(colors: [Color(red: 0.20, green: 0.22, blue: 0.48), glass, Color(red: 0.05, green: 0.07, blue: 0.20)],
+                                         startPoint: .top, endPoint: .bottom))
+                .opacity(quiet ? 0.6 : 0.88)
+            Circle().fill(RadialGradient(colors: [tint.opacity(0.30), .clear], center: UnitPoint(x: 0.3, y: 0.25),
+                                         startRadius: 1, endRadius: bubble * 0.75))
+            Ellipse()
+                .fill(LinearGradient(colors: [.white.opacity(0.28), .white.opacity(0)], startPoint: .top, endPoint: .bottom))
+                .frame(width: bubble * 0.62, height: bubble * 0.30)
+                .offset(y: -bubble * 0.26)
+                .blur(radius: 1.5)
             Circle().strokeBorder(
-                LinearGradient(colors: [gold.opacity(isPicked ? 1 : 0.75), lavender.opacity(0.5)],
+                LinearGradient(colors: [gold.opacity(isPicked ? 1 : 0.85), tint.opacity(0.35), lavender.opacity(0.55)],
                                startPoint: .topLeading, endPoint: .bottomTrailing),
                 lineWidth: isPicked ? 2.5 : 1.2)
             Text(p.label)
-                .font(.system(size: quiet ? 12 : 13, weight: .medium))
+                .font(.system(size: quiet ? 11.5 : 12.5, weight: .medium))
                 .multilineTextAlignment(.center)
                 .lineLimit(3)
                 .minimumScaleFactor(0.8)
-                .padding(10)
-                .foregroundStyle(.white.opacity(quiet ? 0.75 : 1))
+                .padding(9)
+                .foregroundStyle(.white.opacity(quiet ? 0.75 : 0.96))
             if isPicked {
                 Image(systemName: "checkmark")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(gold)
-                    .offset(y: bubble * 0.34)
+                    .offset(y: bubble * 0.36)
             }
         }
         .frame(width: bubble, height: bubble)
-        .shadow(color: gold.opacity(isPicked ? 0.6 : 0.12), radius: isPicked ? 16 : 8)
+        .shadow(color: (isPicked ? gold : tint).opacity(isPicked ? 0.7 : 0.28), radius: isPicked ? 18 : 10)
     }
 
     // MARK: Geometry
 
     private var star: some View {
-        NorthstarVisionStarMark(size: starSize)
-            .shadow(color: gold.opacity(phase == .asking ? 0.2 : 0.45), radius: 30)
+        ZStack {
+            // A warm halo, so the star reads as the brightest light in the sky.
+            Circle()
+                .fill(RadialGradient(colors: [gold.opacity(phase == .asking ? 0.12 : 0.30), gold.opacity(0.06), .clear],
+                                     center: .center, startRadius: 4, endRadius: starSize * 0.9))
+                .frame(width: starSize * 1.8, height: starSize * 1.8)
+            NorthstarVisionStarMark(size: starSize)
+        }
+        .shadow(color: gold.opacity(phase == .asking ? 0.2 : 0.5), radius: 34)
     }
 
     private var starScale: CGFloat {
@@ -356,7 +375,7 @@ struct PathForwardView: View {
 
     /// Where bubble i rests: evenly around the star, starting at the top, drifting gently.
     private func spot(_ i: Int, of n: Int, center: CGPoint, size: CGSize, time: Date) -> CGPoint {
-        let r = min(size.width * 0.36, size.height * 0.26)
+        let r = min(size.width * 0.37, size.height * 0.24)
         let a = -Double.pi / 2 + Double(i) * 2 * .pi / Double(max(n, 1))
         let t = reduceMotion ? 0 : time.timeIntervalSinceReferenceDate
         let drift = reduceMotion ? 0.0 : 4.0
@@ -377,7 +396,7 @@ struct PathForwardView: View {
 
     private func opacity(for p: PathOption, index: Int) -> Double {
         guard index < shown else { return 0 }
-        if let picked { return picked == p ? (phase == .merging ? 0 : 1) : 0.3 }
+        if let picked { return picked == p ? (phase == .merging ? 0 : 1) : 0 }
         return 1
     }
 
@@ -454,7 +473,8 @@ struct PathForwardView: View {
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let choice: PathChoice = p.label == somethingElse
             ? (words.isEmpty ? .skip : .words(words))
-            : .path(label: p.label, words: words)
+            : .path(label: p.label, words: words,
+                    opener: p.opener.isEmpty ? "Let's \(p.label.lowercased()) together. Where would you like to start?" : p.opener)
         UISelectionFeedbackGenerator().selectionChanged()
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             picked = p
