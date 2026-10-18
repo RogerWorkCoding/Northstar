@@ -159,6 +159,12 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         let url: URL
     }
 
+    /// The expert behind the answer (a skill like Design, or a switched-on module like Wood carving).
+    nonisolated struct Used: Hashable, Sendable, Decodable {
+        let expert: String
+        let module: Bool?
+    }
+
     /// What they've said so far for a table or appointment (fills the Reserve and Call buttons).
     nonisolated struct Booking: Hashable, Sendable, Decodable {
         var party: Int?
@@ -239,6 +245,22 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let products: [Product]
     /// Booking details (Concierge; nil otherwise).
     let booking: Booking?
+    /// The expert the brain used (nil for plain chat, personal moments and crisis).
+    let used: Used?
+
+    /// The quiet line at the end of an answer: "Wood carving · looked at 3 sources".
+    /// Only what really happened; nil when nothing special did (so plain chat stays clean).
+    var usedLine: String? {
+        guard !crisis else { return nil }
+        var parts: [String] = []
+        if let used { parts.append(used.expert) }
+        if !sources.isEmpty { parts.append("looked at \(sources.count) source\(sources.count == 1 ? "" : "s")") }
+        if !places.isEmpty { parts.append("\(places.count) on the map") }
+        if visual != nil { parts.append("sketched a layout") }
+        guard let first = parts.first else { return nil }
+        parts[0] = first.prefix(1).uppercased() + first.dropFirst()
+        return parts.joined(separator: " · ")
+    }
     /// Video shot cards (empty unless they're making a video).
     let shots: [Shot]
     /// YouTube lessons to watch in the app (empty unless a module found some).
@@ -276,6 +298,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case places
         case products
         case booking
+        case used
         case shots
         case videos
         case code
@@ -307,6 +330,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
             .filter { $0.url.scheme == "https" }
             .prefix(3))
         booking = try? c.decodeIfPresent(Booking.self, forKey: .booking)
+        used = try? c.decodeIfPresent(Used.self, forKey: .used)
         shots = Array(((try? c.decodeIfPresent([Shot].self, forKey: .shots)) ?? []).prefix(5))
         videos = Array(((try? c.decodeIfPresent([LessonVideo].self, forKey: .videos)) ?? [])
             .filter { $0.id.range(of: "^[A-Za-z0-9_-]{11}$", options: .regularExpression) != nil }

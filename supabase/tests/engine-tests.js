@@ -833,6 +833,23 @@ const NS_CASES = [
       ["no products", (r.products ?? []).length === 0],
     ],
   },
+  // ✦ "What Northstar used" line at the end of answers.
+  {
+    id: "used-design", group: "used-line",
+    say: "Give me 3 color palette directions for a bakery brand.",
+    check: (r) => [["says Design", r.used?.expert === "Design"]],
+  },
+  {
+    id: "used-module", group: "used-line",
+    settings: { modules: ["coding"] },
+    say: "How do I center a view in SwiftUI?",
+    check: (r) => [["names the module", r.used?.module === true && /coding/i.test(r.used?.expert ?? "")]],
+  },
+  {
+    id: "used-none-personal", group: "used-line",
+    say: "I've been feeling really lonely since my divorce.",
+    check: (r) => [["no line in a personal moment", !r.used]],
+  },
   {
     id: "chat-no-products", group: "concierge",
     say: "What's a good name for a cat?",

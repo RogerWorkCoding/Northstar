@@ -455,8 +455,8 @@ const REPLY_TOOL = {
       },
       skill: {
         type: "string",
-        enum: ["none", ...Object.keys(SKILLS)],
-        description: "Which skill (expert) you used for this reply, or none.",
+        enum: ["none", ...new Set([...Object.keys(SKILLS), ...Object.keys(MODULES)])],
+        description: "Which skill or switched-on module (expert) you mainly used for this reply, or none.",
       },
       shots: {
         type: "array",
@@ -664,6 +664,13 @@ const CONCIERGE_RULES = `Concierge screen
   weather, rules), with sources. Places only if they help.
 - If anything sounds like an emergency, start with "Call 911 now." Never diagnose; point to a doctor,
   urgent care or the ER.`;
+
+/** The expert behind this answer, in plain words, for the line under it. Modules only count when switched on. */
+function usedFrom(skill: string, on: string[]): { expert: string; module: boolean } | null {
+  if (skill in MODULES && on.includes(skill)) return { expert: MODULES[skill].name, module: true };
+  const names: Record<string, string> = { design: "Design", places: "Places", news: "News", convert: "Quick math", video: "Video" };
+  return names[skill] ? { expert: names[skill], module: false } : null;
+}
 
 /** Products for the shopping cards: up to 3, each with a real link from the web search. */
 function productsFrom(raw: unknown, found: Map<string, string>) {
@@ -1780,6 +1787,8 @@ Deno.serve(async (req) => {
     schedule: crisis ? null : scheduleFrom(tool.schedule),
     // Real places to show on a map (the app finds them in Apple Maps).
     places: personal || crisis ? [] : placesFrom(tool.places),
+    // "What Northstar used" for the quiet line at the end of the answer (never in personal or crisis moments).
+    used: personal || crisis ? null : usedFrom(str(tool.skill, 20), modulesFrom(body.settings)),
     // Shopping cards (real links from the web search only).
     products: personal || crisis ? [] : productsFrom(tool.products, found),
     // Booking details for the Concierge Reserve and Call buttons.

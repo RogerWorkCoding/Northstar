@@ -247,6 +247,18 @@ struct NorthstarReplyView: View {
                     saveCard(save)
                 }
             }
+
+            // ✦ What Northstar used, quietly, at the very end.
+            if let line = insight?.usedLine {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkle").font(.caption2)
+                    Text(line).font(.footnote)
+                }
+                .foregroundStyle(NorthstarChatStyle.label)
+                .padding(.top, 2)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Northstar used: \(line)")
+            }
         }
         .padding(.horizontal, 20)
     }
