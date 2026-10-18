@@ -4,7 +4,7 @@ import Supabase
 
 // 🎟 "Happening near you" (Concierge): event images to swipe through, below the tiles.
 // Only the CITY's center point is sent (never the person's exact spot). Events come from Ticketmaster
-// through the northstar-nearby function. Tap a card for Tickets, Directions and Add to calendar.
+// and SeatGeek through the northstar-nearby function. Tap a card for Tickets, Directions and Add to calendar.
 // If there's nothing to show (no location, not set up, no events), the row simply isn't there.
 
 nonisolated struct NearbyEvent: Identifiable, Hashable, Sendable, Decodable {
@@ -17,6 +17,8 @@ nonisolated struct NearbyEvent: Identifiable, Hashable, Sendable, Decodable {
     let image: URL
     let url: URL
     let miles: Double?
+    /// Where it came from: "Ticketmaster" or "SeatGeek" (for the credit line).
+    var source: String? = nil
 
     var start: Date? {
         let f = DateFormatter()
@@ -91,7 +93,7 @@ struct NearbyEventsRow: View {
                         .padding(.vertical, 2)
                     }
                     .scrollClipDisabled()
-                    Text("Events from Ticketmaster")
+                    Text("Events from " + Set(events.compactMap(\.source)).sorted().joined(separator: " and "))
                         .font(.caption2)
                         .foregroundStyle(NorthstarChatStyle.label)
                 }
