@@ -53,7 +53,7 @@ const TOOL = {
         items: {
           type: "object",
           properties: {
-            label: { type: "string", description: "2-3 words, verb first, sentence case, in their language. e.g. Plan my week" },
+            label: { type: "string", description: "2-3 words, at most 22 characters, verb first, sentence case, in their language. e.g. Plan my week" },
             icon: { type: "string", enum: [...ICONS] },
             opener: { type: "string", description: "Northstar's first chat line for this path: under 25 words, names the path, ends with exactly one question." },
           },
@@ -72,7 +72,7 @@ Rules:
 - Each path a different kind of help: plan, do, understand, and when feelings show up, "Talk it through".
 - Labels: 2-3 words, verb first, sentence case, in the person's language. "Plan my week", not "Weekly Planning".
 - No diagnosis, no assumptions beyond their words. "I'm tired all the time" -> "Look at my sleep", never a medical guess.
-- tone: practical (tasks), personal (feelings show up: include Talk it through), vague ("idk", "not sure": include "See what Northstar can do"), direct (one clear request like "find sushi tonight").
+- tone: practical (tasks, goals, wanting to learn or improve), personal (feelings show up: include "Talk it through"), vague ("idk", "not sure": include "Explore Northstar"), direct ONLY for one concrete thing to fetch or look up right now ("find sushi tonight", "weather tomorrow"). A goal like "I want to learn something new" is practical, never direct.
 - Opener: warm, plain, under 25 words, ends with one question.`;
 
 const recent = new Map<string, number[]>();
@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
     const seen = new Set<string>();
     const paths = (Array.isArray(out.paths) ? out.paths : [])
       .map((p: Record<string, unknown>) => ({
-        label: String(p?.label ?? "").replace(/\s+/g, " ").trim().slice(0, 24),
+        label: String(p?.label ?? "").replace(/\s+/g, " ").trim().slice(0, 30),
         icon: ICONS.has(String(p?.icon)) ? String(p.icon) : "sparkle",
         opener: String(p?.opener ?? "").trim().slice(0, 200),
       }))
