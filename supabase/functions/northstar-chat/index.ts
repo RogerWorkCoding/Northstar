@@ -511,6 +511,32 @@ const REPLY_TOOL = {
           required: ["name", "area"],
         },
       },
+      products: {
+        type: "array",
+        maxItems: 3,
+        description: "Shopping only: the top products to compare (from web_search results, never invented). Empty otherwise.",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Product name, e.g. 'Ninja AF101 Air Fryer'." },
+            price: { type: "string", description: "Price as found, e.g. '$89.99'. Empty if not found." },
+            store: { type: "string", description: "Where it's sold, e.g. 'Target'." },
+            rating: { type: "string", description: "Rating as found, e.g. '4.7★ (12k)'. Empty if not found." },
+            why: { type: "string", description: "One short line: why it's a good pick." },
+            url: { type: "string", description: "The product page URL, exactly as in a web_search result." },
+          },
+          required: ["name", "why", "url"],
+        },
+      },
+      booking: {
+        type: "object",
+        description: "Concierge only: the booking details they have said so far for a table or appointment (so the Reserve and Call buttons are filled in). Omit when none.",
+        properties: {
+          party: { type: "integer", description: "How many people." },
+          date: { type: "string", description: "Their local date, YYYY-MM-DD." },
+          time: { type: "string", description: "Their local time, HH:MM, 24-hour." },
+        },
+      },
       schedule: {
         type: "object",
         description: "Only when they mention their own appointment with a day/time or ask to be reminded: ONE item for the app to offer adding (they tap Add). Omit otherwise.",
@@ -616,6 +642,54 @@ function shotsFrom(raw: unknown): { title: string; seconds: number; framing: str
       prompt: str(o.prompt, 600),
     };
   }).filter((s) => s.title && s.prompt);
+}
+
+// 🛎 Concierge screen rules (only when the request comes from the Concierge screen).
+const CONCIERGE_RULES = `Concierge screen
+- They're on the Concierge screen. The app shows your places as cards with a map and buttons (Reserve, Call,
+  Ride, Order, Directions) and your products as cards with a View button. So keep the reply to 1–2 short
+  lines and never list the options in the reply text; the cards show them.
+- Always give real options: up to 3 places for anything local, or the top 3 products for shopping.
+- Ask at most one missing detail at a time (city, how many people, day, time, budget), in a few words.
+- Northstar can't book, order or pay. Never say something is booked, reserved or ordered. Say "Tap Reserve
+  to book" or "Tap Call and I'll show you what to say."
+- Booking: whenever they've said how many people, the day or the time for a table or an appointment, fill
+  booking (keep earlier details from the chat).
+- Shopping and gifts: search first. Use real current prices and stores from the results, put each in
+  products, and say prices can change. Compare in one line (e.g. "Best value is the Ninja; the Cosori is
+  quieter."). For gifts, ask who it's for and the budget if you don't know.
+- Home & services (plumber, electrician, cleaner, handyman, car repair, pet care): well-reviewed local
+  businesses in places; remind them to ask if they're licensed and insured.
+- Look it up: answer the question itself in 2–5 short lines (search when facts change: hours, prices,
+  weather, rules), with sources. Places only if they help.
+- If anything sounds like an emergency, start with "Call 911 now." Never diagnose; point to a doctor,
+  urgent care or the ER.`;
+
+/** Products for the shopping cards: up to 3, each with a real link from the web search. */
+function productsFrom(raw: unknown, found: Map<string, string>) {
+  if (!Array.isArray(raw)) return [];
+  const hosts = new Set([...found.keys()].map((u) => new URL(u).hostname));
+  const out: { name: string; price: string; store: string; rating: string; why: string; url: string }[] = [];
+  for (const p of raw as Array<Record<string, unknown>>) {
+    const name = str(p?.name, 100);
+    const url = str(p?.url, 500);
+    let ok = false;
+    try { ok = found.has(url) || (url.startsWith("https://") && hosts.has(new URL(url).hostname)); } catch { ok = false; }
+    if (!name || !ok) continue;
+    out.push({ name, price: str(p.price, 30), store: str(p.store, 40), rating: str(p.rating, 30), why: str(p.why, 160), url });
+    if (out.length === 3) break;
+  }
+  return out;
+}
+
+/** Booking details for the Reserve and Call buttons (party size, date, time); null when none. */
+function bookingFrom(raw: unknown) {
+  if (!raw || typeof raw !== "object") return null;
+  const b = raw as Record<string, unknown>;
+  const party = typeof b.party === "number" && b.party >= 1 && b.party <= 30 ? Math.round(b.party) : null;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(str(b.date, 10)) ? str(b.date, 10) : null;
+  const time = /^\d{2}:\d{2}$/.test(str(b.time, 5)) ? str(b.time, 5) : null;
+  return party || date || time ? { party, date, time } : null;
 }
 
 /** Places for the map card: up to 5, each a name and an area, no repeats. */
@@ -1329,6 +1403,7 @@ Deno.serve(async (req) => {
   ].join("\n\n");
   const personPart = [
     nowLine(body.settings),
+    str(body.source, 20) === "concierge" ? CONCIERGE_RULES : "",
     earlier,
     settingsRules(body.settings),
     subjectsBlock(subjects),
@@ -1671,6 +1746,7 @@ Deno.serve(async (req) => {
     if (photo) feats.push("photo");
     if (found.size > 0) feats.push("web");
     if (Array.isArray(tool.places) && tool.places.length) feats.push("places");
+    if (Array.isArray(tool.products) && tool.products.length) feats.push("products");
     if (tool.schedule || Array.isArray(body.calendar)) feats.push("calendar");
     if (Array.isArray(tool.shots) && tool.shots.length) feats.push("video");
     if (visual) feats.push("design");
@@ -1704,6 +1780,10 @@ Deno.serve(async (req) => {
     schedule: crisis ? null : scheduleFrom(tool.schedule),
     // Real places to show on a map (the app finds them in Apple Maps).
     places: personal || crisis ? [] : placesFrom(tool.places),
+    // Shopping cards (real links from the web search only).
+    products: personal || crisis ? [] : productsFrom(tool.products, found),
+    // Booking details for the Concierge Reserve and Call buttons.
+    booking: personal || crisis ? null : bookingFrom(tool.booking),
     // Video shot cards to paste into a video tool (never in personal or crisis moments).
     shots: personal || crisis ? [] : shotsFrom(tool.shots),
     // Code cards (Coding module only): monospace, with a Copy button in the app.

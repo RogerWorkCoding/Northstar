@@ -2,9 +2,10 @@ import SwiftUI
 import MapKit
 
 // 🛎 Concierge: visual and voice-first.
-// Pick what you need (Dinner, Fitness…). Northstar works in the background and the picks appear here
-// as cards with a small map and buttons: Reserve, Call, Ride. Need more? Tap the mic and say it,
-// or tap a quick answer ("For 4", "Saturday"). The conversation runs behind the scenes.
+// Pick what you need (Dinner, Shopping, Home…). Northstar works in the background and the picks appear
+// here as cards: places with a small map and buttons (Reserve, Call, Ride, Order), products with a View
+// button, or a short answer with sources (Look It Up). Need more? Tap the mic and say it, or tap a quick
+// answer ("For 4", "Saturday"). Urgent Help opens real help right away (911 first), with no AI.
 // Northstar shows options; you choose. It never books or pays.
 
 struct ConciergeView: View {
@@ -20,6 +21,11 @@ struct ConciergeView: View {
     @State private var working = false
     @State private var line = ""          // Northstar's short line at the top
     @State private var places: [NorthstarInsight.Place] = []
+    @State private var products: [NorthstarInsight.Product] = []
+    @State private var sources: [NorthstarInsight.Source] = []
+    @State private var answer = ""        // Look It Up: the full answer
+    @State private var booking = NorthstarInsight.Booking()
+    @State private var showUrgent = false
     @State private var typed = ""
     @State private var speech = SpeechRecognizer()
     @State private var micMessage: String?
@@ -35,32 +41,39 @@ struct ConciergeView: View {
         let icon: String
         let request: String
         let quick: [String]
-        /// Dinner: Reserve opens a reservation search.
-        var reserves: Bool = false
+        var kind: Kind = .places
+
+        enum Kind { case places, dinner, shopping, home, lookUp }
     }
 
     private let services: [Service] = [
         .init(id: "dinner", title: "Dinner", icon: "fork.knife",
               request: "Find me 3 good places for dinner near me.",
-              quick: ["For 2", "For 4", "Tonight", "Saturday", "Quieter", "Cheaper"], reserves: true),
-        .init(id: "fitness", title: "Fitness", icon: "figure.yoga",
-              request: "Find 3 fitness classes or gyms near me.",
-              quick: ["Yoga", "Pilates", "Beginners", "Mornings", "Evenings"]),
+              quick: ["For 2", "For 4", "Tonight", "Saturday", "7pm", "Delivery", "Quieter", "Cheaper"], kind: .dinner),
+        .init(id: "shopping", title: "Shopping", icon: "cart",
+              request: "Help me shop. Ask me what I'm looking for, then compare the top 3 with prices.",
+              quick: ["A gift", "Under $50", "Under $100", "Best rated", "Buy local"], kind: .shopping),
         .init(id: "fun", title: "Fun", icon: "sparkles",
               request: "Find 3 fun things to do near me this week.",
               quick: ["Outdoors", "With kids", "Date night", "Free", "Saturday"]),
+        .init(id: "fitness", title: "Fitness", icon: "figure.yoga",
+              request: "Find 3 fitness classes or gyms near me.",
+              quick: ["Yoga", "Pilates", "Beginners", "Mornings", "Evenings"]),
         .init(id: "travel", title: "Travel", icon: "airplane",
               request: "Help me with travel: a ride, a hotel or a flight. Ask me which one and where I'm going, then show the best 3 options.",
               quick: ["Ride", "Hotel", "Flight", "Airport", "This weekend"]),
         .init(id: "errands", title: "Errands", icon: "bag",
               request: "Find the 3 nearest open pharmacies or stores near me.",
-              quick: ["Pharmacy", "Grocery", "Hardware", "Open now"]),
-        .init(id: "gifts", title: "Gifts", icon: "gift",
-              request: "Help me find a good gift. Suggest 3 local shops near me.",
-              quick: ["Under $25", "Under $50", "For her", "For him", "Handmade"]),
+              quick: ["Pharmacy", "Grocery", "Hardware", "Post office", "Open now"]),
+        .init(id: "home", title: "Home & Services", icon: "wrench.and.screwdriver",
+              request: "I need help at home. Ask me what kind (plumber, electrician, cleaner, handyman, car repair or pet care), then find 3 well-reviewed local ones.",
+              quick: ["Plumber", "Electrician", "Cleaner", "Handyman", "Car repair", "Pet care"], kind: .home),
+        .init(id: "lookup", title: "Look It Up", icon: "magnifyingglass",
+              request: "",
+              quick: ["Is it open now?", "Weather this weekend", "Gas prices near me", "Compare two things"], kind: .lookUp),
     ]
 
-    private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+    private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
     var body: some View {
         ZStack {
@@ -103,6 +116,7 @@ struct ConciergeView: View {
             if speech.isRecording { speech.stopRecording() }
             NorthstarVoice.shared.stop()
         }
+        .fullScreenCover(isPresented: $showUrgent) { UrgentHelpView() }
         .alert("Voice input", isPresented: Binding(get: { micMessage != nil }, set: { if !$0 { micMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -159,15 +173,20 @@ struct ConciergeView: View {
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(services) { s in
                     Button { start(s) } label: {
-                        VStack(spacing: 8) {
+                        HStack(spacing: 10) {
                             Image(systemName: s.icon)
-                                .font(.system(size: 22))
+                                .font(.system(size: 20))
                                 .foregroundStyle(NorthstarChatStyle.linkBlue)
+                                .frame(width: 28)
                             Text(s.title)
-                                .font(.subheadline.weight(.medium))
+                                .font(.body.weight(.medium))
                                 .foregroundStyle(NorthstarChatStyle.text)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 84)
+                        .padding(.horizontal, 14)
+                        .frame(maxWidth: .infinity, minHeight: 64)
                         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(NorthstarChatStyle.card))
                         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
                         .contentShape(Rectangle())
@@ -175,6 +194,30 @@ struct ConciergeView: View {
                     .buttonStyle(.plain)
                 }
             }
+
+            // Urgent Help: always last and always the same, so it's easy to find in a hurry.
+            Button { showUrgent = true } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "cross.case.fill")
+                        .font(.system(size: 20))
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Urgent Help").font(.body.weight(.semibold))
+                        Text("911, nearest ER, urgent care, pharmacy")
+                            .font(.footnote)
+                            .opacity(0.9)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right").font(.footnote.weight(.semibold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity, minHeight: 64)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(UrgentHelpView.red))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens 911, the nearest emergency room, urgent care and pharmacy")
 
             Label("Northstar never books or pays without you.", systemImage: "hand.raised")
                 .font(.footnote)
@@ -195,6 +238,13 @@ struct ConciergeView: View {
                         .foregroundStyle(NorthstarChatStyle.soft)
                 }
                 .padding(.vertical, 8)
+            } else if service?.kind == .lookUp, !answer.isEmpty {
+                Text(NorthstarReplyView.formatted(answer))
+                    .font(.system(size: 18))
+                    .foregroundStyle(NorthstarChatStyle.text)
+                    .tint(NorthstarChatStyle.linkBlue)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
             } else if !line.isEmpty {
                 Text(line)
                     .font(.system(size: 18))
@@ -203,9 +253,17 @@ struct ConciergeView: View {
                     .textSelection(.enabled)
             }
 
-            if !places.isEmpty {
-                ConciergePicks(places: places, reserves: service?.reserves == true)
+            if !products.isEmpty {
+                ProductCards(products: products)
+            }
+
+            if !places.isEmpty, let service {
+                ConciergePicks(places: places, kind: service.kind, booking: booking)
                     .id(places)
+            }
+
+            if !sources.isEmpty, !working {
+                SourcesRow(sources: sources)
             }
 
             if let service, !working {
@@ -290,8 +348,13 @@ struct ConciergeView: View {
     private func start(_ s: Service) {
         service = s
         turns = []
-        places = []
-        line = ""
+        clearResults()
+        booking = .init()
+        if s.kind == .lookUp {
+            line = "What should I look up? Say it or type it."
+            typing = true
+            return
+        }
         Task {
             var request = s.request
             if let city = await NearMe.shared.cityName() {
@@ -307,10 +370,18 @@ struct ConciergeView: View {
         NorthstarVoice.shared.stop()
         service = nil
         turns = []
-        places = []
-        line = ""
+        clearResults()
+        booking = .init()
         typed = ""
         working = false
+    }
+
+    private func clearResults() {
+        places = []
+        products = []
+        sources = []
+        answer = ""
+        line = ""
     }
 
     private func ask(_ text: String) {
@@ -332,7 +403,11 @@ struct ConciergeView: View {
             working = false
             turns.append(MessageModel(role: .assistant, content: answer.text, insight: answer.insight))
             line = Self.shortLine(answer.text)
+            self.answer = answer.text
+            booking = booking.merged(with: answer.insight?.booking)
             if let found = answer.insight?.places, !found.isEmpty { places = found }
+            if let found = answer.insight?.products, !found.isEmpty { products = found }
+            sources = answer.insight?.sources ?? []
             if NorthstarVoice.autoSpeak, !answer.failed { NorthstarVoice.shared.speak(line) }
         }
     }
@@ -375,174 +450,6 @@ struct ConciergeView: View {
         let plain = joined.replacingOccurrences(of: #"\[([^\]]+)\]\([^)]+\)"#, with: "$1", options: .regularExpression)
             .replacingOccurrences(of: "**", with: "")
         return plain.isEmpty ? text : plain
-    }
-}
-
-// MARK: - The picks: a small map and one card per place
-
-private struct ConciergePicks: View {
-    let places: [NorthstarInsight.Place]
-    let reserves: Bool
-
-    struct Pick: Identifiable {
-        let id = UUID()
-        let place: NorthstarInsight.Place
-        let item: MKMapItem?
-        let miles: Double?
-    }
-
-    @State private var picks: [Pick] = []
-    @State private var searched = false
-    @Environment(\.openURL) private var openURL
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            let pinned = picks.filter { $0.item != nil }
-            if !pinned.isEmpty {
-                Map(initialPosition: .automatic, interactionModes: []) {
-                    ForEach(Array(pinned.enumerated()), id: \.element.id) { index, p in
-                        if let item = p.item {
-                            Marker("\(index + 1)", coordinate: item.location.coordinate)
-                        }
-                    }
-                    UserAnnotation()
-                }
-                .frame(height: 170)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
-                .accessibilityLabel("Map of \(pinned.map(\.place.name).joined(separator: ", "))")
-            } else if !searched {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(NorthstarChatStyle.card)
-                    .frame(height: 170)
-                    .overlay(ProgressView().tint(NorthstarChatStyle.text))
-            }
-
-            ForEach(Array((searched ? picks : places.map { Pick(place: $0, item: nil, miles: nil) }).enumerated()), id: \.element.id) { index, p in
-                card(p, number: index + 1)
-            }
-        }
-        .task { await search() }
-    }
-
-    private func card(_ p: Pick, number: Int) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("\(number) · \(p.place.name)")
-                    .font(.headline)
-                    .foregroundStyle(NorthstarChatStyle.text)
-                    .lineLimit(2)
-                Spacer(minLength: 8)
-                if let miles = p.miles {
-                    Text(String(format: miles < 10 ? "%.1f mi" : "%.0f mi", miles))
-                        .font(.footnote)
-                        .foregroundStyle(NorthstarChatStyle.label)
-                }
-            }
-            Text(p.item?.address?.shortAddress ?? p.place.area)
-                .font(.subheadline)
-                .foregroundStyle(NorthstarChatStyle.soft)
-                .lineLimit(2)
-
-            HStack(spacing: 8) {
-                if reserves {
-                    pill("Reserve", primary: true) { reserve(p) }
-                } else if let url = p.item?.url {
-                    pill("Website", primary: true) { openURL(url) }
-                }
-                if let phone = p.item?.phoneNumber,
-                   let url = URL(string: "tel:" + phone.filter { "0123456789+".contains($0) }) {
-                    pill("Call", primary: false) { openURL(url) }
-                }
-                Menu {
-                    Button("Uber") { ride(p, uber: true) }
-                    Button("Lyft") { ride(p, uber: false) }
-                    Button("Directions in Maps") { directions(p) }
-                } label: {
-                    Text("Ride")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(NorthstarChatStyle.text)
-                        .frame(maxWidth: .infinity, minHeight: 40)
-                        .overlay(Capsule().strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
-                }
-            }
-        }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(NorthstarChatStyle.card))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
-        .accessibilityElement(children: .contain)
-    }
-
-    private func pill(_ title: String, primary: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(primary ? NorthstarChatStyle.onPrimary : NorthstarChatStyle.text)
-                .frame(maxWidth: .infinity, minHeight: 40)
-                .background(Capsule().fill(primary ? NorthstarChatStyle.primaryFill : Color.clear))
-                .overlay(Capsule().strokeBorder(primary ? Color.clear : NorthstarChatStyle.stroke, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: Find each place in Apple Maps
-
-    private func search() async {
-        let here = await NearMe.shared.currentLocation()
-        var out: [Pick] = []
-        for place in places.prefix(5) {
-            let request = MKLocalSearch.Request()
-            request.naturalLanguageQuery = "\(place.name), \(place.area)"
-            request.resultTypes = [.pointOfInterest, .address]
-            let item = try? await MKLocalSearch(request: request).start().mapItems.first
-            guard !Task.isCancelled else { return }
-            let miles = item.flatMap { i in here.map { i.location.distance(from: $0) / 1609.34 } }
-            out.append(Pick(place: place, item: item, miles: miles))
-        }
-        picks = out
-        searched = true
-    }
-
-    // MARK: Buttons (each opens another app; Northstar itself never books or pays)
-
-    private func reserve(_ p: Pick) {
-        var parts = URLComponents(string: "https://www.opentable.com/s")!
-        parts.queryItems = [URLQueryItem(name: "term", value: "\(p.place.name) \(p.place.area)")]
-        if let url = parts.url { openURL(url) }
-    }
-
-    private func ride(_ p: Pick, uber: Bool) {
-        guard let item = p.item else { return directions(p) }
-        let c = item.location.coordinate
-        var parts: URLComponents
-        if uber {
-            parts = URLComponents(string: "https://m.uber.com/ul/")!
-            parts.queryItems = [
-                URLQueryItem(name: "action", value: "setPickup"),
-                URLQueryItem(name: "pickup", value: "my_location"),
-                URLQueryItem(name: "dropoff[latitude]", value: String(c.latitude)),
-                URLQueryItem(name: "dropoff[longitude]", value: String(c.longitude)),
-                URLQueryItem(name: "dropoff[nickname]", value: p.place.name),
-            ]
-        } else {
-            parts = URLComponents(string: "https://lyft.com/ride")!
-            parts.queryItems = [
-                URLQueryItem(name: "id", value: "lyft"),
-                URLQueryItem(name: "destination[latitude]", value: String(c.latitude)),
-                URLQueryItem(name: "destination[longitude]", value: String(c.longitude)),
-            ]
-        }
-        if let url = parts.url { openURL(url) }
-    }
-
-    private func directions(_ p: Pick) {
-        if let item = p.item {
-            item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
-        } else {
-            var parts = URLComponents(string: "https://maps.apple.com/")!
-            parts.queryItems = [URLQueryItem(name: "daddr", value: "\(p.place.name), \(p.place.area)")]
-            if let url = parts.url { openURL(url) }
-        }
     }
 }
 

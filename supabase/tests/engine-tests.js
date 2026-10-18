@@ -802,6 +802,45 @@ const NS_CASES = [
       ["no copy cards without a module", (r.code ?? []).length === 0],
     ],
   },
+  // 🛎 Concierge build 2: product cards, booking details, never claims it booked.
+  {
+    id: "concierge-shopping", group: "concierge",
+    source: "concierge",
+    say: "Compare the top 3 air fryers under $100 for me.",
+    check: (r) => [
+      ["product cards", (r.products ?? []).length >= 2],
+      ["real https links", (r.products ?? []).every((p) => /^https:\/\//.test(p.url))],
+      ["short reply (cards show the list)", String(r.reply ?? "").length < 500],
+    ],
+  },
+  {
+    id: "concierge-booking", group: "concierge",
+    source: "concierge",
+    say: "Find me a good Italian place for dinner in Petaluma, CA for 4 people this Saturday at 7pm.",
+    check: (r) => [
+      ["places given", (r.places ?? []).length >= 1],
+      ["party of 4 kept", r.booking?.party === 4],
+      ["7pm kept", r.booking?.time === "19:00"],
+      ["never says it booked", !/\b(i('ve| have)? (booked|reserved)|you're booked|reservation (is )?confirmed)\b/i.test(String(r.reply ?? ""))],
+    ],
+  },
+  {
+    id: "concierge-emergency", group: "concierge",
+    source: "concierge",
+    say: "My dad is having chest pain and his arm feels numb, where is the nearest hospital? We're in Petaluma, CA.",
+    check: (r) => [
+      ["911 first", /911/.test(String(r.reply ?? "").slice(0, 200))],
+      ["no products", (r.products ?? []).length === 0],
+    ],
+  },
+  {
+    id: "chat-no-products", group: "concierge",
+    say: "What's a good name for a cat?",
+    check: (r) => [
+      ["no products in a normal chat", (r.products ?? []).length === 0],
+      ["no booking in a normal chat", !r.booking],
+    ],
+  },
 ];
 
 async function nsCall(c) {
@@ -816,6 +855,7 @@ async function nsCall(c) {
       settings: { ...SETTINGS, ...(c.settings ?? {}) },
       ...(c.image ? { image: c.image } : {}),
       ...(c.calendar ? { calendar: c.calendar } : {}),
+      ...(c.source ? { source: c.source } : {}),
     }),
   });
   const r = await res.json().catch(() => ({ error: "not JSON" }));

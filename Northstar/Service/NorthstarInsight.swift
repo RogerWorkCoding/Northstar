@@ -149,6 +149,53 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         let area: String
     }
 
+    /// A product to compare (Concierge shopping): name, price, store, rating, why, and its page.
+    nonisolated struct Product: Hashable, Sendable, Decodable {
+        let name: String
+        let price: String?
+        let store: String?
+        let rating: String?
+        let why: String?
+        let url: URL
+    }
+
+    /// What they've said so far for a table or appointment (fills the Reserve and Call buttons).
+    nonisolated struct Booking: Hashable, Sendable, Decodable {
+        var party: Int?
+        var date: String?   // YYYY-MM-DD
+        var time: String?   // HH:MM, 24-hour
+
+        /// Keeps earlier details when a new reply leaves them out.
+        func merged(with newer: Booking?) -> Booking {
+            Booking(party: newer?.party ?? party, date: newer?.date ?? date, time: newer?.time ?? time)
+        }
+
+        var start: Date? {
+            guard let date else { return nil }
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.dateFormat = "yyyy-MM-dd HH:mm"
+            return f.date(from: "\(date) \(time ?? "19:00")")
+        }
+
+        /// "Saturday" / "tonight" / "Oct 24", for the call script.
+        var dayText: String? {
+            guard let start else { return nil }
+            let cal = Calendar.current
+            if cal.isDateInToday(start) { return "tonight" }
+            if cal.isDateInTomorrow(start) { return "tomorrow" }
+            if let days = cal.dateComponents([.day], from: cal.startOfDay(for: .now), to: start).day, days < 7 {
+                return start.formatted(.dateTime.weekday(.wide))
+            }
+            return start.formatted(.dateTime.month(.abbreviated).day())
+        }
+
+        var timeText: String? {
+            guard time != nil, let start else { return nil }
+            return start.formatted(date: .omitted, time: .shortened)
+        }
+    }
+
     nonisolated struct Source: Hashable, Sendable, Decodable {
         let title: String
         let url: URL
@@ -188,6 +235,10 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let sources: [Source]
     /// Real places to show on a map (empty for most replies).
     let places: [Place]
+    /// Products to compare (Concierge shopping; empty otherwise).
+    let products: [Product]
+    /// Booking details (Concierge; nil otherwise).
+    let booking: Booking?
     /// Video shot cards (empty unless they're making a video).
     let shots: [Shot]
     /// YouTube lessons to watch in the app (empty unless a module found some).
@@ -223,6 +274,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case directions
         case sources
         case places
+        case products
+        case booking
         case shots
         case videos
         case code
@@ -250,6 +303,10 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         sources = ((try? c.decodeIfPresent([Source].self, forKey: .sources)) ?? [])
             .filter { $0.url.scheme == "https" && seenSites.insert($0.site).inserted }
         places = Array(((try? c.decodeIfPresent([Place].self, forKey: .places)) ?? []).prefix(5))
+        products = Array(((try? c.decodeIfPresent([Product].self, forKey: .products)) ?? [])
+            .filter { $0.url.scheme == "https" }
+            .prefix(3))
+        booking = try? c.decodeIfPresent(Booking.self, forKey: .booking)
         shots = Array(((try? c.decodeIfPresent([Shot].self, forKey: .shots)) ?? []).prefix(5))
         videos = Array(((try? c.decodeIfPresent([LessonVideo].self, forKey: .videos)) ?? [])
             .filter { $0.id.range(of: "^[A-Za-z0-9_-]{11}$", options: .regularExpression) != nil }
