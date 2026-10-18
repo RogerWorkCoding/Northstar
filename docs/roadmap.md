@@ -1,0 +1,23 @@
+# Northstar roadmap
+
+## Build 2 (version 1.0) — Concierge upgrade
+- Tiles on top: Dinner, Shopping, Fun, Fitness, Travel, Errands, Home & Services, Look It Up
+- Happening near you: event images (Ticketmaster), tap for Tickets, Directions, Add to calendar
+- Dinner: Reserve opens OpenTable with party, day and time filled in; Ride / Order (Uber, Lyft, DoorDash, Uber Eats)
+- Call with a script: what to say, then "Booked it" adds to the calendar
+- Shopping: top 3 product cards (price, store, rating, why, View)
+- Urgent Help button removed (Roger, Oct 17). The chat still says "Call 911 now" for emergencies.
+
+## Build 3 — Connections
+A **Connections** page in Settings. Every connector is off until the person taps **Connect**.
+
+| Order | Connector | Why | Effort |
+|---|---|---|---|
+| 1 | Contacts | "Text Mom", "Call Dave" | Easy (iPhone permission) |
+| 2 | Siri & Shortcuts | "Hey Siri, ask Northstar…" | Easy (App Intents) |
+| 3 | Spotify | Music for the moment; fits Concierge | Medium (sign-in) |
+| 4 | Uber | Ride requests inside Northstar | Medium (sign-in, Uber approval) |
+| Later | Google Calendar, Gmail, Notion | Work life | Gmail needs Google's security review |
+| Later | OpenTable partner booking, DoorDash | Book or order right in the app | Partner approval (apply now, free) |
+
+Ideas parked: AI phone calls to book (version 2 headline, needs AI disclosure under California law).
