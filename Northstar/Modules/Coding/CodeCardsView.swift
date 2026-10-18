@@ -95,6 +95,7 @@ struct CodeCardsView: View {
         case "json": return "JSON"
         case "powerfx": return "Power Fx"
         case "bash": return "Terminal"
+        case "prompt": return "AI prompt"
         default: return "Text"
         }
     }

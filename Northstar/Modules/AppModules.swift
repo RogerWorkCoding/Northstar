@@ -7,6 +7,7 @@ import Foundation
 nonisolated enum AppModule: String, CaseIterable, Identifiable, Sendable {
     case woodcarving
     case coding
+    case design
 
     var id: String { rawValue }
 
@@ -14,6 +15,7 @@ nonisolated enum AppModule: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .woodcarving: return "Wood carving"
         case .coding: return "Coding"
+        case .design: return "Design"
         }
     }
 
@@ -21,6 +23,7 @@ nonisolated enum AppModule: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .woodcarving: return "hammer"
         case .coding: return "chevron.left.forwardslash.chevron.right"
+        case .design: return "paintpalette"
         }
     }
 
@@ -28,6 +31,7 @@ nonisolated enum AppModule: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .woodcarving: return "Tools, wood, cuts, sharpening and safety, with video lessons."
         case .coding: return "A patient senior engineer: plain-words explanations, code you can copy, help with errors."
+        case .design: return "A creative director: honest feedback on your designs, colors and type, and AI image prompts you can copy."
         }
     }
 

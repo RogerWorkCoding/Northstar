@@ -775,6 +775,33 @@ const NS_CASES = [
       ["says it can't make images yet", has(r.reply, /can.?t|not able|yet/i)],
     ],
   },
+  // ---- Design module ----
+  {
+    id: "design-prompt", group: "design-module",
+    settings: { modules: ["design"] },
+    say: "Write me an AI image prompt for a calm mountain lake background at sunrise for my meditation app, vertical.",
+    check: (r) => [
+      ["prompt card given", (r.code ?? []).some((c) => c.language === "prompt" && c.code.length > 80)],
+      ["prompt mentions vertical/9:16", (r.code ?? []).some((c) => /9:16|vertical/i.test(c.code))],
+      ["prompt not pasted in reply", !/9:16/.test(String(r.reply ?? "")) || (r.reply ?? "").length < 400],
+    ],
+  },
+  {
+    id: "design-colors", group: "design-module",
+    settings: { modules: ["design"] },
+    say: "Give me a color palette for a calm meditation app with a navy and gold feel. Does white text work on it?",
+    check: (r) => [
+      ["gives hex colors", /#[0-9a-f]{6}/i.test(String(r.reply ?? "") + JSON.stringify(r.directions ?? []))],
+      ["talks about contrast", /contrast|readab|4\.5/i.test(String(r.reply ?? ""))],
+    ],
+  },
+  {
+    id: "design-off-no-cards", group: "design-module",
+    say: "Write me an AI image prompt for a calm mountain lake background at sunrise, vertical.",
+    check: (r) => [
+      ["no copy cards without a module", (r.code ?? []).length === 0],
+    ],
+  },
 ];
 
 async function nsCall(c) {

@@ -325,6 +325,43 @@ const MODULES: Record<string, { name: string; rules: string }> = {
 - For bigger jobs, give the steps in order (1, 2, 3) and only the first step's code, then ask to continue.
 - Remember their projects as subjects (e.g. "Northstar app": next step "add the Day theme").`,
   },
+  design: {
+    name: "Design",
+    rules: `Module: Design (this person switched it on; they design apps, brands and visuals and want a creative director)
+- Be a seasoned creative director and product designer who teaches. Calm, direct and generous. Name what
+  works first, then the one or two changes that matter most, and the why behind each, so they build their
+  own eye. Assume they may be dyslexic: short sentences, one idea per line.
+- Honest voice: deep design knowledge, not a studio or clients. Never invent personal experience
+  ("when I designed…", "my clients…"). Say "designers often…" or give the advice plainly.
+- Critique (when they share an image, mockup or screen): look in this order and only mention what matters:
+  1) the one job of the screen and whether it's clear in 3 seconds, 2) hierarchy (what the eye sees first,
+  second, third), 3) readability and contrast (text on images, small text, light grey on white),
+  4) spacing and alignment (an 8-point rhythm, consistent margins, breathing room), 5) type (2 families
+  at most, clear size steps), 6) color (a calm base, one accent, meaning kept consistent),
+  7) touch and access (targets of at least 44pt, labels for screen readers, motion that respects
+  Reduce Motion). End with the single most important next change.
+- Colors: give exact #RRGGBB values with a role for each (background, surface, text, accent). Say
+  whether text passes contrast (aim for 4.5:1 for body text) and suggest a fix when it doesn't. Offer a
+  dark version when it fits.
+- Type: suggest real, available typefaces (Apple system fonts like SF Pro and New York, or free Google
+  Fonts) with a reason, and a simple size scale (e.g. 34 / 22 / 17 / 13).
+- AI images and video: when they want an image, mockup, background, icon or clip made with an AI tool
+  (Firefly, Midjourney, Gemini, Grok, Veo, ChatGPT and others), write the prompt for them and put each
+  prompt in a code card with language "prompt" and a short title (e.g. "Background prompt"). Make prompts
+  concrete: subject, setting, light, mood, color palette, composition and framing, camera or lens,
+  style, aspect ratio (e.g. 9:16 vertical), and what to avoid (no text, no logos, no extra people). For
+  video add the motion, camera movement (often "locked-off camera") and length, and "seamless loop" when
+  it should loop. Give at most 2 prompts; never put a prompt in the reply text.
+- Sizes and exports: know common specs and give exact numbers when asked (iOS app icon 1024×1024 with no
+  transparency, App Store screenshots for the current iPhone sizes, TikTok/Reels/Stories 1080×1920,
+  Facebook feed 1080×1350, web hero images about 2400px wide). If you're not sure a spec is current,
+  say so.
+- Respect their direction: if they've chosen a look (a brand, a mood board, an approved mockup), keep to
+  it and point out changes that would drift from it, rather than redesigning.
+- Brand and originality: help them make their own work. Don't copy another brand's logo, characters or
+  trademarked look; suggest an original direction instead.
+- Remember their design projects as subjects (e.g. "Personal Calm app": next step "finalize the orb").`,
+  },
 };
 
 /** The modules this person switched on (only known ones). */
@@ -439,12 +476,12 @@ const REPLY_TOOL = {
       code: {
         type: "array",
         maxItems: 3,
-        description: "Code cards (only when the Coding module is on and code helps). Empty otherwise.",
+        description: "Copy cards (only when the Coding or Design module is on): code, or AI image/video prompts with language 'prompt'. Empty otherwise.",
         items: {
           type: "object",
           properties: {
             title: { type: "string", description: "2–5 words, e.g. 'Save button view'." },
-            language: { type: "string", description: "swift, swiftui, javascript, typescript, html, css, sql, python, json, powerfx, bash or text." },
+            language: { type: "string", description: "swift, swiftui, javascript, typescript, html, css, sql, python, json, powerfx, bash, prompt (an AI image/video prompt) or text." },
             code: { type: "string", description: "The complete code, ready to paste." },
             explain: { type: "string", description: "One plain line on what it does." },
           },
@@ -662,7 +699,9 @@ function splitHistory(turns: Turn[]): { recent: Turn[]; earlier: string } {
 }
 
 // Code cards from the Coding module: up to 3, each under 6000 characters.
-const CODE_LANGS = ["swift", "swiftui", "javascript", "typescript", "html", "css", "sql", "python", "json", "powerfx", "bash", "text"];
+const CODE_LANGS = ["swift", "swiftui", "javascript", "typescript", "html", "css", "sql", "python", "json", "powerfx", "bash", "prompt", "text"];
+/** Modules whose answers can include copy cards (code for Coding, AI prompts for Design). */
+const CARD_MODULES = ["coding", "design"];
 function codeFrom(raw: unknown): { title: string; language: string; code: string; explain: string }[] {
   if (!Array.isArray(raw)) return [];
   return raw.slice(0, 3).map((x) => {
@@ -1320,7 +1359,7 @@ Deno.serve(async (req) => {
     max_uses: 3,
     ...(site ? { allowed_domains: [site] } : {}),
   };
-  const replyTool = modulesFrom(body.settings).includes("coding") ? REPLY_TOOL : REPLY_TOOL_NO_CODE;
+  const replyTool = modulesFrom(body.settings).some((m) => CARD_MODULES.includes(m)) ? REPLY_TOOL : REPLY_TOOL_NO_CODE;
   // A photo they attached goes with their latest message, so Claude can look at it.
   const photo = photoFrom(body.image);
   const apiMessages = photo
@@ -1668,7 +1707,7 @@ Deno.serve(async (req) => {
     // Video shot cards to paste into a video tool (never in personal or crisis moments).
     shots: personal || crisis ? [] : shotsFrom(tool.shots),
     // Code cards (Coding module only): monospace, with a Copy button in the app.
-    code: personal || crisis || !modulesFrom(body.settings).includes("coding") ? [] : codeFrom(tool.code),
+    code: personal || crisis || !modulesFrom(body.settings).some((m) => CARD_MODULES.includes(m)) ? [] : codeFrom(tool.code),
     // YouTube videos that play in the app (only ones the web search really found).
     videos: personal || crisis ? [] : videosFrom(tool.videos),
     // A suggested folder for saving those videos (the person picks the folder).
