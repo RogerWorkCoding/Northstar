@@ -170,6 +170,43 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         let url: URL
     }
 
+    /// A rental listing (Concierge apartments): real link, true monthly cost and a scam check.
+    nonisolated struct Listing: Hashable, Sendable, Decodable, Identifiable {
+        var id: URL { url }
+        let name: String
+        let url: URL
+        let rent: Double
+        var area: String? = nil
+        var beds: Double? = nil
+        var baths: Double? = nil
+        var sqft: Double? = nil
+        var source: String? = nil
+        var posted: String? = nil
+        var why: String? = nil
+        var trueCost: TrueCost? = nil
+        let scam: ScamCheck
+
+        nonisolated struct TrueCost: Hashable, Sendable, Decodable {
+            let total: Double
+            let parts: [String]
+        }
+        nonisolated struct ScamCheck: Hashable, Sendable, Decodable {
+            let level: String      // clear · caution · warning
+            let reasons: [String]
+        }
+
+        /// "2 bd · 1 ba · 850 sq ft"
+        var sizeText: String {
+            var bits: [String] = []
+            if let beds { bits.append(beds == 0 ? "Studio" : "\(Self.n(beds)) bd") }
+            if let baths { bits.append("\(Self.n(baths)) ba") }
+            if let sqft, sqft > 0 { bits.append("\(Int(sqft).formatted()) sq ft") }
+            return bits.joined(separator: " \u{00B7} ")
+        }
+        static func money(_ v: Double) -> String { "$" + Int(v.rounded()).formatted() }
+        private static func n(_ v: Double) -> String { v == v.rounded() ? String(Int(v)) : String(format: "%.1f", v) }
+    }
+
     /// The expert behind the answer (a skill like Design, or a switched-on module like Wood carving).
     nonisolated struct Used: Hashable, Sendable, Decodable {
         let expert: String
@@ -256,6 +293,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let products: [Product]
     /// Booking details (Concierge; nil otherwise).
     let booking: Booking?
+    /// Apartment listings with a scam check (Concierge; empty otherwise).
+    let listings: [Listing]
     /// The expert the brain used (nil for plain chat, personal moments and crisis).
     let used: Used?
 
@@ -308,6 +347,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case sources
         case places
         case products
+        case listings
         case booking
         case used
         case shots
@@ -341,6 +381,9 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
             .filter { $0.url.scheme == "https" }
             .prefix(3))
         booking = try? c.decodeIfPresent(Booking.self, forKey: .booking)
+        listings = Array(((try? c.decodeIfPresent([Listing].self, forKey: .listings)) ?? [])
+            .filter { $0.url.scheme == "https" }
+            .prefix(3))
         used = try? c.decodeIfPresent(Used.self, forKey: .used)
         shots = Array(((try? c.decodeIfPresent([Shot].self, forKey: .shots)) ?? []).prefix(5))
         videos = Array(((try? c.decodeIfPresent([LessonVideo].self, forKey: .videos)) ?? [])

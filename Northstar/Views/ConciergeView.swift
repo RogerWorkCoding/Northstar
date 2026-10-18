@@ -22,6 +22,8 @@ struct ConciergeView: View {
     @State private var line = ""          // Northstar's short line at the top
     @State private var places: [NorthstarInsight.Place] = []
     @State private var products: [NorthstarInsight.Product] = []
+    @State private var listings: [NorthstarInsight.Listing] = []
+    @State private var city: String?
     @State private var sources: [NorthstarInsight.Source] = []
     @State private var answer = ""        // Look It Up: the full answer
     @State private var booking = NorthstarInsight.Booking()
@@ -43,7 +45,7 @@ struct ConciergeView: View {
         let quick: [String]
         var kind: Kind = .places
 
-        enum Kind { case places, dinner, shopping, home, lookUp, events }
+        enum Kind { case places, dinner, shopping, home, lookUp, events, apartments }
     }
 
     private let services: [Service] = [
@@ -70,6 +72,10 @@ struct ConciergeView: View {
         .init(id: "home", title: "Home & Services", icon: "wrench.and.screwdriver",
               request: "I need help at home. Ask me what kind (plumber, electrician, cleaner, handyman, car repair or pet care), then find 3 well-reviewed local ones.",
               quick: ["Plumber", "Electrician", "Cleaner", "Handyman", "Car repair", "Pet care"], kind: .home),
+        .init(id: "apartments", title: "Apartments", icon: "building.2",
+              request: "Help me find an apartment to rent. Ask what's missing (area, budget, bedrooms, move-in date, pets), one thing at a time, then show the best 3 real listings with a scam check and the true monthly cost.",
+              quick: ["Under $2,000", "Under $2,500", "1 bedroom", "2 bedrooms", "Pet friendly", "Move in soon", "In-unit laundry"],
+              kind: .apartments),
         .init(id: "lookup", title: "Look It Up", icon: "magnifyingglass",
               request: "",
               quick: ["Is it open now?", "Weather this weekend", "Gas prices near me", "Compare two things"], kind: .lookUp),
@@ -171,12 +177,9 @@ struct ConciergeView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            // Pairs in the grid; Look It Up gets the full width underneath (9 tiles would leave one alone).
-            VStack(spacing: 10) {
-                LazyVGrid(columns: columns, spacing: 10) {
-                    ForEach(services.filter { $0.kind != .lookUp }) { s in tile(s) }
-                }
-                ForEach(services.filter { $0.kind == .lookUp }) { s in tile(s) }
+            // Ten tiles, in pairs.
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(services) { s in tile(s) }
             }
 
             NearbyEventsRow()
@@ -238,6 +241,10 @@ struct ConciergeView: View {
                     .foregroundStyle(NorthstarChatStyle.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
+            }
+
+            if !listings.isEmpty {
+                ApartmentCards(listings: listings, city: city)
             }
 
             if !products.isEmpty {
@@ -361,8 +368,9 @@ struct ConciergeView: View {
         }
         Task {
             var request = s.request
-            if let city = await NearMe.shared.cityName() {
-                request += " I'm in \(city)."
+            if let found = await NearMe.shared.cityName() {
+                city = found
+                request += " I'm in \(found)."
             }
             ask(request)
         }
@@ -383,6 +391,7 @@ struct ConciergeView: View {
     private func clearResults() {
         places = []
         products = []
+        listings = []
         sources = []
         answer = ""
         line = ""
@@ -411,6 +420,7 @@ struct ConciergeView: View {
             booking = booking.merged(with: answer.insight?.booking)
             if let found = answer.insight?.places, !found.isEmpty { places = found }
             if let found = answer.insight?.products, !found.isEmpty { products = found }
+            if let found = answer.insight?.listings, !found.isEmpty { listings = found }
             sources = answer.insight?.sources ?? []
             if NorthstarVoice.autoSpeak, !answer.failed { NorthstarVoice.shared.speak(line) }
         }

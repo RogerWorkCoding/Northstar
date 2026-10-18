@@ -527,6 +527,45 @@ const REPLY_TOOL = {
           required: ["name", "area"],
         },
       },
+      listings: {
+        type: "array",
+        maxItems: 3,
+        description: "Apartments and rentals only: up to 3 real listings from web_search results (never invented), each with a scam check and the true monthly cost. Empty otherwise.",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Listing title, e.g. '2 bed near downtown, in-unit laundry'." },
+            area: { type: "string", description: "Neighborhood and city, or the street address if the listing shows it." },
+            rent: { type: "number", description: "Monthly rent in dollars, as listed." },
+            beds: { type: "number", description: "Bedrooms (0 = studio)." },
+            baths: { type: "number" },
+            sqft: { type: "number" },
+            source: { type: "string", description: "Where it's listed, e.g. 'Zillow', 'Craigslist'." },
+            posted: { type: "string", description: "How fresh, e.g. 'posted 3 days ago'. Empty if unknown." },
+            url: { type: "string", description: "The listing URL, exactly as in a web_search result." },
+            why: { type: "string", description: "One short line: why it fits what they asked." },
+            true_cost: {
+              type: "object",
+              description: "Rent plus typical extras for this place, so there are no surprises. Estimates are labeled.",
+              properties: {
+                total: { type: "number", description: "Estimated real monthly cost in dollars." },
+                parts: { type: "array", items: { type: "string" }, description: "e.g. ['Rent $2,100', 'Utilities ~$150 (est.)', 'Parking $75', 'Pet rent $50']" },
+              },
+              required: ["total", "parts"],
+            },
+            scam: {
+              type: "object",
+              description: "Scam check from the listing itself and area prices. Judge the LISTING, never the neighborhood or who lives there.",
+              properties: {
+                level: { type: "string", enum: ["clear", "caution", "warning"] },
+                reasons: { type: "array", items: { type: "string" }, description: "Short, specific reasons, e.g. 'Rent is about 45% below similar 2-beds nearby'. Empty when clear." },
+              },
+              required: ["level", "reasons"],
+            },
+          },
+          required: ["name", "area", "rent", "url", "scam"],
+        },
+      },
       products: {
         type: "array",
         maxItems: 3,
@@ -684,6 +723,19 @@ const CONCIERGE_RULES = `Concierge screen
   quieter."). For gifts, ask who it's for and the budget if you don't know.
 - Home & services (plumber, electrician, cleaner, handyman, car repair, pet care): well-reviewed local
   businesses in places; remind them to ask if they're licensed and insured.
+- Apartments and rentals: ask (one at a time, only what's missing) city or area, budget, bedrooms, move-in
+  date, pets. Then search for CURRENT listings and put up to 3 real ones in listings, each with its URL from the
+  results, the true monthly cost (rent plus typical utilities, parking, pet rent and fees; label estimates
+  "est.") and a scam check. Scam check = warning signs in the LISTING: rent far below similar places nearby
+  (say how far), asks to wire money or pay by gift card/crypto, deposit before a viewing, owner "away" and
+  can't show it, no address, copied photos, pressure to decide today, payment outside the site. clear = none
+  found; caution = one soft sign; warning = a strong sign. Always remind them: never pay before seeing the
+  place in person and signing a lease. Fair housing: search and describe by price, size, features, location
+  and commute only. Never rate, rank or describe a neighborhood as safe or unsafe, good or bad, and never
+  mention who lives there (race, religion, national origin, families with children, disability, sex). If they
+  ask whether an area is safe, say Northstar doesn't rate neighborhoods and suggest the city or police
+  department's official crime map so they can decide; you can mention the home's own safety features
+  (secured entry, lighting, gated parking). Lead the reply with the best real point in one line.
 - Look it up: answer the question itself in 2–5 short lines (search when facts change: hours, prices,
   weather, rules), with sources. Places only if they help.
 - If anything sounds like an emergency, start with "Call 911 now." Never diagnose; point to a doctor,
@@ -697,6 +749,39 @@ function usedFrom(skill: string, on: string[]): { expert: string; module: boolea
 }
 
 /** Products for the shopping cards: up to 3, each with a real link from the web search. */
+/** Rental listings (real links from the web search only), each with a true monthly cost and a scam check. */
+function listingsFrom(raw: unknown, found: Map<string, string>) {
+  if (!Array.isArray(raw)) return [];
+  const hosts = new Set([...found.keys()].map((u) => new URL(u).hostname));
+  const num = (v: unknown, max: number) => (typeof v === "number" && v >= 0 && v <= max ? Math.round(v * 10) / 10 : null);
+  const out: Record<string, unknown>[] = [];
+  for (const l of raw as Array<Record<string, unknown>>) {
+    const name = str(l?.name, 100);
+    const url = str(l?.url, 500);
+    let ok = false;
+    try { ok = found.has(url) || (url.startsWith("https://") && hosts.has(new URL(url).hostname)); } catch { ok = false; }
+    const rent = num(l?.rent, 100_000);
+    if (!name || !ok || !rent) continue;
+    const sc = (l?.scam ?? {}) as Record<string, unknown>;
+    const level = ["clear", "caution", "warning"].includes(String(sc.level)) ? String(sc.level) : "caution";
+    const reasons = (Array.isArray(sc.reasons) ? sc.reasons : []).map((x) => str(x, 140)).filter(Boolean).slice(0, 4);
+    const tc = (l?.true_cost ?? {}) as Record<string, unknown>;
+    const total = num(tc.total, 200_000);
+    out.push({
+      name, url, rent,
+      area: str(l.area, 80),
+      beds: num(l.beds, 20), baths: num(l.baths, 20), sqft: num(l.sqft, 100_000),
+      source: str(l.source, 40), posted: str(l.posted, 40), why: str(l.why, 160),
+      trueCost: total && total >= rent
+        ? { total, parts: (Array.isArray(tc.parts) ? tc.parts : []).map((x) => str(x, 60)).filter(Boolean).slice(0, 6) }
+        : null,
+      scam: { level, reasons },
+    });
+    if (out.length === 3) break;
+  }
+  return out;
+}
+
 function productsFrom(raw: unknown, found: Map<string, string>) {
   if (!Array.isArray(raw)) return [];
   const hosts = new Set([...found.keys()].map((u) => new URL(u).hostname));
@@ -1793,6 +1878,7 @@ Deno.serve(async (req) => {
     if (found.size > 0) feats.push("web");
     if (Array.isArray(tool.places) && tool.places.length) feats.push("places");
     if (Array.isArray(tool.products) && tool.products.length) feats.push("products");
+    if (Array.isArray(tool.listings) && tool.listings.length) feats.push("listings");
     if (Array.isArray(tool.places) && tool.places.some((p: Record<string, unknown>) => p?.tonight)) feats.push("tonight");
     if (tool.schedule || Array.isArray(body.calendar)) feats.push("calendar");
     if (Array.isArray(tool.shots) && tool.shots.length) feats.push("video");
@@ -1831,6 +1917,8 @@ Deno.serve(async (req) => {
     used: personal || crisis ? null : usedFrom(str(tool.skill, 20), modulesFrom(body.settings)),
     // Shopping cards (real links from the web search only).
     products: personal || crisis ? [] : productsFrom(tool.products, found),
+    // Apartment cards with a scam check and true monthly cost (real links from the web search only).
+    listings: personal || crisis ? [] : listingsFrom(tool.listings, found),
     // Booking details for the Concierge Reserve and Call buttons.
     booking: personal || crisis ? null : bookingFrom(tool.booking),
     // Video shot cards to paste into a video tool (never in personal or crisis moments).
