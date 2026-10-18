@@ -86,6 +86,8 @@ struct ContentView: View {
     /// Pills the person removed since the last message; sent once as corrections.
     @State private var pendingCorrections: [String] = []
     @State private var isStarMenuPresented = false
+    /// ✦ Discovery: explore ways forward around the star (opened by the star button).
+    @State private var isDiscoveryPresented = false
     @State private var responseTask: Task<Void, Never>?
     @FocusState private var isPromptFocused: Bool
 
@@ -151,7 +153,19 @@ struct ContentView: View {
             }
         }
         .fullScreenCover(isPresented: Binding(get: { !welcomed }, set: { if !$0 { welcomed = true } })) {
-            WelcomeView { choice in startFromPath(choice) }
+            WelcomeView { welcomed = true }
+        }
+        .fullScreenCover(isPresented: $isDiscoveryPresented) {
+            DiscoveryView(
+                onChoose: { choice in startFromDiscovery(choice) },
+                onMenu: {
+                    isDiscoveryPresented = false
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(450))
+                        withAnimation(.easeInOut(duration: 0.25)) { isStarMenuPresented = true }
+                    }
+                }
+            )
         }
         .fullScreenCover(isPresented: $isCameraPresented) {
             CameraView(selectedImage: $selectedImage)
@@ -578,11 +592,10 @@ struct ContentView: View {
 
     private var promptRow: some View {
         HStack(spacing: 10) {
+            // ✦ opens Discovery; its ≡ opens the main menu.
             Button {
                 isPromptFocused = false
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    isStarMenuPresented = true
-                }
+                isDiscoveryPresented = true
             } label: {
                 Image(systemName: "sparkle")
                     .font(.system(size: 18, weight: .light))
@@ -1133,12 +1146,14 @@ struct ContentView: View {
         }
     }
 
-    /// Path Forward finished: close the welcome without the slide (the chat sits on the same sky),
-    /// then start the chat on the path they chose, in their own words.
-    private func startFromPath(_ choice: PathChoice) {
+    /// Discovery finished: close it without the slide (chat sits on the same sky), then start a fresh chat
+    /// on the path they chose. Northstar speaks first; their words stay above as context.
+    private func startFromDiscovery(_ choice: PathChoice) {
         var quiet = Transaction()
         quiet.disablesAnimations = true
-        withTransaction(quiet) { welcomed = true }
+        withTransaction(quiet) { isDiscoveryPresented = false }
+        if case .skip = choice { return }
+        if !viewModel.messages.isEmpty, !isThinking { startNewChat() }
         switch choice {
         case .skip:
             return

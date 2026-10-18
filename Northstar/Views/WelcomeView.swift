@@ -5,26 +5,17 @@ import SwiftUI
 // No sign-in here: everyone gets a private account in the background; Sign in with Apple (to keep memory
 // on a new phone) is optional, in Settings.
 // Big text, one idea per page, always skippable. Settings → About can show it again later.
-// After the last page comes Path Forward: "What's on your mind?" and a few ways forward around the star.
+// Discovery (the ✦ star button in chat) is mentioned on the last page; it isn't part of onboarding.
 
 struct WelcomeView: View {
-    var onDone: (PathChoice) -> Void
+    var onDone: () -> Void
 
     @State private var page = 0
-    @State private var paths = false
     private let lastPage = 3
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ZStack {
-            if paths {
-                PathForwardView(onDone: onDone)
-                    .transition(.opacity)
-            } else {
-                pages
-                    .transition(.opacity)
-            }
-        }
+        pages
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // The sky sits BEHIND the layout, so the picture never changes the layout's size.
@@ -47,7 +38,7 @@ struct WelcomeView: View {
                 HStack {
                     Spacer()
                     // Always takes its space (hidden on the last page) so the star never jumps.
-                    Button("Skip") { onDone(.skip) }
+                    Button("Skip") { onDone() }
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.85))
                         .frame(minWidth: 44, minHeight: 44)
@@ -92,10 +83,10 @@ struct WelcomeView: View {
                     if page < lastPage {
                         withAnimation(reduceMotion ? nil : .easeInOut) { page += 1 }
                     } else {
-                        withAnimation(.easeInOut(duration: reduceMotion ? 0.2 : 0.5)) { paths = true }
+                        onDone()
                     }
                 } label: {
-                    Text("Continue")
+                    Text(page < lastPage ? "Continue" : "Start")
                         .font(.headline)
                         .foregroundStyle(Color(red: 0.05, green: 0.09, blue: 0.21))
                         .frame(maxWidth: .infinity, minHeight: 52)
@@ -137,7 +128,11 @@ struct WelcomeView: View {
             VStack(spacing: 8) {
                 Text("Northstar remembers only what you tell it or confirm.")
                 Text("See, change or delete it any time in Settings.")
-                Text("Testing Northstar? Tap ✦ › Send Feedback any time. It's anonymous.")
+                Text("Tap ✦ any time to discover ways forward.")
+                    .font(.subheadline)
+                    .opacity(0.9)
+                    .padding(.top, 8)
+                Text("Testing Northstar? Tap ✦ › ≡ › Send Feedback. It's anonymous.")
                     .font(.subheadline)
                     .opacity(0.8)
                     .padding(.top, 8)
@@ -205,5 +200,5 @@ private struct WelcomeFadePage: View {
 }
 
 #Preview {
-    WelcomeView(onDone: { _ in })
+    WelcomeView(onDone: {})
 }
