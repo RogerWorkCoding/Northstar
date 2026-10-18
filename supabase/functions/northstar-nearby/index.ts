@@ -78,10 +78,17 @@ async function seatgeek(lat: number, lng: number): Promise<Event[]> {
   const raw = ((await res.json())?.events ?? []) as Array<Record<string, any>>;
   check.seatgeek += ` · ${raw.length} found`;
   const out: Event[] = [];
+  // An image can sit in several places; take the first real one.
+  const pic = (x: Record<string, any>) =>
+    [x?.image, x?.images?.huge, x?.images?.banner, x?.images?.["1200x525"], x?.images?.["800x320"]]
+      .map((u) => String(u ?? "")).find((u) => /^https?:\/\//.test(u))?.replace(/^http:/, "https:");
+  const skipped = { image: 0, link: 0, date: 0 };
   for (const e of raw) {
-    const p = (e.performers ?? []).find((x: Record<string, any>) => /^https:/.test(String(x?.image ?? "")));
+    const img = (e.performers ?? []).map(pic).find(Boolean);
     const local = String(e.datetime_local ?? "");
-    if (!p || !/^https:/.test(String(e.url ?? "")) || !/^\d{4}-\d{2}-\d{2}/.test(local)) continue;
+    if (!img) { skipped.image++; continue; }
+    if (!/^https:/.test(String(e.url ?? ""))) { skipped.link++; continue; }
+    if (!/^\d{4}-\d{2}-\d{2}/.test(local)) { skipped.date++; continue; }
     const loc = e.venue?.location;
     out.push({
       name: String(e.title ?? e.short_title ?? "").slice(0, 100),
@@ -89,10 +96,14 @@ async function seatgeek(lat: number, lng: number): Promise<Event[]> {
       time: e.time_tbd ? null : local.slice(11, 16) || null,
       venue: String(e.venue?.name ?? "").slice(0, 80),
       city: String(e.venue?.city ?? "").slice(0, 40),
-      image: String(p.image), url: String(e.url),
+      image: img, url: String(e.url),
       miles: loc && typeof loc.lat === "number" ? milesBetween([lat, lng], [loc.lat, loc.lon]) : null,
       source: "SeatGeek",
     });
+  }
+  if (out.length < raw.length) {
+    const p0 = (raw[0]?.performers ?? [])[0] ?? {};
+    check.seatgeek += ` · skipped ${JSON.stringify(skipped)} · image fields: ${Object.keys(p0.images ?? {}).join(",") || "none"}, image=${String(p0.image ?? "none").slice(0, 60)}`;
   }
   return out;
 }
