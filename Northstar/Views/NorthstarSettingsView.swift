@@ -126,6 +126,7 @@ struct NorthstarSettingsView: View {
                     Label {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Signed in with Apple")
+                            Text("Your memory is backed up.").font(.footnote).foregroundStyle(.secondary)
                             if let email = account.email {
                                 Text(email).font(.footnote).foregroundStyle(.secondary)
                             }
@@ -135,6 +136,14 @@ struct NorthstarSettingsView: View {
                     }
                     Button("Sign out", role: .destructive) { confirmSignOut = true }
                 } else {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Guest on this phone")
+                            Text("Your memory lives only on this iPhone.").font(.footnote).foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "iphone").foregroundStyle(.secondary)
+                    }
                     SignInWithAppleButton(.signIn) { request in
                         account.prepare(request)
                     } onCompletion: { result in

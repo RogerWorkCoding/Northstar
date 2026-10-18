@@ -63,6 +63,8 @@ struct ContentView: View {
     /// The chat that was open last time, so closing the app (even by mistake) never loses it.
     /// Cleared only when they tap New chat (or the chat is deleted).
     @AppStorage("ns.openChatId") private var openChatId = ""
+    /// ✦ The one-time "Keep your memory safe" card (after the 3rd thing kept).
+    @State private var showKeepSafe = false
     private let chatsService = ChatsService()
     @State private var speechRecognizer = SpeechRecognizer()
     @State private var appleAccount = AppleAccount.shared
@@ -397,6 +399,11 @@ struct ContentView: View {
                                 onUndoSubject: { update in undoSubject(update, for: message.id) }
                             )
                         }
+                    }
+
+                    if showKeepSafe && !isThinking {
+                        KeepMemoryCard { withAnimation { showKeepSafe = false } }
+                            .transition(.opacity)
                     }
 
                     if isThinking {
@@ -1100,12 +1107,14 @@ struct ContentView: View {
     private func saveSuggestion(_ save: NorthstarInsight.Save) async -> UUID? {
         guard let identityId = memoryIdentityId else { return nil }
         do {
-            return try await memoryService.saveMemory(
+            let id = try await memoryService.saveMemory(
                 identityId: identityId,
                 projectId: nil,
                 content: save.text,
                 category: save.kind
             )
+            if KeepMemoryNudge.noteKept() { withAnimation { showKeepSafe = true } }
+            return id
         } catch {
             print("Save suggestion failed:", error.localizedDescription)
             return nil
@@ -1126,6 +1135,7 @@ struct ContentView: View {
         Task {
             do {
                 try await subjectsService.keep(title: offer.title, goal: offer.goal, nextStep: offer.nextStep)
+                if KeepMemoryNudge.noteKept() { withAnimation { showKeepSafe = true } }
             } catch {
                 subjectStates[messageId] = "keepFailed"   // shows "Couldn't keep it" with the buttons again
             }
