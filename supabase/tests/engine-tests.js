@@ -842,6 +842,7 @@ const NS_CASES = [
       return [
         ["2–4 shots", (r.shots ?? []).length >= 2 && (r.shots ?? []).length <= 4],
         ["15–24 seconds in total", total >= 14 && total <= 24],
+        ["no \"I can't make video\"", !/can'?t make (the |a )?video/i.test(String(r.reply ?? ""))],
       ];
     },
   },

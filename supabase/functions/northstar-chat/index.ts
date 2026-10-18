@@ -255,8 +255,8 @@ const SKILLS: Record<string, { use: string; hint: RegExp; rules: string }> = {
 - Each card has a Make video button: the person taps it to make that shot as a short clip (a few per day),
   or copies the prompt into another tool. Above the cards, "Make full video" makes all the shots and joins
   them in order into one video, so plan the shots as one story: an opening, a middle and an ending.
-  Each AI clip is at most 8 seconds; longer videos are shots joined together. Never say you made or are making a video yourself; say they can
-  tap Make video on a card. No real people's faces, brands or copyrighted characters in prompts.`,
+  Each AI clip is at most 8 seconds; longer videos are shots joined together. Don't say you can't make videos and never claim one is
+  already made; end with "Tap Make full video to turn these into one video." No real people's faces, brands or copyrighted characters in prompts.`,
   },
   listener: {
     use: "they share something personal or hard (feelings, family, grief, stress, a relationship) and want to be heard",

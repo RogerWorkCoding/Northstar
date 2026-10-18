@@ -73,21 +73,41 @@ struct UserMessageView: View {
         .padding(.horizontal, 20)
     }
 
+    /// Long messages (a pasted prompt) fold to 4 lines so the chat doesn't turn into a heavy navy wall.
+    @State private var expanded = false
+    private var isLong: Bool { text.count > 280 || text.filter { $0 == "\n" }.count > 5 }
+
     private var bubble: some View {
+        VStack(alignment: .leading, spacing: 8) {
             Text(text)
                 .font(.system(size: 17))
                 .lineSpacing(3)
+                .lineLimit(isLong && !expanded ? 4 : nil)
                 .foregroundStyle(NorthstarChatStyle.onUserBubble)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: 20, bottomLeadingRadius: 20,
-                        bottomTrailingRadius: 6, topTrailingRadius: 20,
-                        style: .continuous
-                    )
-                    .fill(NorthstarChatStyle.userBubble)
-                )
+            if isLong {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) { expanded.toggle() }
+                } label: {
+                    Label(expanded ? "Show less" : "Show all", systemImage: expanded ? "chevron.up" : "chevron.down")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(NorthstarChatStyle.onUserBubble.opacity(0.75))
+                        .frame(minHeight: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(expanded ? "Folds your message" : "Shows your whole message")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 20, bottomLeadingRadius: 20,
+                bottomTrailingRadius: 6, topTrailingRadius: 20,
+                style: .continuous
+            )
+            .fill(NorthstarChatStyle.userBubble)
+        )
     }
 }
 
