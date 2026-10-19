@@ -138,16 +138,21 @@ Deno.serve(async (req) => {
     ticketmaster(la, ln).catch(() => [] as Event[]),
     seatgeek(la, ln).catch((e) => { check.seatgeek = "error " + String(e).slice(0, 80); return [] as Event[]; }),
   ]);
-  // One card per show: the same name on the same day counts once (Ticketmaster first).
+  // One card per show. Names are compared loosely (the start of the name, letters only), because the two
+  // companies spell the same show differently ("Jim Henson's Labyrinth: In Concert 40th…" vs "Jim Hensons
+  // Labyrinth - In Concert"). Ticketmaster goes first, so a show listed by both keeps its real image.
+  const short = (n: string) => n.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]/g, "").slice(0, 14);
   const seen = new Set<string>();
-  const merged: Event[] = [];
-  for (const e of [...tm, ...sg].sort((a, b) => `${a.date}${a.time ?? ""}`.localeCompare(`${b.date}${b.time ?? ""}`))) {
-    const k = e.name.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (!e.name || seen.has(k) || seen.has(`${k}|${e.date}`)) continue;
-    seen.add(k); seen.add(`${k}|${e.date}`);
-    merged.push(e);
-    if (merged.length === 10) break;
+  const kept: Event[] = [];
+  for (const e of [...tm, ...sg]) {
+    const k = short(e.name);
+    if (!e.name || !k || seen.has(k)) continue;
+    seen.add(k);
+    kept.push(e);
   }
+  const merged = kept
+    .sort((a, b) => `${a.date}${a.time ?? ""}`.localeCompare(`${b.date}${b.time ?? ""}`))
+    .slice(0, 10);
   // Only keep results worth keeping, so a hiccup doesn't hide events for an hour.
   if (merged.length) cache.set(key, { at: Date.now(), events: merged });
   return json({ events: merged, check });
