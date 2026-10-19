@@ -1123,7 +1123,8 @@ struct Orbits {
                 }
                 r = size.height  // big text: places step aside (the ≡ menu still has them all)
             } else {
-                let (rx, ry) = ring(r + ra, ra)
+                // 10% farther from the star than before (Roger, Oct 19), still kept on screen by ring().
+                let (rx, ry) = ring((r + ra) * 1.1, ra)
                 for (k, b) in active.enumerated() {
                     out.spots[b.id] = place(k, of: active.count, ringIndex: 0, rx: rx, ry: ry, seed: k)
                 }
