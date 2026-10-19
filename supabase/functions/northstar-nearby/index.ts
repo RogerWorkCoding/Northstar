@@ -152,9 +152,12 @@ Deno.serve(async (req) => {
     seen.push(k);
     kept.push(e);
   }
-  const merged = kept
-    .sort((a, b) => `${a.date}${a.time ?? ""}`.localeCompare(`${b.date}${b.time ?? ""}`))
-    .slice(0, 10);
+  // Closest first (test round 1: Petaluma showed mostly Napa, Napa showed Berkeley): events within about
+  // 12 miles come first, soonest first; farther ones fill the rest, also soonest first. Each card shows its town.
+  const NEAR = 12;
+  const byDate = (a: Event, b: Event) => `${a.date}${a.time ?? ""}`.localeCompare(`${b.date}${b.time ?? ""}`);
+  const isNear = (e: Event) => typeof e.miles === "number" && e.miles <= NEAR;
+  const merged = [...kept.filter(isNear).sort(byDate), ...kept.filter((e) => !isNear(e)).sort(byDate)].slice(0, 10);
   // Only keep results worth keeping, so a hiccup doesn't hide events for an hour.
   if (merged.length) cache.set(key, { at: Date.now(), events: merged });
   return json({ events: merged, check });

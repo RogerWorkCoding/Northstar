@@ -84,11 +84,13 @@ enum PathService {
     static func ways(for text: String) async -> Reply? {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return nil }
+        // A schedule question before Calendar is connected: Discovery may offer "Connect Calendar" (it really works).
+        let offer = NorthstarCalendar.asksAboutSchedule(clean) && !NorthstarCalendar.calendarConnected ? ["calendar"] : []
         let call = Task { () -> Reply? in
             do {
                 let r: Reply = try await SupabaseManager.shared.client.functions.invoke(
                     "northstar-paths",
-                    options: FunctionInvokeOptions(body: Request(text: clean, destinations: NorthstarDestinations.forBrain, offer: [])))
+                    options: FunctionInvokeOptions(body: Request(text: clean, destinations: NorthstarDestinations.forBrain, offer: offer)))
                 return r
             } catch { return nil }
         }

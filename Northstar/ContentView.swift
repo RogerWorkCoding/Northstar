@@ -86,6 +86,9 @@ struct ContentView: View {
     @State private var isStarMenuPresented = false
     /// ✦ Discovery: explore ways forward around the star (opened by the star button).
     @State private var isDiscoveryPresented = false
+    /// Something was opened FROM Discovery (a place, Settings, Concierge, the menu): when the person closes it,
+    /// they go back to Discovery, not to Chat (test round 1). Choosing Chat on purpose clears it.
+    @State private var returnToDiscovery = false
     @State private var responseTask: Task<Void, Never>?
     @FocusState private var isPromptFocused: Bool
 
@@ -167,6 +170,7 @@ struct ContentView: View {
                 canGoToChat: !viewModel.messages.isEmpty,
                 onResult: { result in startFromDiscovery(result) },
                 onMenu: {
+                    returnToDiscovery = true
                     isDiscoveryPresented = false
                     Task {
                         try? await Task.sleep(for: .milliseconds(450))
@@ -179,8 +183,8 @@ struct ContentView: View {
             CameraView(selectedImage: $selectedImage)
                 .ignoresSafeArea()
         }
-        .sheet(isPresented: $isFeedbackPresented) { FeedbackView() }
-        .sheet(isPresented: $isConciergePresented) {
+        .sheet(isPresented: $isFeedbackPresented, onDismiss: maybeReturnToDiscovery) { FeedbackView() }
+        .sheet(isPresented: $isConciergePresented, onDismiss: maybeReturnToDiscovery) {
             ConciergeView(memory: { await memoryForEngine() })
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -199,7 +203,15 @@ struct ContentView: View {
                 photoItem = nil
             }
         }
-        .sheet(isPresented: $isLivePDFDraftPresented) {
+        .sheet(isPresented: $isLivePDFDraftPresented, onDismiss: {
+            // Closed without a PDF (Cancel or swipe): end the document steps so the next message gets a normal reply.
+            if documentStep == 2 {
+                if speechRecognizer.isRecording { speechRecognizer.stopRecording() }
+                livePDFText = ""
+                resetDocumentWorkflow()
+                appendAssistantMessage("No PDF this time. What would you like to do next?")
+            }
+        }) {
             LivePDFDraftView(
                 documentText: $livePDFText,
                 isRecording: speechRecognizer.isRecording,
@@ -254,7 +266,13 @@ struct ContentView: View {
         // chats and other screens use Settings → Appearance.
         .onAppear { applyWindowLook() }
         .onChange(of: viewModel.messages.isEmpty) { applyWindowLook() }
-        .onChange(of: navigationPath) { applyWindowLook() }
+        .onChange(of: navigationPath) {
+            applyWindowLook()
+            if navigationPath.isEmpty { maybeReturnToDiscovery() }
+        }
+        .onChange(of: isStarMenuPresented) {
+            if !isStarMenuPresented { maybeReturnToDiscovery() }
+        }
         .onChange(of: appearance) { applyWindowLook() }
         .onChange(of: appleAccount.accountChanges) {
             // Signed in to a different account (or out): start fresh so nothing mixes.
@@ -771,6 +789,7 @@ struct ContentView: View {
 
     /// Opens a saved chat (from History or Search) and continues it.
     private func openChat(_ id: UUID) {
+        returnToDiscovery = false   // they chose a chat
         Task {
             guard let stored = try? await chatsService.messages(chatId: id), !stored.isEmpty else { return }
             responseTask?.cancel()
@@ -788,10 +807,15 @@ struct ContentView: View {
     private func go(_ route: NorthstarRoute) {
         switch route {
         case .newChat:
+            returnToDiscovery = false
             // ≡ → New Chat goes straight to a fresh chat (Roger, Oct 19). Discovery stays the start screen.
             startNewChat()
-        case .camera: isCameraPresented = true
-        case .photoLibrary: isPhotoLibraryPresented = true
+        case .camera:
+            returnToDiscovery = false   // the photo is asked about in Chat
+            isCameraPresented = true
+        case .photoLibrary:
+            returnToDiscovery = false
+            isPhotoLibraryPresented = true
         case .projects: open(.projects)
         case .videos: open(.learning)
         case .voices: open(.voices)
@@ -1041,13 +1065,9 @@ struct ContentView: View {
         switch documentStep {
         case 1:
             guard question.lowercased().contains("pdf") else {
-                appendAssistantMessage("""
-                PDF Creation
-
-                PDF is the first connected document format.
-
-                Type PDF to continue.
-                """)
+                // Not "PDF": leave the document steps and answer them normally (never a loop).
+                resetDocumentWorkflow()
+                requestGeminiResponse()
                 return
             }
 
@@ -1065,7 +1085,9 @@ struct ContentView: View {
             """)
 
         default:
+            // Never leave a message unanswered: end the document steps and reply normally.
             resetDocumentWorkflow()
+            requestGeminiResponse()
         }
     }
 
@@ -1173,6 +1195,18 @@ struct ContentView: View {
         }
     }
 
+    /// Back to Discovery once whatever was opened from it has closed, and nothing else is open.
+    private func maybeReturnToDiscovery() {
+        guard returnToDiscovery else { return }
+        Task {
+            try? await Task.sleep(for: .milliseconds(500))   // a menu choice may still be opening its screen
+            guard returnToDiscovery, navigationPath.isEmpty, !isStarMenuPresented, !isConciergePresented,
+                  !isFeedbackPresented, !isCameraPresented, !isPhotoLibraryPresented, !isDiscoveryPresented else { return }
+            returnToDiscovery = false
+            isDiscoveryPresented = true
+        }
+    }
+
     /// Discovery finished: close it without the slide (chat sits on the same sky), then do what they chose:
     /// open a place directly, start a chat on their request (Northstar speaks first), or connect an app.
     private func startFromDiscovery(_ result: DiscoveryResult) {
@@ -1181,14 +1215,17 @@ struct ContentView: View {
         withTransaction(quiet) { isDiscoveryPresented = false }
         switch result {
         case .close:
+            returnToDiscovery = false
             return
         case .navigate(let route):
+            returnToDiscovery = true
             // A sheet or screen can only open once Discovery has finished closing.
             Task {
                 try? await Task.sleep(for: .milliseconds(350))
                 go(route)
             }
         case .crisis(let words):
+            returnToDiscovery = false
             if !viewModel.messages.isEmpty, !isThinking { startNewChat() }
             Task {
                 try? await Task.sleep(for: .milliseconds(350))
@@ -1197,6 +1234,7 @@ struct ContentView: View {
                 requestGeminiResponse()
             }
         case .beginChat(let prompt, _, let opener):
+            returnToDiscovery = false
             if !viewModel.messages.isEmpty, !isThinking { startNewChat() }
             Task {
                 try? await Task.sleep(for: .milliseconds(350))
@@ -1204,6 +1242,7 @@ struct ContentView: View {
                 appendAssistantMessage(opener)
             }
         case .connect(_, let prompt):
+            returnToDiscovery = false
             // No connector is live yet (none are ever offered), so this can't be reached today. When Connections
             // ships, open that connector's flow here, then continue the same request.
             if !viewModel.messages.isEmpty, !isThinking { startNewChat() }
@@ -1443,6 +1482,7 @@ struct ContentView: View {
     }
 
     private func startNewChat() {
+        returnToDiscovery = false
         NorthstarVoice.shared.stop()
         responseTask?.cancel()
         responseTask = nil

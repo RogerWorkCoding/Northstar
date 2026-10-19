@@ -53,14 +53,15 @@ const FIELDS = [
   "businessStatus", "primaryTypeDisplayName",
 ].map((f) => "places." + f).join(",");
 
-async function search(need: string, city: string, lat: number, lng: number) {
+async function search(need: string, city: string, lat: number, lng: number, wide = false) {
   const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Goog-Api-Key": KEY, "X-Goog-FieldMask": FIELDS },
     body: JSON.stringify({
-      textQuery: city ? `${need} in ${city}` : need,
-      locationBias: { circle: { center: { latitude: lat, longitude: lng }, radius: 25000 } },
-      maxResultCount: 10,
+      // Wide (second try): a broader phrase and a bigger circle, when the first found fewer than 4.
+      textQuery: wide ? `${need} service near ${city || "me"}` : city ? `${need} in ${city}` : need,
+      locationBias: { circle: { center: { latitude: lat, longitude: lng }, radius: wide ? 45000 : 25000 } },
+      maxResultCount: 20,
       languageCode: "en",
     }),
     signal: AbortSignal.timeout(8000),
@@ -181,6 +182,15 @@ Deno.serve(async (req) => {
   }
 
   // Eligible: open for business, with a Google rating from enough people to mean something.
+  const isEligible = (p: Record<string, any>) => (p.businessStatus ?? "OPERATIONAL") === "OPERATIONAL" &&
+    typeof p.rating === "number" && typeof p.userRatingCount === "number" && p.userRatingCount >= MIN_REVIEWS;
+  // At least a top pick + 3 more (Roger): when fewer than 4 qualify, search once more, wider. Same rules apply.
+  if (raw.filter(isEligible).length < 4) {
+    try {
+      const seen = new Set(raw.map((p) => String(p.id)));
+      raw = raw.concat((await search(need, city, lat, lng, true)).filter((p) => !seen.has(String(p.id))));
+    } catch { /* keep what we have */ }
+  }
   const eligible = raw
     .filter((p) => (p.businessStatus ?? "OPERATIONAL") === "OPERATIONAL")
     .filter((p) => typeof p.rating === "number" && typeof p.userRatingCount === "number" && p.userRatingCount >= MIN_REVIEWS)

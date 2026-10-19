@@ -29,6 +29,11 @@ final class NorthstarCalendar {
         return words.contains { t.contains($0) }
     }
 
+    /// Calendar already allowed (full access)? Discovery offers "Connect Calendar" only when it isn't.
+    static var calendarConnected: Bool {
+        EKEventStore.authorizationStatus(for: .event) == .fullAccess
+    }
+
     /// Next 7 days, for the brain. nil if they haven't allowed Calendar.
     func upcoming() async -> [NorthstarEngineClient.CalendarLine]? {
         guard await hasEventAccess() else { return nil }

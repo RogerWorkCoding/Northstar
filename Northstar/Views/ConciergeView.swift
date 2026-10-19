@@ -342,7 +342,10 @@ struct ConciergeView: View {
 
             // Fun also shows what's happening nearby.
             if service?.id == "fun", !working {
-                NearbyEventsRow()
+                // Tapping the event images opens the full Events list (test round 1: they said "Tap" but did nothing).
+                NearbyEventsRow(onBrowse: {
+                    if let events = services.first(where: { $0.kind == .events }) { start(events) }
+                })
             }
 
             Label("Northstar never books or pays without you.", systemImage: "hand.raised")

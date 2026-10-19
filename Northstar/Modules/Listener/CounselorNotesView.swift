@@ -129,8 +129,17 @@ struct CounselorNotesView: View {
         } else if reply.failed || reply.text.isEmpty {
             problem = "The notes couldn't be written right now. Please try again."
         } else {
-            notes = reply.text
+            notes = Self.plain(reply.text)
         }
+    }
+
+    /// Plain words for the edit box: no ** bold or # heading marks (test round 1).
+    static func plain(_ text: String) -> String {
+        text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+            var l = String(line).replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "__", with: "")
+            while l.hasPrefix("#") { l.removeFirst() }
+            return l.hasPrefix(" ") && line.hasPrefix("#") ? String(l.dropFirst()) : l
+        }.joined(separator: "\n")
     }
 
     /// A simple, multi-page PDF of their notes, in a temporary folder.

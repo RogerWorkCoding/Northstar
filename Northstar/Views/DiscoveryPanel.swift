@@ -86,8 +86,10 @@ final class DiscoveryPanelModel {
             return
         case .answer(_, let prompt):
             let ask = "\(prompt)\n\nWhat I wrote: \(request)"
+            // "What's on my calendar?" answered right here, from their real calendar (only if they connected it).
+            let calendar = NorthstarCalendar.asksAboutSchedule(request) ? await NorthstarCalendar.shared.upcoming() : nil
             let reply = await engine.getReply(for: [MessageModel(role: .user, content: ask)],
-                                              settings: EngineSettings.current, source: "discovery")
+                                              settings: EngineSettings.current, calendar: calendar, source: "discovery")
             guard mine == generation, !Task.isCancelled else { return }
             if reply.insight?.crisis == true { crisis = true }
             answerText = reply.failed ? "" : reply.text

@@ -38,7 +38,9 @@ const CONNECTOR_INFO: Record<string, { name: string; icon: string; helps: string
   spotify: { name: "Spotify", icon: "sparkles", helps: "music for the moment" },
 };
 // Only connectors that really work in the app are ever offered.
-const LIVE_CONNECTORS = (Deno.env.get("NS_CONNECTORS") ?? "").split(",").map((c) => c.trim()).filter((c) => c in CONNECTOR_INFO);
+// Calendar really works in the app (Discovery → Connect), so it's always allowed; NS_CONNECTORS adds more.
+const LIVE_CONNECTORS = [...new Set(["calendar", ...(Deno.env.get("NS_CONNECTORS") ?? "").split(",").map((c) => c.trim())])]
+  .filter((c) => c in CONNECTOR_INFO);
 
 // Same crisis words as the chat brain (kept in step with northstar-chat).
 const CRISIS = [
@@ -48,6 +50,10 @@ const CRISIS = [
   /\bself[- ]harm(ing)?\b/i,
   /\bi (just |really |honestly )?(don'?t|do not) want to (be here|live|wake up|exist)( like this)?\b(?!\s+(in|for|at|with|on|there|near|by|until|through|during)\b)/i,
   /\bbetter off without me\b/i, /\bno reason to live\b/i,
+  // Test round 1: "I don't want to be alive anymore" got bubbles. These go straight to crisis help too.
+  /\b(don'?t|do not|no longer) want to be alive\b/i, /\bwish i (was|were) (dead|never born)\b/i,
+  /\b(want|wanna) to disappear forever\b/i,
+  /\bnot worth living\b/i, /\bcan'?t go on (anymore|like this)\b/i,
 ];
 
 // Icons the app knows (SF Symbols). Anything else becomes a sparkle.
