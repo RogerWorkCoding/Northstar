@@ -35,7 +35,12 @@ Connectors improve Discovery and Chat; they are not a way to move someone into C
 Example: Discovery "Plan my week" → "Connect Calendar and I can help find time." After connecting,
 the person stays in Discovery.
 
-## Discovery home
+## Where the app opens
+
+Decided with Roger, Oct 19, 2026: after the opening star video, **the app opens on Chat**. Discovery lives
+in Chat: the ✦ in the text field opens it. (Before this, the app opened on Discovery.)
+
+## Discovery
 
 Simple: ⭐ Northstar · "What's on your mind?" The person gives a goal, challenge, problem or question;
 Northstar chooses the path.

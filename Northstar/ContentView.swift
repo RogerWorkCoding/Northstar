@@ -251,15 +251,7 @@ struct ContentView: View {
             if viewModel.messages.isEmpty, let id = UUID(uuidString: openChatId) {
                 openChat(id)
             }
-            // Discovery is home: the app opens on it (their last chat waits underneath, one ✕ away).
-            if welcomed { isDiscoveryPresented = true }
-        }
-        .onChange(of: welcomed) {
-            guard welcomed else { return }
-            Task {
-                try? await Task.sleep(for: .milliseconds(500))
-                isDiscoveryPresented = true
-            }
+            // The app opens on Chat (Roger, Oct 19, 2026). Discovery lives in Chat: the ✦ in the text field.
         }
         .onChange(of: currentChatId) { openChatId = currentChatId?.uuidString ?? "" }
         // The home screen (star and mountains) is always Night, status bar included;
@@ -288,7 +280,8 @@ struct ContentView: View {
     /// ScrollView content.
     @ViewBuilder
     private var adaptiveHeader: some View {
-        // No separate start screen: Discovery is the start. An empty chat is simply a chat waiting for words.
+        // No separate start screen: the app opens on Chat. An empty chat is simply a chat waiting for words,
+        // and the ✦ in its text field opens Discovery.
         compactHeader
             .overlay { chatTopButtons }
     }
