@@ -24,11 +24,8 @@ struct ContentView: View {
     @AppStorage("ns.conciergeHintSeen") private var conciergeHintSeen = false
 
     private func applyWindowLook() {
-        if viewModel.messages.isEmpty && navigationPath.isEmpty {
-            Appearance.night.apply()
-        } else {
-            appearance.apply()
-        }
+        // Discovery is the start screen now, so chat always follows Settings → Appearance (even when empty).
+        appearance.apply()
     }
 
     @State private var awaitingMemorySave = false
@@ -123,11 +120,20 @@ struct ContentView: View {
                 VStack(spacing: 0) {
                     adaptiveHeader
                     conversationArea
+                        .overlay {
+                            // An empty chat: a quiet line, no start screen (Discovery is the start).
+                            if viewModel.messages.isEmpty {
+                                Text("What's on your mind?")
+                                    .font(.system(size: 22, weight: .light))
+                                    .foregroundStyle(NorthstarChatStyle.soft)
+                                    .allowsHitTesting(false)
+                            }
+                        }
                     promptArea
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // Home (star and mountains) is always Night; chats follow Day or Night.
-                .environment(\.colorScheme, viewModel.messages.isEmpty ? .dark : colorScheme)
+                .environment(\.colorScheme, colorScheme)
 
                 if isStarMenuPresented {
                     starMenu
@@ -263,11 +269,8 @@ struct ContentView: View {
     /// ScrollView content.
     @ViewBuilder
     private var adaptiveHeader: some View {
-        if viewModel.messages.isEmpty {
-            heroHeader
-        } else {
-            compactHeader
-        }
+        // No separate start screen: Discovery is the start. An empty chat is simply a chat waiting for words.
+        compactHeader
     }
 
     private var compactHeader: some View {
@@ -371,8 +374,7 @@ struct ContentView: View {
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
-        .opacity(viewModel.messages.isEmpty ? 0 : 1)
-        .animation(.easeInOut(duration: reduceMotion ? 0.15 : 0.6), value: viewModel.messages.isEmpty)
+        .opacity(1)
         .accessibilityHidden(true)
     }
 
