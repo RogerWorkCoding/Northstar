@@ -360,7 +360,51 @@ struct ConciergeView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(NorthstarChatStyle.soft)
             }
-            quickChips(s)
+            if s.kind == .home, homeState == nil {
+                homeTiles(s)      // first choice: big icon tiles
+            } else {
+                quickChips(s)
+            }
+        }
+    }
+
+    /// Home & Services' first step: big gold icons you can spot before reading the word.
+    /// (Real images only appear for real businesses, on the recommendation.)
+    private func homeTiles(_ s: Service) -> some View {
+        LazyVGrid(columns: columns, spacing: 10) {
+            ForEach(s.quick, id: \.self) { q in
+                Button { ask(q) } label: {
+                    VStack(spacing: 10) {
+                        Image(systemName: Self.homeIcon(q))
+                            .font(.system(size: 26, weight: .medium))
+                            .foregroundStyle(HomeServicesStyle.gold)
+                            .frame(width: 56, height: 56)
+                            .background(Circle().fill(HomeServicesStyle.gold.opacity(0.14)))
+                            .accessibilityHidden(true)
+                        Text(q)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(NorthstarChatStyle.text)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 120)
+                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(NorthstarChatStyle.card))
+                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Finds the provider Northstar recommends")
+            }
+        }
+    }
+
+    nonisolated static func homeIcon(_ name: String) -> String {
+        switch name {
+        case "Plumber": "drop.fill"
+        case "Electrician": "bolt.fill"
+        case "Cleaner": "bubbles.and.sparkles.fill"
+        case "Handyman": "hammer.fill"
+        case "Car repair": "car.fill"
+        case "Pet care": "pawprint.fill"
+        default: "wrench.and.screwdriver.fill"
         }
     }
 
