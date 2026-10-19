@@ -397,7 +397,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
             .prefix(3))
         used = try? c.decodeIfPresent(Used.self, forKey: .used)
         deep = (try? c.decodeIfPresent(Bool.self, forKey: .deep)) ?? false
-        deepLeft = (try? c.decodeIfPresent(Int.self, forKey: .deepLeft)) ?? nil
+        deepLeft = try? c.decodeIfPresent(Int.self, forKey: .deepLeft)
         shots = Array(((try? c.decodeIfPresent([Shot].self, forKey: .shots)) ?? []).prefix(5))
         videos = Array(((try? c.decodeIfPresent([LessonVideo].self, forKey: .videos)) ?? [])
             .filter { $0.id.range(of: "^[A-Za-z0-9_-]{11}$", options: .regularExpression) != nil }
