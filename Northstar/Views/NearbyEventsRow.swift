@@ -14,7 +14,8 @@ nonisolated struct NearbyEvent: Identifiable, Hashable, Sendable, Decodable {
     let time: String?     // HH:MM
     let venue: String
     let city: String
-    let image: URL
+    /// nil = a text-only event (SeatGeek: its images are for SeatGeek's own use only).
+    let image: URL?
     let url: URL
     let miles: Double?
     /// Where it came from: "Ticketmaster" or "SeatGeek" (for the credit line).
@@ -38,7 +39,7 @@ nonisolated struct NearbyEvent: Identifiable, Hashable, Sendable, Decodable {
         time = try? c.decodeIfPresent(String.self, forKey: .time)
         venue = (try? c.decodeIfPresent(String.self, forKey: .venue)) ?? ""
         city = (try? c.decodeIfPresent(String.self, forKey: .city)) ?? ""
-        image = try link(.image)
+        image = try? link(.image)
         url = try link(.url)
         miles = try? c.decodeIfPresent(Double.self, forKey: .miles)
         source = try? c.decodeIfPresent(String.self, forKey: .source)
@@ -76,35 +77,42 @@ enum NearbyEvents {
         let event: NearbyEvent?
         init(from decoder: Decoder) throws { event = try? NearbyEvent(from: decoder) }
     }
-    private nonisolated struct Reply: Decodable, Sendable { let events: [Lenient]? }
-    private static var cached: (city: String, at: Date, events: [NearbyEvent])?
+    private nonisolated struct Reply: Decodable, Sendable { let events: [Lenient]?; let more: [Lenient]? }
+    private static var cached: (city: String, at: Date, events: [NearbyEvent], more: [NearbyEvent])?
 
-    /// Events near the person's own city, or in `chosenCity` when they picked another one ("Austin, TX").
+    /// Events with images (for the swipe cards) near the person, or in `chosenCity`.
     static func load(chosenCity: String? = nil) async -> [NearbyEvent] {
+        await loadAll(chosenCity: chosenCity).events
+    }
+
+    /// Both lists: `events` with images, and `more`, a longer text-only list (SeatGeek).
+    static func loadAll(chosenCity: String? = nil) async -> (events: [NearbyEvent], more: [NearbyEvent]) {
         let picked = chosenCity?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let lat: Double, lng: Double, key: String
         if picked.isEmpty {
             // Where they are: about a block (exact) or the city's center (city only), per their choice.
-            guard let p = await NearMe.shared.searchPoint() else { return [] }
+            guard let p = await NearMe.shared.searchPoint() else { return ([], []) }
             (lat, lng, key) = (p.lat, p.lng, "here:\(p.lat),\(p.lng)")
         } else {
             // Another city they picked: its center.
-            guard let center = try? await CLGeocoder().geocodeAddressString(picked).first?.location?.coordinate else { return [] }
+            guard let center = try? await CLGeocoder().geocodeAddressString(picked).first?.location?.coordinate else { return ([], []) }
             (lat, lng, key) = ((center.latitude * 100).rounded() / 100, (center.longitude * 100).rounded() / 100, picked)
         }
         let city = key
-        if let c = cached, c.city == city, Date().timeIntervalSince(c.at) < 1800 { return c.events }
+        if let c = cached, c.city == city, Date().timeIntervalSince(c.at) < 1800 { return (c.events, c.more) }
         do {
             let reply: Reply = try await SupabaseManager.shared.client.functions.invoke(
                 "northstar-nearby",
                 options: FunctionInvokeOptions(body: Request(lat: lat, lng: lng))
             )
-            let events = (reply.events ?? []).compactMap(\.event).filter { !$0.name.isEmpty }
+            // The swipe cards only ever show events that came with their own image.
+            let events = (reply.events ?? []).compactMap(\.event).filter { !$0.name.isEmpty && $0.image != nil }
+            let more = (reply.more ?? []).compactMap(\.event).filter { !$0.name.isEmpty }
             // Remember only a real list, so an empty answer can be tried again soon.
-            if !events.isEmpty { cached = (city, Date(), events) }
-            return events
+            if !events.isEmpty || !more.isEmpty { cached = (city, Date(), events, more) }
+            return (events, more)
         } catch {
-            return []
+            return ([], [])
         }
     }
 }
@@ -249,6 +257,8 @@ struct NearbyEventsRow: View {
 /// The Events tile: every event nearby as big image cards you swipe left and right, soonest first.
 struct NearbyEventsList: View {
     @State private var events: [NearbyEvent] = []
+    /// A longer text-only list (SeatGeek), shown under the image cards.
+    @State private var more: [NearbyEvent] = []
     @State private var loading = true
     @State private var open: NearbyEvent?
     /// Another city they picked ("" = where they are). Kept for next time.
@@ -273,7 +283,7 @@ struct NearbyEventsList: View {
                         .foregroundStyle(NorthstarChatStyle.soft)
                 }
                 .padding(.vertical, 8)
-            } else if events.isEmpty {
+            } else if events.isEmpty && more.isEmpty {
                 Text(chosenCity.isEmpty
                      ? "I couldn't find events near you right now. If Location is off for Northstar, turn it on in iPhone Settings, then try again. Or tap Change city."
                      : "I couldn't find events in \(chosenCity) right now. Check the spelling, or try a bigger city nearby.")
@@ -286,21 +296,23 @@ struct NearbyEventsList: View {
                     .frame(minHeight: 44)
             } else {
                 // Swipe left and right, one big image card at a time (the next one peeks in).
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 12) {
-                        ForEach(events) { e in
-                            Button { open = e } label: { card(e) }
-                                .buttonStyle(.plain)
-                                .containerRelativeFrame(.horizontal) { width, _ in width * 0.86 }
+                if !events.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 12) {
+                            ForEach(events) { e in
+                                Button { open = e } label: { card(e) }
+                                    .buttonStyle(.plain)
+                                    .containerRelativeFrame(.horizontal) { width, _ in width * 0.86 }
+                            }
                         }
+                        .scrollTargetLayout()
                     }
-                    .scrollTargetLayout()
+                    .scrollTargetBehavior(.viewAligned)
+                    .scrollClipDisabled()
+                    Text("Swipe for more · \(events.count) events")
+                        .font(.footnote)
+                        .foregroundStyle(NorthstarChatStyle.soft)
                 }
-                .scrollTargetBehavior(.viewAligned)
-                .scrollClipDisabled()
-                Text("Swipe for more · \(events.count) events")
-                    .font(.footnote)
-                    .foregroundStyle(NorthstarChatStyle.soft)
                 // Four more events with real photos, in a 2×2 grid, to fill the page.
                 if !moreFour.isEmpty {
                     Text("MORE TO DO")
@@ -316,7 +328,27 @@ struct NearbyEventsList: View {
                         }
                     }
                 }
-                Text("Events from " + Set(events.compactMap(\.source)).sorted().joined(separator: " and "))
+                // More events as plain text (no images), so the list can be longer.
+                if !more.isEmpty {
+                    Text("MORE EVENTS")
+                        .font(.caption.weight(.semibold))
+                        .tracking(2)
+                        .foregroundStyle(NorthstarChatStyle.label)
+                        .padding(.top, 8)
+                        .accessibilityAddTraits(.isHeader)
+                    VStack(spacing: 0) {
+                        ForEach(more) { e in
+                            Button { open = e } label: { textRow(e) }
+                                .buttonStyle(.plain)
+                            if e.id != more.last?.id {
+                                Divider().overlay(NorthstarChatStyle.stroke)
+                            }
+                        }
+                    }
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(NorthstarChatStyle.card))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
+                }
+                Text("Events from " + Set((events + more).compactMap(\.source)).sorted().joined(separator: " and "))
                     .font(.caption2)
                     .foregroundStyle(NorthstarChatStyle.label)
             }
@@ -328,9 +360,40 @@ struct NearbyEventsList: View {
         }
     }
 
+    /// One line per event: name, then when · where · how far. Tap for Tickets, Directions, Add to calendar.
+    private func textRow(_ e: NearbyEvent) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(e.name)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(NorthstarChatStyle.text)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Text([e.whenText, [e.venue, e.city].filter { !$0.isEmpty }.joined(separator: ", "),
+                      e.miles.map { String(format: $0 < 10 ? "%.1f mi" : "%.0f mi", $0) }]
+                    .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.footnote)
+                    .foregroundStyle(NorthstarChatStyle.soft)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(NorthstarChatStyle.label)
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Shows tickets, directions and add to calendar")
+    }
+
     /// Up to 4 events with their own photo (not our built-in night-sky card), skipping the first one on screen.
     private var moreFour: [NearbyEvent] {
-        let real = events.dropFirst().filter { !$0.image.absoluteString.contains("/assets/events/") }
+        let real = events.dropFirst().filter { $0.image.map { !$0.absoluteString.contains("/assets/events/") } ?? false }
         let pick = Array(real.prefix(4))
         return pick.count >= 2 ? Array(pick.prefix(pick.count >= 4 ? 4 : 2)) : []
     }
@@ -364,7 +427,7 @@ struct NearbyEventsList: View {
 
     private func load() async {
         loading = true
-        events = await NearbyEvents.load(chosenCity: chosenCity)
+        (events, more) = await NearbyEvents.loadAll(chosenCity: chosenCity)
         if chosenCity.isEmpty { hereName = await NearMe.shared.cityName() }
         loading = false
     }
@@ -484,13 +547,15 @@ private struct NearbyEventSheet: View {
             NorthstarChatStyle.background.ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    AsyncImage(url: event.image) { phase in
-                        if let image = phase.image { image.resizable().scaledToFill() } else { NorthstarChatStyle.card }
+                    if let picture = event.image {
+                        AsyncImage(url: picture) { phase in
+                            if let image = phase.image { image.resizable().scaledToFill() } else { NorthstarChatStyle.card }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 190)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .accessibilityHidden(true)
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 190)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text(event.name)

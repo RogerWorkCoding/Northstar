@@ -1,7 +1,9 @@
 // Northstar — nearby events ("Happening near you" on the Concierge screen)
 // The app sends its CITY's center point (never the person's exact spot). This asks Ticketmaster
-// and SeatGeek (whichever has a key) for upcoming events within 30 miles, merges them (one card per
-// show), and returns up to 10 with a real event image, soonest first.
+// and SeatGeek (whichever has a key) for upcoming events within 30 miles.
+// `events`: up to 10 Ticketmaster events with their image, closest and soonest first.
+// `more`: up to 30 more from SeatGeek, TEXT ONLY (no image field). SeatGeek told Northstar on
+// Oct 19, 2026 that its event and performer images are for SeatGeek's own use only.
 // Secrets: TICKETMASTER_KEY (developer.ticketmaster.com) and/or SEATGEEK_CLIENT_ID (seatgeek.com/account/develop).
 // Results are kept for 1 hour per city so it stays fast and well inside the free limits.
 
@@ -19,9 +21,9 @@ const json = (body: unknown, status = 200) =>
 
 type Event = {
   name: string; date: string; time: string | null; venue: string; city: string;
-  image: string; url: string; miles: number | null; source: "Ticketmaster" | "SeatGeek";
+  image?: string; url: string; miles: number | null; source: "Ticketmaster" | "SeatGeek";
 };
-const cache = new Map<string, { at: number; events: Event[] }>();
+const cache = new Map<string, { at: number; events: Event[]; more: Event[] }>();
 
 function milesBetween(a: [number, number], b: [number, number]) {
   const r = (d: number) => d * Math.PI / 180, R = 3958.8;
@@ -62,19 +64,6 @@ async function ticketmaster(lat: number, lng: number): Promise<Event[]> {
   return out;
 }
 
-// Northstar's own event cards (night sky, one per kind of event), served from the public repo.
-const CARDS = "https://cdn.jsdelivr.net/gh/RogerWorkCoding/Northstar@8cc9b4d8747c7e1837b1320b1f9585d8f2a5b844/assets/events/";
-function cardFor(e: Record<string, any>): string {
-  const kinds = [String(e.type ?? ""), ...((e.taxonomies ?? []) as Array<Record<string, any>>).map((t) => String(t?.name ?? ""))]
-    .join(" ").toLowerCase();
-  const kind = /comedy/.test(kinds) ? "comedy"
-    : /theater|theatre|broadway|musical|opera|ballet|dance|classical/.test(kinds) ? "theater"
-    : /concert|music|festival|band/.test(kinds) ? "music"
-    : /sport|nba|nfl|mlb|nhl|mls|ncaa|wnba|soccer|football|baseball|basketball|hockey|tennis|golf|racing|fight|boxing|mma|wrestling|rodeo/.test(kinds) ? "sports"
-    : "events";
-  return `${CARDS}${kind}.jpg`;
-}
-
 async function seatgeek(lat: number, lng: number): Promise<Event[]> {
   if (!SG_ID) return [];
   const url = new URL("https://api.seatgeek.com/2/events");
@@ -93,10 +82,7 @@ async function seatgeek(lat: number, lng: number): Promise<Event[]> {
   const out: Event[] = [];
   const skipped = { link: 0, date: 0 };
   for (const e of raw) {
-    // Never SeatGeek's own images: SeatGeek told Northstar (Oct 19, 2026) that event and performer
-    // images are licensed for SeatGeek's own use only, even for affiliates. Always Northstar's
-    // night-sky card for that kind of event.
-    const img = cardFor(e);
+    // No image at all: SeatGeek events are listed as text (see the top of this file).
     const local = String(e.datetime_local ?? "");
     if (!/^https:/.test(String(e.url ?? ""))) { skipped.link++; continue; }
     if (!/^\d{4}-\d{2}-\d{2}/.test(local)) { skipped.date++; continue; }
@@ -107,7 +93,7 @@ async function seatgeek(lat: number, lng: number): Promise<Event[]> {
       time: e.time_tbd ? null : local.slice(11, 16) || null,
       venue: String(e.venue?.name ?? "").slice(0, 80),
       city: String(e.venue?.city ?? "").slice(0, 40),
-      image: img, url: String(e.url),
+      url: String(e.url),
       miles: loc && typeof loc.lat === "number" ? milesBetween([lat, lng], [loc.lat, loc.lon]) : null,
       source: "SeatGeek",
     });
@@ -118,7 +104,7 @@ async function seatgeek(lat: number, lng: number): Promise<Event[]> {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
-  if (!TM_KEY && !SG_ID) return json({ events: [], note: "not set up" });
+  if (!TM_KEY && !SG_ID) return json({ events: [], more: [], note: "not set up" });
 
   let body: { lat?: unknown; lng?: unknown } = {};
   try { body = await req.json(); } catch { /* empty */ }
@@ -130,7 +116,9 @@ Deno.serve(async (req) => {
   const la = Math.round(lat * 100) / 100, ln = Math.round(lng * 100) / 100;
   const key = `${la},${ln}`;
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < 60 * 60 * 1000) return json({ events: hit.events, check: { ...check, cached: "yes" } });
+  if (hit && Date.now() - hit.at < 60 * 60 * 1000) {
+    return json({ events: hit.events, more: hit.more, check: { ...check, cached: "yes" } });
+  }
 
   const [tm, sg] = await Promise.all([
     ticketmaster(la, ln).catch(() => [] as Event[]),
@@ -143,20 +131,26 @@ Deno.serve(async (req) => {
   // Same show if one name starts the other ("Sarah Jarosz" and "Sarah Jarosz: 10 Years of Undercurrent").
   const seen: string[] = [];
   const same = (a: string, b: string) => Math.min(a.length, b.length) >= 6 && (a.startsWith(b) || b.startsWith(a));
-  const kept: Event[] = [];
-  for (const e of [...tm, ...sg]) {
-    const k = short(e.name);
-    if (!e.name || !k || seen.some((s) => same(s, k))) continue;
-    seen.push(k);
-    kept.push(e);
-  }
+  const keep = (list: Event[]) => {
+    const out: Event[] = [];
+    for (const e of list) {
+      const k = short(e.name);
+      if (!e.name || !k || seen.some((s) => same(s, k))) continue;
+      seen.push(k);
+      out.push(e);
+    }
+    return out;
+  };
   // Closest first (test round 1: Petaluma showed mostly Napa, Napa showed Berkeley): events within about
   // 12 miles come first, soonest first; farther ones fill the rest, also soonest first. Each card shows its town.
   const NEAR = 12;
   const byDate = (a: Event, b: Event) => `${a.date}${a.time ?? ""}`.localeCompare(`${b.date}${b.time ?? ""}`);
   const isNear = (e: Event) => typeof e.miles === "number" && e.miles <= NEAR;
-  const merged = [...kept.filter(isNear).sort(byDate), ...kept.filter((e) => !isNear(e)).sort(byDate)].slice(0, 10);
+  const order = (list: Event[]) => [...list.filter(isNear).sort(byDate), ...list.filter((e) => !isNear(e)).sort(byDate)];
+  const merged = order(keep(tm)).slice(0, 10);
+  // SeatGeek shows that Ticketmaster doesn't already have, as a longer text list.
+  const more = order(keep(sg)).slice(0, 30);
   // Only keep results worth keeping, so a hiccup doesn't hide events for an hour.
-  if (merged.length) cache.set(key, { at: Date.now(), events: merged });
-  return json({ events: merged, check });
+  if (merged.length || more.length) cache.set(key, { at: Date.now(), events: merged, more });
+  return json({ events: merged, more, check });
 });
