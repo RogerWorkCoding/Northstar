@@ -697,6 +697,13 @@ struct ContentView: View {
             .padding(.horizontal, 8)
             .frame(minHeight: 36)
 
+            // A soft gray line between the words and the icons.
+            Rectangle()
+                .fill(NorthstarChatStyle.stroke)
+                .frame(height: 1)
+                .padding(.horizontal, 8)
+                .accessibilityHidden(true)
+
             // Bottom deck: the doors on the left, mic and send on the right.
             HStack(spacing: 4) {
                 // ✦ opens Discovery; its ≡ opens the main menu.
