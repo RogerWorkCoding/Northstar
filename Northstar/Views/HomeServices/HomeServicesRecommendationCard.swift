@@ -16,7 +16,7 @@ struct HomeServicesRecommendationCard: View {
 
             VStack(alignment: .leading, spacing: 18) {
                 NorthstarRecommendationBadge()
-                ProviderIdentity(provider: provider)
+                ProviderIdentity(provider: provider, precise: recommendation.precise)
                 Text(statement)
                     .font(.body)
                     .foregroundStyle(NorthstarChatStyle.text)
@@ -163,6 +163,7 @@ struct NorthstarRecommendationBadge: View {
 
 private struct ProviderIdentity: View {
     let provider: HomeServiceProvider
+    var precise = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -177,7 +178,7 @@ private struct ProviderIdentity: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
                 if let miles = provider.miles {
-                    Label(String(format: miles < 10 ? "%.1f mi from the city center" : "%.0f mi from the city center", miles),
+                    Label(String(format: miles < 10 ? "%.1f mi" : "%.0f mi", miles) + (precise ? " away" : " from the city center"),
                           systemImage: "location")
                 }
                 if let open = provider.openNow {

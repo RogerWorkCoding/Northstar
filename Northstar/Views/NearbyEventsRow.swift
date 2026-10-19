@@ -82,16 +82,22 @@ enum NearbyEvents {
     /// Events near the person's own city, or in `chosenCity` when they picked another one ("Austin, TX").
     static func load(chosenCity: String? = nil) async -> [NearbyEvent] {
         let picked = chosenCity?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let found: String? = picked.isEmpty ? await NearMe.shared.cityName() : picked
-        guard let city = found else { return [] }
+        let lat: Double, lng: Double, key: String
+        if picked.isEmpty {
+            // Where they are: about a block (exact) or the city's center (city only), per their choice.
+            guard let p = await NearMe.shared.searchPoint() else { return [] }
+            (lat, lng, key) = (p.lat, p.lng, "here:\(p.lat),\(p.lng)")
+        } else {
+            // Another city they picked: its center.
+            guard let center = try? await CLGeocoder().geocodeAddressString(picked).first?.location?.coordinate else { return [] }
+            (lat, lng, key) = ((center.latitude * 100).rounded() / 100, (center.longitude * 100).rounded() / 100, picked)
+        }
+        let city = key
         if let c = cached, c.city == city, Date().timeIntervalSince(c.at) < 1800 { return c.events }
-        // The city's center, not where the person is standing.
-        guard let center = try? await CLGeocoder().geocodeAddressString(city).first?.location?.coordinate else { return [] }
         do {
             let reply: Reply = try await SupabaseManager.shared.client.functions.invoke(
                 "northstar-nearby",
-                options: FunctionInvokeOptions(body: Request(lat: (center.latitude * 100).rounded() / 100,
-                                                             lng: (center.longitude * 100).rounded() / 100))
+                options: FunctionInvokeOptions(body: Request(lat: lat, lng: lng))
             )
             let events = (reply.events ?? []).compactMap(\.event).filter { !$0.name.isEmpty }
             // Remember only a real list, so an empty answer can be tried again soon.

@@ -123,6 +123,8 @@ nonisolated struct NorthstarProviderRecommendation: Hashable, Sendable, Decodabl
     let alternatives: [HomeServiceProvider]
     let reasons: [RecommendationReason]
     let limitations: [String]
+    /// Distances are from where they are (true) or from the city's center (false). Set by the app.
+    var precise = false
 
     private enum CodingKeys: String, CodingKey {
         case status, retrievedAt, methodology, compared, recommended, alternatives, reasons, limitations
@@ -184,18 +186,14 @@ enum HomeServicesProviderService {
     static func recommend(need: String) async -> HomeServicesState {
         let status = CLLocationManager().authorizationStatus
         if status == .denied || status == .restricted { return .permissionRequired }
-        guard let city = await NearMe.shared.cityName() else { return .locationUnavailable }
-        guard let request = MKGeocodingRequest(addressString: city),
-              let center = try? await request.mapItems.first?.location.coordinate else {
-            return .locationUnavailable
-        }
+        guard let city = await NearMe.shared.cityName(),
+              let point = await NearMe.shared.searchPoint() else { return .locationUnavailable }
         do {
-            let reply: NorthstarProviderRecommendation = try await SupabaseManager.shared.client.functions.invoke(
+            var reply: NorthstarProviderRecommendation = try await SupabaseManager.shared.client.functions.invoke(
                 "northstar-providers",
-                options: FunctionInvokeOptions(body: Request(need: need, city: city,
-                                                             lat: (center.latitude * 100).rounded() / 100,
-                                                             lng: (center.longitude * 100).rounded() / 100))
+                options: FunctionInvokeOptions(body: Request(need: need, city: city, lat: point.lat, lng: point.lng))
             )
+            reply.precise = point.precise
             switch reply.status {
             case "ok" where reply.recommended != nil: return .ready(reply)
             case "ok", "none": return .noProviders

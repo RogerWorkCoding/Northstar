@@ -32,6 +32,9 @@ struct ConciergeView: View {
     @State private var homeNeed = ""
     /// Which page of tiles is showing (tiles swipe left and right).
     @State private var tilePage: Int? = 0
+    // Exact location or city only: asked once with a clear notice, changeable any time.
+    @State private var showLocationNotice = false
+    @State private var preciseOn = NearMe.precise
 
     @State private var typed = ""
     @State private var speech = SpeechRecognizer()
@@ -127,6 +130,15 @@ struct ConciergeView: View {
                 ask(heard)
             }
         }
+        .onAppear {
+            if NearMe.preciseChoice == nil { showLocationNotice = true }
+        }
+        .alert("Use your exact location?", isPresented: $showLocationNotice) {
+            Button("Use exact location") { setPrecise(true) }
+            Button("City only") { setPrecise(false) }
+        } message: {
+            Text("Northstar can find what's really closest to you: chargers, events and help at home. Your location is sent only when you search, rounded to about a block, and Northstar doesn't save it. You can change this any time at the bottom of the Concierge.")
+        }
         .onDisappear {
             task?.cancel()
             if speech.isRecording { speech.stopRecording() }
@@ -198,6 +210,16 @@ struct ConciergeView: View {
                 .foregroundStyle(NorthstarChatStyle.label)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 8)
+
+            Button { showLocationNotice = true } label: {
+                Label(preciseOn ? "Location: exact (about a block) \u{00B7} Change" : "Location: city only \u{00B7} Change",
+                      systemImage: preciseOn ? "location.fill" : "location")
+                    .font(.footnote)
+                    .foregroundStyle(NorthstarChatStyle.linkBlue)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Choose exact location or city only")
         }
     }
 
@@ -433,10 +455,16 @@ struct ConciergeView: View {
             var request = s.request
             if let found = await NearMe.shared.cityName() {
                 city = found
-                request += " I'm in \(found)."
+                let near = await NearMe.shared.nearText() ?? "in \(found)"
+                request += " I'm \(near)."
             }
             ask(request)
         }
+    }
+
+    private func setPrecise(_ on: Bool) {
+        NearMe.preciseChoice = on
+        preciseOn = on
     }
 
     private func startOver() {

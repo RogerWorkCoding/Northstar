@@ -1,9 +1,12 @@
 import Foundation
 import CoreLocation
+import MapKit
 
-// 📍 Near me: the phone's rough location, only when the person uses the Concierge.
-// Asks "While using the app" once. Only the CITY is ever sent to Northstar, never the exact spot.
-// The exact spot stays on the phone (for distances on the cards).
+// 📍 Near me: the phone's location, only when the person uses the Concierge.
+// Asks "While using the app" once. Then Northstar's notice asks which they prefer:
+//   • Exact location: the spot, rounded to about a block (3 decimals), so "nearest" really is nearest.
+//   • City only: just the city's center point.
+// Either way it's sent only with a search, and Northstar doesn't save it.
 
 @MainActor
 final class NearMe: NSObject, CLLocationManagerDelegate {
@@ -13,6 +16,15 @@ final class NearMe: NSObject, CLLocationManagerDelegate {
     private var waiters: [CheckedContinuation<CLLocation?, Never>] = []
     private(set) var lastLocation: CLLocation?
     private(set) var city: String?
+    /// The street they're on ("Washington St"), from the same lookup as the city.
+    private(set) var street: String?
+
+    /// nil = not asked yet (show the notice), true = exact (about a block), false = city only.
+    static var preciseChoice: Bool? {
+        get { UserDefaults.standard.object(forKey: "ns.preciseLocation") as? Bool }
+        set { UserDefaults.standard.set(newValue, forKey: "ns.preciseLocation") }
+    }
+    static var precise: Bool { preciseChoice ?? false }
 
     override init() {
         super.init()
@@ -28,8 +40,29 @@ final class NearMe: NSObject, CLLocationManagerDelegate {
         guard let mark = marks?.first else { return nil }
         let parts = [mark.locality, mark.administrativeArea].compactMap { $0 }
         city = parts.isEmpty ? nil : parts.joined(separator: ", ")
+        street = mark.thoroughfare
         return city
     }
+
+    /// Where to search from: their spot rounded to about a block (exact), or the city's center (city only).
+    func searchPoint() async -> (lat: Double, lng: Double, precise: Bool)? {
+        if Self.precise, let here = await currentLocation() {
+            return (Self.round3(here.coordinate.latitude), Self.round3(here.coordinate.longitude), true)
+        }
+        guard let city = await cityName(),
+              let request = MKGeocodingRequest(addressString: city),
+              let center = try? await request.mapItems.first?.location.coordinate else { return nil }
+        return ((center.latitude * 100).rounded() / 100, (center.longitude * 100).rounded() / 100, false)
+    }
+
+    /// For the brain's search words: "near Washington St, Petaluma, CA" (exact) or "in Petaluma, CA".
+    func nearText() async -> String? {
+        guard let city = await cityName() else { return nil }
+        if Self.precise, let street, !street.isEmpty { return "near \(street), \(city)" }
+        return "in \(city)"
+    }
+
+    private static func round3(_ v: Double) -> Double { (v * 1000).rounded() / 1000 }
 
     func currentLocation() async -> CLLocation? {
         if let lastLocation, abs(lastLocation.timestamp.timeIntervalSinceNow) < 600 { return lastLocation }
