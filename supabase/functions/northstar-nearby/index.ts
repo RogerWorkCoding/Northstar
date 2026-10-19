@@ -142,12 +142,14 @@ Deno.serve(async (req) => {
   // companies spell the same show differently ("Jim Henson's Labyrinth: In Concert 40th…" vs "Jim Hensons
   // Labyrinth - In Concert"). Ticketmaster goes first, so a show listed by both keeps its real image.
   const short = (n: string) => n.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]/g, "").slice(0, 14);
-  const seen = new Set<string>();
+  // Same show if one name starts the other ("Sarah Jarosz" and "Sarah Jarosz: 10 Years of Undercurrent").
+  const seen: string[] = [];
+  const same = (a: string, b: string) => Math.min(a.length, b.length) >= 6 && (a.startsWith(b) || b.startsWith(a));
   const kept: Event[] = [];
   for (const e of [...tm, ...sg]) {
     const k = short(e.name);
-    if (!e.name || !k || seen.has(k)) continue;
-    seen.add(k);
+    if (!e.name || !k || seen.some((s) => same(s, k))) continue;
+    seen.push(k);
     kept.push(e);
   }
   const merged = kept
