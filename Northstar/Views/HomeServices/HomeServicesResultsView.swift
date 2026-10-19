@@ -8,8 +8,6 @@ struct HomeServicesResultsView: View {
     let state: HomeServicesState
     var onRetry: () -> Void
 
-    @State private var comparing = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -18,10 +16,9 @@ struct HomeServicesResultsView: View {
                 loadingCard
             case .ready(let rec):
                 if let provider = rec.recommended {
-                    HomeServicesRecommendationCard(recommendation: rec, provider: provider) {
-                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) { comparing.toggle() }
-                    }
-                    if comparing, !rec.alternatives.isEmpty {
+                    // The top pick, then the next best right below (always at least 3 when there are that many).
+                    HomeServicesRecommendationCard(recommendation: rec, provider: provider, onCompare: nil)
+                    if !rec.alternatives.isEmpty {
                         compare(rec)
                     }
                     limitations(rec)
@@ -48,7 +45,6 @@ struct HomeServicesResultsView: View {
                         "Turn on Location for Northstar in iPhone Settings \u{203A} Privacy & Security \u{203A} Location Services. Only your city is used.", retry: true)
             }
         }
-        .onChange(of: state) { comparing = false }
     }
 
     private var loadingCard: some View {
@@ -73,11 +69,11 @@ struct HomeServicesResultsView: View {
 
     private func compare(_ rec: NorthstarProviderRecommendation) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Other options")
+            Text("Also top rated")
                 .font(.headline)
                 .foregroundStyle(NorthstarChatStyle.text)
                 .accessibilityAddTraits(.isHeader)
-            Text("I still recommend the one above. These were next by the same method.")
+            Text("Next best by the same method. My first pick is still the one above.")
                 .font(.footnote)
                 .foregroundStyle(NorthstarChatStyle.soft)
                 .fixedSize(horizontal: false, vertical: true)
