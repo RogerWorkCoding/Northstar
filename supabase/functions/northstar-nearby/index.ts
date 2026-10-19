@@ -91,14 +91,12 @@ async function seatgeek(lat: number, lng: number): Promise<Event[]> {
   const raw = ((await res.json())?.events ?? []) as Array<Record<string, any>>;
   check.seatgeek += ` · ${raw.length} found`;
   const out: Event[] = [];
-  // An image can sit in several places; take the first real one.
-  const pic = (x: Record<string, any>) =>
-    [x?.image, x?.images?.huge, x?.images?.banner, x?.images?.["1200x525"], x?.images?.["800x320"]]
-      .map((u) => String(u ?? "")).find((u) => /^https?:\/\//.test(u))?.replace(/^http:/, "https:");
   const skipped = { link: 0, date: 0 };
   for (const e of raw) {
-    // SeatGeek's free plan sends no pictures: use Northstar's night-sky card for that kind of event.
-    const img = (e.performers ?? []).map(pic).find(Boolean) ?? cardFor(e);
+    // Never SeatGeek's own images: SeatGeek told Northstar (Oct 19, 2026) that event and performer
+    // images are licensed for SeatGeek's own use only, even for affiliates. Always Northstar's
+    // night-sky card for that kind of event.
+    const img = cardFor(e);
     const local = String(e.datetime_local ?? "");
     if (!/^https:/.test(String(e.url ?? ""))) { skipped.link++; continue; }
     if (!/^\d{4}-\d{2}-\d{2}/.test(local)) { skipped.date++; continue; }
