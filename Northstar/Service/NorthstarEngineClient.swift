@@ -57,6 +57,8 @@ struct NorthstarEngineClient {
         let calendar: [CalendarLine]?
         /// Where the question came from ("concierge"), for anonymous feature counts.
         let source: String?
+        /// How hard Northstar thinks: "fast" | "smart" | "deep" (chosen from the star in Discovery).
+        var brain: String = NorthstarBrainLevel.current.rawValue
     }
 
     /// One calendar item sent when they ask about their schedule ("Today 2:00 PM: Vet").

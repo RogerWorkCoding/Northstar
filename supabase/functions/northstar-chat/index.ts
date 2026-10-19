@@ -1646,7 +1646,13 @@ Deno.serve(async (req) => {
   // Crisis help always gets the bigger brain, answers right away (no long thinking) and never counts.
   const deepUser = userIdFrom(req.headers.get("Authorization") ?? "");
   const crisisNow = crisisNet(lastText);
-  const askedDeep = !crisisNow && wantsDeep(lastText, str(body.source, 20), body.deep === true);
+  // Brain level, chosen from the star in Discovery: "fast" never Deep Thinks, "deep" thinks on most
+  // questions (still within the daily allowance), "smart" (default) decides by the question.
+  const brain = str(body.brain, 8);
+  const src = str(body.source, 20);
+  const quickScreen = src === "concierge" || src === "discovery";
+  const askedDeep = !crisisNow && brain !== "fast" &&
+    wantsDeep(lastText, src, body.deep === true || (brain === "deep" && !quickScreen && lastText.trim().length >= 12));
   // The dev copy (northstar-chat-dev) may Deep Think for a signed-out test call; the live brain never does.
   const isDev = new URL(req.url).pathname.includes("-dev");
   let left = askedDeep ? (deepUser || !isDev ? await deepLeft(deepUser) : 1) : 0;

@@ -30,6 +30,7 @@ enum DiscoveryAction: Equatable {
     case clarify(question: String)
     case find(need: String)                     // real local options, in the Discovery panel
     case answer(prompt: String)                 // a short answer, in the Discovery panel
+    case show(DiscoveryPanelContent)            // the star's own tools (Connections, Brain level), in the panel
     case more                                   // the full ≡ menu, when there isn't room for every place
 }
 
@@ -129,6 +130,8 @@ struct DiscoveryView: View {
     @State private var ripple = false
     @State private var speech = SpeechRecognizer()
     @State private var panel = DiscoveryPanelModel()
+    /// Tapped the star: its three orbs (Settings, Connections, Brain level) are out.
+    @State private var starMenu = false
     @FocusState private var typing: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -182,7 +185,13 @@ struct DiscoveryView: View {
                         .animation(.easeOut(duration: 0.12), value: speech.level)
                         .position(state == .startingChat ? CGPoint(x: center.x, y: -40) : center)
                         .opacity(state == .startingChat ? 0 : 1)
-                        .accessibilityHidden(true)
+                        .contentShape(Circle().scale(0.3))   // only the star itself, not the sky around it
+                        .onTapGesture { tapStar() }
+                        .accessibilityElement()
+                        .accessibilityLabel("Northstar")
+                        .accessibilityHint(starMenu ? "Hides Settings, Connections and Brain level" : "Shows Settings, Connections and Brain level")
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction { tapStar() }
 
                     Circle()
                         .stroke(gold.opacity(0.8), lineWidth: 2)
@@ -368,9 +377,9 @@ struct DiscoveryView: View {
             // Their exact words, never a rewording.
             let heard = request.count > 60 ? String(request.prefix(57)) + "\u{2026}" : request
             VStack(spacing: 2) {
-                Text("A few ways forward")
+                Text(starMenu ? "Your Northstar" : "A few ways forward")
                     .font(.system(size: 20, weight: .light))
-                Text("You said: \u{201C}\(heard)\u{201D}")
+                Text(starMenu ? "Tap the star again to hide" : "You said: \u{201C}\(heard)\u{201D}")
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.7))
                     .lineLimit(2)
@@ -652,6 +661,7 @@ struct DiscoveryView: View {
         case .beginChat: return "Opens a chat about this"
         case .find: return "Shows real local options here, in Discovery"
         case .answer: return "Shows a short answer here, in Discovery"
+        case .show: return "Opens here, in Discovery"
         case .connect: return "Opens the connection, then continues your request"
         case .clarify: return "Asks you one more thing, then suggests new ways forward"
         case .more: return "Opens the full menu"
@@ -689,6 +699,7 @@ struct DiscoveryView: View {
         typing = false
         // A new request closes any open result (still Discovery) and brings fresh suggestions.
         if panel.isOpen { withAnimation(.easeInOut(duration: 0.3)) { panel.close() } }
+        starMenu = false
         // An answer to a follow-up keeps the original request with it.
         if let question, !again {
             request = "\(request). \(question) \(said)"
@@ -784,6 +795,8 @@ struct DiscoveryView: View {
             openPanel(.find(need: need), for: b)
         case .answer(let prompt):
             openPanel(.answer(title: b.title, prompt: prompt), for: b)
+        case .show(let content):
+            openPanel(content, for: b)
         case .clarify(let q):
             // Stay in Discovery: ask, then bring new bubbles after they answer.
             if panel.isOpen { panel.close() }
@@ -865,6 +878,48 @@ struct DiscoveryView: View {
         }
     }
 
+    // MARK: The star's own orbs
+
+    /// Tap the star: Settings, Connections and Brain level come out. Tap again: they go back.
+    private func tapStar() {
+        guard picked == nil, state != .interpreting, state != .startingChat else { return }
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        if starMenu {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                starMenu = false
+                active = []
+                shown = 0
+                state = .idle
+            }
+            return
+        }
+        question = nil
+        starMenu = true
+        let level = NorthstarBrainLevel.current
+        active = [
+            DiscoveryBubble(id: "star.settings", title: "Settings", symbol: "gearshape", kind: .destination,
+                            action: .navigate(.settings), priority: 0, isPersistent: false),
+            DiscoveryBubble(id: "star.connections", title: "Connections", symbol: "link", kind: .inPlace,
+                            action: .show(.connections), priority: 1, isPersistent: false),
+            DiscoveryBubble(id: "star.brain", title: "Brain: \(level.title)", symbol: level.symbol, kind: .inPlace,
+                            action: .show(.brain), priority: 2, isPersistent: false),
+        ]
+        withAnimation(.easeInOut(duration: 0.3)) { state = .showingSuggestions }
+        if !reduceMotion {
+            withAnimation(.easeOut(duration: 0.15)) { pulse = true }
+            withAnimation(.easeInOut(duration: 0.3).delay(0.15)) { pulse = false }
+        }
+        AccessibilityNotification.Announcement("Settings, Connections and Brain level").post()
+        Task {
+            for i in 0..<active.count {
+                if !reduceMotion { try? await Task.sleep(for: .milliseconds(110)) }
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.25) : .spring(response: 0.6, dampingFraction: 0.8)) {
+                    shown = i + 1
+                }
+            }
+        }
+    }
+
     // MARK: The panel (results in place)
 
     private func openPanel(_ content: DiscoveryPanelContent, for b: DiscoveryBubble) {
@@ -878,6 +933,11 @@ struct DiscoveryView: View {
     private func closePanel() {
         withAnimation(reduceMotion ? .easeInOut(duration: 0.25) : .spring(response: 0.5, dampingFraction: 0.86)) {
             panel.close()
+            if starMenu, let i = active.firstIndex(where: { $0.id == "star.brain" }) {
+                let level = NorthstarBrainLevel.current
+                active[i] = DiscoveryBubble(id: "star.brain", title: "Brain: \(level.title)", symbol: level.symbol, kind: .inPlace,
+                                            action: .show(.brain), priority: 2, isPersistent: false)
+            }
         }
         AccessibilityNotification.Announcement("Back to suggestions").post()
     }
@@ -899,12 +959,14 @@ struct DiscoveryView: View {
                     .frame(width: 60, height: 60)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("A few ways forward")
+                    Text(starMenu ? "Your Northstar" : "A few ways forward")
                         .font(.subheadline.weight(.semibold))
-                    Text("You said: \u{201C}\(request)\u{201D}")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.7))
-                        .lineLimit(1)
+                    if !starMenu {
+                        Text("You said: \u{201C}\(request)\u{201D}")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.7))
+                            .lineLimit(1)
+                    }
                 }
                 Spacer(minLength: 0)
             }

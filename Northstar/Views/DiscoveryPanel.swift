@@ -9,6 +9,8 @@ import SwiftUI
 enum DiscoveryPanelContent: Equatable {
     case find(need: String)
     case answer(title: String, prompt: String)
+    case connections        // from the star: connect apps, right here
+    case brain              // from the star: how hard Northstar thinks
 }
 
 /// Owns what the panel shows. Each open bumps a generation number, so a slow earlier answer can never
@@ -44,6 +46,10 @@ final class DiscoveryPanelModel {
         status = .loading
         providers = .loading
         answerText = ""
+        if content == .connections || content == .brain {
+            status = .loaded     // nothing to load: the choices show at once
+            return
+        }
         AccessibilityNotification.Announcement("Loading \(title)").post()
         task = Task { [weak self] in await self?.load(content, request: request, generation: mine) }
     }
@@ -76,6 +82,8 @@ final class DiscoveryPanelModel {
             case .loading: return
             default: status = .failed
             }
+        case .connections, .brain:
+            return
         case .answer(_, let prompt):
             let ask = "\(prompt)\n\nWhat I wrote: \(request)"
             let reply = await engine.getReply(for: [MessageModel(role: .user, content: ask)],
@@ -180,6 +188,10 @@ struct DiscoveryPanelView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
+        case .some(.connections):
+            ConnectionsPanelContent()
+        case .some(.brain):
+            BrainLevelPanelContent()
         case nil:
             EmptyView()
         }
@@ -211,7 +223,7 @@ struct DiscoveryPanelView: View {
     /// Secondary on purpose: Chat is a choice, never the automatic next step. Hidden while loading.
     @ViewBuilder
     private var chatButton: some View {
-        if model.status != .loading {
+        if model.status != .loading, model.content != .connections, model.content != .brain {
             Button(action: onChat) {
                 Label("Discuss in Chat", systemImage: "bubble.left.and.bubble.right")
                     .font(.subheadline)
