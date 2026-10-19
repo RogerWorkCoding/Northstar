@@ -105,28 +105,62 @@ struct NearbyEventsRow: View {
     @State private var open: NearbyEvent?
 
     @State private var finished = false
+    /// Opens the Events list (the static images use it).
+    var onBrowse: (() -> Void)? = nil
+
+    init(onBrowse: (() -> Void)? = nil) { self.onBrowse = onBrowse }
+
+    private static let categories: [(title: String, image: String)] = [
+        ("Music", "EventCard-music"), ("Sports", "EventCard-sports"),
+        ("Theater", "EventCard-theater"), ("Comedy", "EventCard-comedy"),
+    ]
+
+    private func categoryCard(_ c: (title: String, image: String)) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            Image(c.image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 180, height: 120)
+                .clipped()
+            Text(c.title)
+                .font(.headline)
+                .foregroundStyle(.white)
+                .shadow(radius: 4)
+                .padding(12)
+        }
+        .frame(width: 180, height: 120)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens events near you")
+    }
 
     var body: some View {
         // A VStack (not a Group): an empty Group never starts its .task, so the row never loaded.
         VStack(alignment: .leading, spacing: 0) {
-            if events.isEmpty && !finished {
-                // Placeholder image cards while it looks.
+            if events.isEmpty {
+                // Static images that are always there (built into the app), so the bottom is never empty.
+                // Tapping one opens the Events list. Real events replace them once they load.
                 VStack(alignment: .leading, spacing: 10) {
                     Text("HAPPENING NEAR YOU")
                         .font(.caption.weight(.semibold))
                         .tracking(2)
                         .foregroundStyle(NorthstarChatStyle.label)
-                    HStack(spacing: 12) {
-                        ForEach(0..<2, id: \.self) { _ in
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(NorthstarChatStyle.card)
-                                .frame(width: 280, height: 236)
-                                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
+                        .accessibilityAddTraits(.isHeader)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(Self.categories, id: \.image) { c in
+                                Button { onBrowse?() } label: { categoryCard(c) }
+                                    .buttonStyle(.plain)
+                                    .disabled(onBrowse == nil)
+                            }
                         }
+                        .padding(.vertical, 2)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .clipped()
-                    .accessibilityLabel("Finding events near you")
+                    .scrollClipDisabled()
+                    Text(finished ? "Tap to see events near you" : "Finding events near you\u{2026}")
+                        .font(.caption2)
+                        .foregroundStyle(NorthstarChatStyle.label)
                 }
                 .padding(.top, 8)
             } else if !events.isEmpty {

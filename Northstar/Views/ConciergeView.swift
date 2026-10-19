@@ -182,7 +182,9 @@ struct ConciergeView: View {
                 ForEach(services) { s in tile(s) }
             }
 
-            NearbyEventsRow()
+            NearbyEventsRow {
+                if let events = services.first(where: { $0.kind == .events }) { start(events) }
+            }
 
             Label("Northstar never books or pays without you.", systemImage: "hand.raised")
                 .font(.footnote)
