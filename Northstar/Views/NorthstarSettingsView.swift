@@ -301,6 +301,27 @@ struct NorthstarSettingsView: View {
                         }
                     }
                 }
+                // Coming soon: a preview only, no switch until Navigator is built.
+                NavigationLink {
+                    NavigatorPreviewView()
+                } label: {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text("Northstar Navigator")
+                                Text("Coming soon")
+                                    .font(.caption2.weight(.semibold))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule().fill(Color.yellow.opacity(0.25)))
+                            }
+                            Text("Does things on your Mac when you ask. Tap to see a preview.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "safari")
+                    }
+                }
             } header: {
                 Text("Modules")
             } footer: {
