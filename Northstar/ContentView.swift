@@ -530,7 +530,7 @@ struct ContentView: View {
 
     private var listenerOn: Bool { modulesOn.split(separator: ",").contains("listener") }
 
-    /// Good Listener's door: the ear in the text field, next to the star and the bell (only when it's on).
+    /// Good Listener's door: the ear in the text field's bottom row, next to the star and the bell (only when it's on).
     private var listenerButton: some View {
         Button {
             isPromptFocused = false
@@ -539,7 +539,7 @@ struct ContentView: View {
             Image(systemName: "ear")
                 .font(.system(size: 17, weight: .light))
                 .foregroundStyle(NorthstarChatStyle.text)
-                .frame(width: 34, height: 34)
+                .frame(width: 40, height: 40)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -605,7 +605,7 @@ struct ContentView: View {
             Image(systemName: "bell")
                 .font(.system(size: 17, weight: .light))
                 .foregroundStyle(NorthstarChatStyle.text)
-                .frame(width: 34, height: 34)
+                .frame(width: 40, height: 40)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -674,58 +674,77 @@ struct ContentView: View {
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
+    /// The text field, two decks (Roger, Oct 19): the top deck is for words (type or speak); the bottom deck
+    /// holds the doors (✦ Discovery, the Concierge bell, Good Listener's ear and future modules) on the left,
+    /// and the mic and send on the right. Room for more modules without squeezing the typing space.
     private var promptRow: some View {
-        HStack(spacing: 10) {
-            // ✦ opens Discovery; its ≡ opens the main menu.
-            Button {
-                isPromptFocused = false
-                isDiscoveryPresented = true
-            } label: {
-                Image(systemName: "sparkle")
-                    .font(.system(size: 18, weight: .light))
+        VStack(alignment: .leading, spacing: 6) {
+            // Top deck: their words.
+            HStack(spacing: 8) {
+                // While listening: live voice bars, then their words appear as they speak.
+                if speechRecognizer.isRecording {
+                    VoiceBars(level: speechRecognizer.level, count: promptText.isEmpty ? 14 : 6)
+                        .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .leading)))
+                }
+                TextField(speechRecognizer.isRecording ? "Listening\u{2026}" : "Ask Northstar...", text: $promptText, axis: .vertical)
+                    .focused($isPromptFocused)
                     .foregroundStyle(NorthstarChatStyle.text)
-                    .frame(width: 34, height: 34)
+                    .lineLimit(1...6)
+                    .disabled(isThinking)
+                    .submitLabel(.send)
+                    .onSubmit { sendMessage() }
             }
+            .padding(.horizontal, 8)
+            .frame(minHeight: 36)
 
-            // The concierge bell sits next to the star on every screen (both are "places to go").
-            conciergeButton
+            // Bottom deck: the doors on the left, mic and send on the right.
+            HStack(spacing: 4) {
+                // ✦ opens Discovery; its ≡ opens the main menu.
+                Button {
+                    isPromptFocused = false
+                    isDiscoveryPresented = true
+                } label: {
+                    Image(systemName: "sparkle")
+                        .font(.system(size: 18, weight: .light))
+                        .foregroundStyle(NorthstarChatStyle.text)
+                        .frame(width: 40, height: 40)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Discovery")
+                .accessibilityHint("Shows a few ways forward")
 
-            // Good Listener's ear, only when it's switched on (Settings > Modules).
-            if listenerOn {
-                listenerButton
-            }
+                // The concierge bell sits next to the star (both are "places to go").
+                conciergeButton
 
-            // While listening: live voice bars, then their words appear as they speak.
-            if speechRecognizer.isRecording {
-                VoiceBars(level: speechRecognizer.level, count: promptText.isEmpty ? 14 : 6)
-                    .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .leading)))
-            }
+                // Good Listener's ear, only when it's switched on (Settings > Modules).
+                if listenerOn {
+                    listenerButton
+                }
 
-            TextField(speechRecognizer.isRecording ? "Listening\u{2026}" : "Ask Northstar...", text: $promptText, axis: .vertical)
-                .focused($isPromptFocused)
-                .foregroundStyle(NorthstarChatStyle.text)
-                .lineLimit(1...6)
-                .disabled(isThinking)
-                .submitLabel(.send)
-                .onSubmit { sendMessage() }
+                Spacer(minLength: 8)
 
-            Button { toggleMicrophone() } label: {
-                Image(systemName: speechRecognizer.isRecording ? "stop.circle.fill" : "mic.fill")
-                    .font(.system(size: 18))
-                    .foregroundStyle(speechRecognizer.isRecording ? NorthstarChatStyle.listening : NorthstarChatStyle.text)
-                    .frame(width: 34, height: 34)
-                    .background { ListeningRing(active: speechRecognizer.isRecording) }
-            }
-            .accessibilityLabel(speechRecognizer.isRecording ? "Stop listening" : "Speak")
+                Button { toggleMicrophone() } label: {
+                    Image(systemName: speechRecognizer.isRecording ? "stop.circle.fill" : "mic.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(speechRecognizer.isRecording ? NorthstarChatStyle.listening : NorthstarChatStyle.text)
+                        .frame(width: 40, height: 40)
+                        .background { ListeningRing(active: speechRecognizer.isRecording) }
+                }
+                .accessibilityLabel(speechRecognizer.isRecording ? "Stop listening" : "Speak")
 
-            Button {
-                isThinking ? stopResponse() : sendMessage()
-            } label: {
-                Image(systemName: isThinking ? "stop.fill" : "arrow.up")
-                    .font(.system(size: isThinking ? 12 : 15, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
-                    .background { Circle().fill(NorthstarChatStyle.sendFill) }
+                Button {
+                    isThinking ? stopResponse() : sendMessage()
+                } label: {
+                    Image(systemName: isThinking ? "stop.fill" : "arrow.up")
+                        .font(.system(size: isThinking ? 12 : 15, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background { Circle().fill(NorthstarChatStyle.sendFill) }
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel(isThinking ? "Stop" : "Send")
             }
         }
     }
