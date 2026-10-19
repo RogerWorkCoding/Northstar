@@ -4,19 +4,10 @@ struct StarMenuView: View {
 
     @Binding var isPresented: Bool
 
-    var onNewChat: () -> Void = {}
-    var onCamera: () -> Void = {}
-    var onPhotoLibrary: () -> Void = {}
-    var onProjects: () -> Void = {}
-    var onDiscovery: () -> Void = {}
-    var onLearning: () -> Void = {}
-    var onVoices: () -> Void = {}
-    var onMemory: () -> Void = {}
-    var onDocuments: () -> Void = {}
-    var onHistory: () -> Void = {}
-    var onSettings: () -> Void = {}
-    var onAbout: () -> Void = {}
-    var onFeedback: () -> Void = {}
+    /// Opens a place from the shared list (ContentView decides how: screen, sheet or action).
+    var onOpen: (NorthstarRoute) -> Void = { _ in }
+
+    private static let sections = Array(Set(NorthstarDestinations.all.filter(\.inMenu).map(\.menuSection))).sorted()
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -40,78 +31,13 @@ struct StarMenuView: View {
                     )
                     .padding(.vertical, 14)
 
-                menuButton(
-                    title: "New Chat",
-                    systemImage: "square.and.pencil",
-                    action: onNewChat
-                )
-
-                menuButton(
-                    title: "Camera",
-                    systemImage: "camera",
-                    action: onCamera
-                )
-
-                menuButton(
-                    title: "Photo Library",
-                    systemImage: "photo.on.rectangle",
-                    action: onPhotoLibrary
-                )
-
-                sectionDivider
-
-                menuButton(
-                    title: "Projects",
-                    systemImage: "folder",
-                    action: onProjects
-                )
-
-                menuButton(
-                    title: "Videos",
-                    systemImage: "play.rectangle.on.rectangle",
-                    action: onLearning
-                )
-
-                menuButton(
-                    title: "Voices",
-                    systemImage: "waveform",
-                    action: onVoices
-                )
-
-                sectionDivider
-
-                menuButton(
-                    title: "Search Memory",
-                    systemImage: "brain.head.profile",
-                    action: onMemory
-                )
-
-                menuButton(
-                    title: "Documents",
-                    systemImage: "doc",
-                    action: onDocuments
-                )
-
-                sectionDivider
-
-                menuButton(
-                    title: "Settings",
-                    systemImage: "gearshape",
-                    action: onSettings
-                )
-
-                menuButton(
-                    title: "About Northstar",
-                    systemImage: "info.circle",
-                    action: onAbout
-                )
-
-                // Testers: feedback is one tap away, never hidden in Settings.
-                menuButton(
-                    title: "Send Feedback",
-                    systemImage: "bubble.left.and.text.bubble.right",
-                    action: onFeedback
-                )
+                // The rows come from the one shared list (NorthstarDestinations), in its order and groups.
+                ForEach(Self.sections, id: \.self) { section in
+                    if section != Self.sections.first { sectionDivider }
+                    ForEach(NorthstarDestinations.all.filter { $0.inMenu && $0.menuSection == section }) { d in
+                        menuButton(title: d.title, systemImage: d.symbol) { onOpen(d.route) }
+                    }
+                }
 
                 Spacer()
             }

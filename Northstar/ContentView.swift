@@ -157,7 +157,7 @@ struct ContentView: View {
         }
         .fullScreenCover(isPresented: $isDiscoveryPresented) {
             DiscoveryView(
-                onChoose: { choice in startFromDiscovery(choice) },
+                onResult: { result in startFromDiscovery(result) },
                 onMenu: {
                     isDiscoveryPresented = false
                     Task {
@@ -644,45 +644,7 @@ struct ContentView: View {
     private var starMenu: some View {
         StarMenuView(
             isPresented: $isStarMenuPresented,
-            onNewChat: {
-                startNewChat()
-            },
-            onCamera: {
-                isCameraPresented = true
-            },
-            onPhotoLibrary: {
-                isPhotoLibraryPresented = true
-            },
-            onProjects: {
-                open(.projects)
-            },
-            onDiscovery: {
-                open(.discovery)
-            },
-            onLearning: {
-                open(.learning)
-            },
-            onVoices: {
-                open(.voices)
-            },
-            onMemory: {
-                open(.memory)
-            },
-            onDocuments: {
-                open(.documents)
-            },
-            onHistory: {
-                open(.history)
-            },
-            onSettings: {
-                open(.settings)
-            },
-            onAbout: {
-                open(.about)
-            },
-            onFeedback: {
-                isFeedbackPresented = true
-            }
+            onOpen: { go($0) }
         )
         .transition(
             .move(edge: .leading)
@@ -794,6 +756,25 @@ struct ContentView: View {
             }
             currentChatId = id
             navigationPath.removeAll()
+        }
+    }
+
+    /// Opens any place from the shared list (NorthstarDestinations): the ✦ menu and Discovery both use this.
+    private func go(_ route: NorthstarRoute) {
+        switch route {
+        case .newChat: startNewChat()
+        case .camera: isCameraPresented = true
+        case .photoLibrary: isPhotoLibraryPresented = true
+        case .projects: open(.projects)
+        case .videos: open(.learning)
+        case .voices: open(.voices)
+        case .memory: open(.memory)
+        case .documents: open(.documents)
+        case .history: open(.history)
+        case .concierge: isConciergePresented = true
+        case .settings: open(.settings)
+        case .about: open(.about)
+        case .feedback: isFeedbackPresented = true
         }
     }
 
@@ -1154,32 +1135,45 @@ struct ContentView: View {
         }
     }
 
-    /// Discovery finished: close it without the slide (chat sits on the same sky), then start a fresh chat
-    /// on the path they chose. Northstar speaks first; their words stay above as context.
-    private func startFromDiscovery(_ choice: PathChoice) {
+    /// Discovery finished: close it without the slide (chat sits on the same sky), then do what they chose:
+    /// open a place directly, start a chat on their request (Northstar speaks first), or connect an app.
+    private func startFromDiscovery(_ result: DiscoveryResult) {
         var quiet = Transaction()
         quiet.disablesAnimations = true
         withTransaction(quiet) { isDiscoveryPresented = false }
-        if case .skip = choice { return }
-        if !viewModel.messages.isEmpty, !isThinking { startNewChat() }
-        switch choice {
-        case .skip:
+        switch result {
+        case .close:
             return
-        case .words(let words):
-            // "Something else" or crisis words: Northstar answers their own words.
-            guard !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        case .navigate(let route):
+            // A sheet or screen can only open once Discovery has finished closing.
+            Task {
+                try? await Task.sleep(for: .milliseconds(350))
+                go(route)
+            }
+        case .crisis(let words):
+            if !viewModel.messages.isEmpty, !isThinking { startNewChat() }
             Task {
                 try? await Task.sleep(for: .milliseconds(350))
                 guard !isThinking else { return }
                 appendUserMessage(words)
                 requestGeminiResponse()
             }
-        case .path(_, let words, let opener):
-            // Northstar speaks first, on the path they chose. Their words stay above it as context.
+        case .beginChat(let prompt, _, let opener):
+            if !viewModel.messages.isEmpty, !isThinking { startNewChat() }
             Task {
                 try? await Task.sleep(for: .milliseconds(350))
-                if !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { appendUserMessage(words) }
+                if !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { appendUserMessage(prompt) }
                 appendAssistantMessage(opener)
+            }
+        case .connect(_, let prompt):
+            // No connector is live yet (none are ever offered), so this can't be reached today. When Connections
+            // ships, open that connector's flow here, then continue the same request.
+            if !viewModel.messages.isEmpty, !isThinking { startNewChat() }
+            Task {
+                try? await Task.sleep(for: .milliseconds(350))
+                guard !isThinking else { return }
+                appendUserMessage(prompt)
+                requestGeminiResponse()
             }
         }
     }

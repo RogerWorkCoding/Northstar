@@ -1,34 +1,67 @@
 import SwiftUI
 import Supabase
 
-// ✦ Discovery: step inside Northstar's thinking. Chat is for conversation; Discovery is for finding the best path.
-// Opened from the ✦ star button in chat. The ≡ in its corner opens the main menu.
-// The person always goes first: only the star and the text field until they type or speak.
-// Then the star reacts and 3–5 bubbles, written from THEIR words, float around it. Most are things Northstar can
-// do now; at most one may be a connector (looks the same, only ones that really work). They can pick a bubble,
-// or keep typing to refine and get new bubbles. Picking one merges it into the star and opens chat on that path.
-// Their words are used for this answer only; nothing is saved here.
+// ✦ Discovery: the intelligent front door to Northstar. Opened by the ✦ star button in chat.
+//
+// Two layers of bubbles around the central star:
+//   • Background: every real place in Northstar (from NorthstarDestinations, the same list as the ≡ menu),
+//     as small muted icon bubbles, like the Apple Watch. Always there, always tappable, never in the way.
+//   • Active: after the person types or speaks, 3–5 bubbles written from THEIR words come forward:
+//     open a place, do a task in chat, ask one follow-up, or (when one really works) connect an app.
+//     A place they ask for is PROMOTED from the background (no duplicate bubble).
+// Three ways around: background bubbles (passive discovery), active bubbles (intelligent routing),
+// and the ≡ menu (the complete list). Their words are used for this answer only; nothing is saved here.
 
-/// What the person chose, handed to chat.
-enum PathChoice: Equatable {
-    case skip
-    case words(String)                                     // crisis words: chat's crisis help answers
-    case path(label: String, words: String, opener: String)
+// MARK: - Model
+
+enum DiscoveryBubbleKind: Equatable {
+    case destination, nativeCapability, connector, clarification
 }
 
-nonisolated struct PathOption: Identifiable, Hashable, Sendable, Decodable {
-    var id: String { label }
+enum DiscoveryAction: Equatable {
+    case navigate(NorthstarRoute)
+    case beginChat(prompt: String, capability: String, opener: String)
+    case connect(connector: String, prompt: String)
+    case clarify(question: String)
+    case more                                   // the full ≡ menu, when there isn't room for every place
+}
+
+struct DiscoveryBubble: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let symbol: String?
+    let kind: DiscoveryBubbleKind
+    let action: DiscoveryAction
+    let priority: Int
+    let isPersistent: Bool
+}
+
+/// What Discovery hands back to chat.
+enum DiscoveryResult: Equatable {
+    case close
+    case crisis(String)                          // crisis words: chat's crisis help answers
+    case navigate(NorthstarRoute)
+    case beginChat(prompt: String, capability: String, opener: String)
+    case connect(connector: String, prompt: String)
+}
+
+nonisolated struct PathOption: Hashable, Sendable, Decodable {
     let label: String
     let icon: String
     let opener: String
-    /// "capability" (Northstar helps now) or "connector" (connect an app for a better answer).
+    /// capability · navigate · clarify · connector
     var kind: String? = nil
+    var destination: String? = nil
     var connector: String? = nil
 }
 
 @MainActor
 enum PathService {
-    private nonisolated struct Request: Encodable, Sendable { let text: String }
+    private nonisolated struct Request: Encodable, Sendable {
+        let text: String
+        let destinations: [[String: String]]
+        let offer: [String]
+    }
     nonisolated struct Reply: Decodable, Sendable {
         var heard: String?
         var tone: String?
@@ -37,52 +70,52 @@ enum PathService {
         var fallback: Bool?
     }
 
-    static let fallback: [PathOption] = [
-        .init(label: "Organize priorities", icon: "list.number", opener: "Let's sort what matters from what can wait. What's on your plate right now?"),
-        .init(label: "Plan my week", icon: "calendar", opener: "Let's plan your week together. What's the one thing that matters most to finish?"),
-        .init(label: "Learn something new", icon: "book", opener: "Let's find a good way in. What would you love to learn?"),
-        .init(label: "Talk it through", icon: "bubble.left.and.bubble.right", opener: "I'm here. What's on your mind most today?"),
-    ]
-
-    /// Never throws and never waits more than about 4 seconds: the ready-made paths cover anything slow.
-    static func ways(for text: String) async -> Reply {
+    /// nil when Northstar couldn't be reached or answered too slowly (about 6 seconds). Never made-up results.
+    static func ways(for text: String) async -> Reply? {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty else { return Reply(heard: nil, tone: "vague", paths: fallback, fallback: true) }
+        guard !clean.isEmpty else { return nil }
         let call = Task { () -> Reply? in
             do {
                 let r: Reply = try await SupabaseManager.shared.client.functions.invoke(
-                    "northstar-paths", options: FunctionInvokeOptions(body: Request(text: clean)))
+                    "northstar-paths",
+                    options: FunctionInvokeOptions(body: Request(text: clean, destinations: NorthstarDestinations.forBrain, offer: [])))
                 return r
             } catch { return nil }
         }
         let timer = Task {
-            try? await Task.sleep(for: .seconds(4))
+            try? await Task.sleep(for: .seconds(6))
             call.cancel()
         }
-        let first = await call.value
+        let reply = await call.value
         timer.cancel()
-        if let first, first.crisis == true || (first.paths?.count ?? 0) >= 3 { return first }
-        return Reply(heard: nil, tone: "practical", paths: fallback, fallback: true)
+        guard let reply else { return nil }
+        if reply.crisis == true { return reply }
+        // The brain's own ready-made set is not an answer to THEIR words: treat it as "couldn't interpret".
+        guard reply.fallback != true, (reply.paths?.count ?? 0) >= 3 else { return nil }
+        return reply
     }
 }
 
+// MARK: - View
+
 struct DiscoveryView: View {
-    var onChoose: (PathChoice) -> Void
+    var onResult: (DiscoveryResult) -> Void
     var onMenu: () -> Void
 
-    private enum Phase { case idle, thinking, choosing, merging, leaving }
+    enum Phase: Equatable {
+        case idle, listening, interpreting, showingSuggestions, navigating, startingChat, requestingConnection, error
+    }
 
-    @State private var phase: Phase = .idle
-    @State private var draft = ""                   // what's in the field now
-    @State private var asked: [String] = []         // everything they've said here, in order
+    @State private var state: Phase = .idle
+    @State private var draft = ""                  // the composer; never cleared by a transition
+    @State private var request = ""                // what Northstar is working on (their words)
+    @State private var question: String?           // a follow-up they chose to answer
     @State private var reply: PathService.Reply?
-    @State private var paths: [PathOption] = []
-    @State private var shown = 0                    // bubbles floated in so far
-    @State private var round = 0                    // a new set of bubbles each time they refine
-    @State private var picked: PathOption?
-    @State private var pan: CGSize = .zero
+    @State private var active: [DiscoveryBubble] = []
+    @State private var shown = 0                   // active bubbles floated in so far
+    @State private var picked: DiscoveryBubble?
+    @State private var pickedSpot: CGPoint?
     @State private var dragging: (id: String, at: CGPoint)?
-    @State private var mergeTo: CGPoint?
     @State private var pulse = false
     @State private var ripple = false
     @State private var speech = SpeechRecognizer()
@@ -90,16 +123,29 @@ struct DiscoveryView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.colorSchemeContrast) private var contrast
 
     private let starSize: CGFloat = 190
-    private let bubble: CGFloat = 78
+    private let activeSize: CGFloat = 76
+    private let backSize: CGFloat = 44
 
     private let gold = Color(red: 1.0, green: 0.84, blue: 0.55)
     private let lavender = Color(red: 0.72, green: 0.70, blue: 1.0)
     private let glass = Color(red: 0.10, green: 0.14, blue: 0.38)
+    private let mist = Color(red: 0.55, green: 0.63, blue: 0.80)      // muted gray-blue for background places
 
     private var hasWords: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    private var listLayout: Bool { typeSize.isAccessibilitySize }
+    private var bigText: Bool { typeSize.isAccessibilitySize }
+    private var shownState: Phase { speech.isRecording ? .listening : state }
+    private var suggesting: Bool { state == .showingSuggestions || picked != nil }
+
+    // Every place in Northstar, most important first (the same list the ≡ menu uses).
+    private var background: [DiscoveryBubble] {
+        NorthstarDestinations.all.sorted { $0.priority < $1.priority }.map { d in
+            DiscoveryBubble(id: "dest.\(d.route.rawValue)", title: d.title, symbol: d.symbol, kind: .destination,
+                            action: .navigate(d.route), priority: d.priority, isPersistent: true)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -107,40 +153,41 @@ struct DiscoveryView: View {
             GeometryReader { geo in
                 let size = geo.size
                 let center = CGPoint(x: size.width / 2, y: size.height * 0.5)
+                let layout = DiscoveryLayout.make(size: size, center: center, active: Array(active.prefix(shown)),
+                                                  background: background, suggesting: suggesting,
+                                                  starRadius: starRadius, activeSize: activeSize, backSize: backSize,
+                                                  headingBelowStar: !suggesting, bigText: bigText)
                 ZStack {
-                    constellation(center: center, size: size)
+                    constellation(center: center, layout: layout)
 
                     star
                         .scaleEffect(starScale * (pulse ? 1.18 : 1) * (speech.isRecording ? 1 + CGFloat(speech.level) * 0.08 : 1))
                         .brightness(speech.isRecording ? Double(speech.level) * 0.15 : 0)
                         .animation(.easeOut(duration: 0.12), value: speech.level)
-                        .position(phase == .leaving ? CGPoint(x: center.x, y: -40) : center)
-                        .opacity(phase == .leaving ? 0 : 1)
+                        .position(state == .startingChat ? CGPoint(x: center.x, y: -40) : center)
+                        .opacity(state == .startingChat ? 0 : 1)
                         .accessibilityHidden(true)
 
                     Circle()
                         .stroke(gold.opacity(0.8), lineWidth: 2)
                         .frame(width: 70, height: 70)
                         .scaleEffect(ripple ? 3.2 : 0.6)
-                        .opacity(ripple ? 0 : (phase == .merging ? 0.9 : 0))
+                        .opacity(ripple ? 0 : (picked != nil ? 0.9 : 0))
                         .position(center)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
 
                     wordsLayer(center: center, size: size)
 
-                    if phase == .choosing || phase == .merging {
-                        bubbles(center: center, size: size)
-                    }
+                    bubbles(layout: layout, center: center)
                 }
                 .frame(width: size.width, height: size.height)
                 .contentShape(Rectangle())
                 .coordinateSpace(name: "discovery")
-                .gesture(skyPan)
                 .onTapGesture { typing = false }
             }
-            inputBar
-                .opacity(phase == .merging || phase == .leaving ? 0 : 1)
+            composer
+                .opacity(state == .startingChat || state == .navigating ? 0 : 1)
         }
         .foregroundStyle(.white)
         .background {
@@ -159,7 +206,7 @@ struct DiscoveryView: View {
         .onDisappear { if speech.isRecording { speech.stopRecording() } }
     }
 
-    // MARK: Top and bottom
+    // MARK: Top bar and composer
 
     private var topBar: some View {
         HStack {
@@ -169,14 +216,15 @@ struct DiscoveryView: View {
                     .frame(width: 44, height: 44)
             }
             .accessibilityLabel("Menu")
+            .accessibilityHint("Shows every place in Northstar")
             Spacer()
             Text("Discovery")
                 .font(.headline.weight(.regular))
                 .tracking(1.5)
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(.white.opacity(0.85))
                 .accessibilityAddTraits(.isHeader)
             Spacer()
-            Button { onChoose(.skip) } label: {
+            Button { onResult(.close) } label: {
                 Image(systemName: "xmark")
                     .font(.title3)
                     .frame(width: 44, height: 44)
@@ -184,20 +232,19 @@ struct DiscoveryView: View {
             .accessibilityLabel("Back to chat")
         }
         .padding(.horizontal, 12)
-        .opacity(phase == .leaving ? 0 : 1)
+        .opacity(state == .startingChat ? 0 : 1)
     }
 
-    /// Always there: type or speak first, then again to refine.
-    private var inputBar: some View {
+    /// Always there: type or speak first, then edit and send again to refine.
+    private var composer: some View {
         HStack(spacing: 10) {
             if speech.isRecording {
                 VoiceBars(level: speech.level, color: gold, count: draft.isEmpty ? 14 : 6)
                     .transition(.opacity)
             }
             TextField("", text: $draft,
-                      prompt: Text(speech.isRecording ? "Listening\u{2026}"
-                                   : asked.isEmpty ? "Type or speak\u{2026}" : "Add more, or pick a bubble\u{2026}")
-                        .foregroundStyle(.white.opacity(0.5)),
+                      prompt: Text(speech.isRecording ? "Listening\u{2026}" : question == nil ? "Type or speak\u{2026}" : "Your answer\u{2026}")
+                        .foregroundStyle(.white.opacity(0.55)),
                       axis: .vertical)
                 .lineLimit(1...4)
                 .focused($typing)
@@ -226,66 +273,83 @@ struct DiscoveryView: View {
         .padding(.leading, 16)
         .padding(.trailing, 6)
         .padding(.vertical, 2)
-        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.white.opacity(0.10)))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.18)))
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.black.opacity(0.35)))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.22)))
         .padding(.horizontal, 16)
         .padding(.bottom, 10)
-        .disabled(phase == .thinking || phase == .merging || phase == .leaving)
+        .disabled(state == .interpreting || state == .startingChat || state == .navigating || state == .requestingConnection)
     }
 
     // MARK: Words on the sky
 
     @ViewBuilder
     private func wordsLayer(center: CGPoint, size: CGSize) -> some View {
-        switch phase {
+        let below = CGPoint(x: center.x, y: center.y + starSize * 0.62)
+        switch shownState {
         case .idle:
-            Text("What's on your mind?")
-                .font(.system(size: 26, weight: .light))
-                .position(x: center.x, y: center.y + starSize * 0.62)
+            Text(question ?? "What's on your mind?")
+                .font(.system(size: question == nil ? 26 : 22, weight: .light))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+                .frame(width: size.width)
+                .position(below)
                 .transition(.opacity)
                 .accessibilityAddTraits(.isHeader)
-        case .thinking:
+        case .listening:
+            Text("Listening\u{2026}")
+                .font(.system(size: 22, weight: .light))
+                .foregroundStyle(.white.opacity(0.85))
+                .position(below)
+        case .interpreting:
             Text("Thinking about your way forward\u{2026}")
                 .font(.callout)
-                .foregroundStyle(.white.opacity(0.75))
-                .position(x: center.x, y: center.y + starSize * 0.62)
+                .foregroundStyle(.white.opacity(0.8))
+                .position(below)
                 .transition(.opacity)
-        case .choosing:
-            // Their exact words, never a rewording.
-            let last = asked.last ?? ""
-            let heard = last.count > 60 ? String(last.prefix(57)) + "\u{2026}" : last
-            VStack(spacing: 4) {
-                Text(reply?.fallback == true ? "A few places to start" : "A few ways forward")
-                    .font(.system(size: 22, weight: .light))
+        case .error:
+            VStack(spacing: 10) {
+                Text("Couldn't reach Northstar just now.")
+                    .font(.callout)
+                Button { submit(again: true) } label: {
+                    Label("Try again", systemImage: "arrow.clockwise")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 44)
+                        .background(Capsule().fill(.white.opacity(0.14)))
+                }
+                .buttonStyle(.plain)
+            }
+            .position(below)
+        case .showingSuggestions, .navigating, .startingChat, .requestingConnection:
+            // Their exact words, never a rewording. Sits at the top, clear of every bubble.
+            let heard = request.count > 60 ? String(request.prefix(57)) + "\u{2026}" : request
+            VStack(spacing: 2) {
+                Text("A few ways forward")
+                    .font(.system(size: 20, weight: .light))
                 Text("You said: \u{201C}\(heard)\u{201D}")
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.65))
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.7))
                     .lineLimit(2)
             }
             .multilineTextAlignment(.center)
             .padding(.horizontal, 24)
             .frame(width: size.width)
-            .position(x: center.x, y: 34)
-            .transition(.opacity)
-        case .merging, .leaving:
-            EmptyView()
+            .position(x: center.x, y: DiscoveryLayout.topBand / 2)
+            .opacity(picked == nil ? 1 : 0)
         }
     }
 
     // MARK: Bubbles
 
-    private func constellation(center: CGPoint, size: CGSize) -> some View {
-        TimelineView(.animation(paused: reduceMotion || phase != .choosing)) { tl in
-            Canvas { ctx, _ in
-                guard (phase == .choosing || phase == .merging), !listLayout else { return }
-                for (i, p) in paths.enumerated() where i < shown {
-                    guard picked == nil || picked == p else { continue }
-                    let at = spot(i, of: paths.count, center: center, size: size, time: tl.date)
-                    var line = Path()
-                    line.move(to: center)
-                    line.addLine(to: at)
-                    ctx.stroke(line, with: .color(gold.opacity(0.18)), lineWidth: 1)
-                }
+    private func constellation(center: CGPoint, layout: DiscoveryLayout) -> some View {
+        Canvas { ctx, _ in
+            guard suggesting, !bigText else { return }
+            for b in active.prefix(shown) {
+                guard picked == nil || picked == b, let at = layout.spots[b.id] else { continue }
+                var line = Path()
+                line.move(to: center)
+                line.addLine(to: at)
+                ctx.stroke(line, with: .color(gold.opacity(0.16)), lineWidth: 1)
             }
         }
         .allowsHitTesting(false)
@@ -293,166 +357,204 @@ struct DiscoveryView: View {
     }
 
     @ViewBuilder
-    private func bubbles(center: CGPoint, size: CGSize) -> some View {
-        if listLayout {
-            // Big text: a simple list of buttons instead of the floating ring.
-            VStack(spacing: 12) {
-                ForEach(paths) { p in
-                    Button { choose(p, from: center, center: center) } label: {
-                        Label(p.label, systemImage: p.icon)
-                            .frame(maxWidth: .infinity, minHeight: 56)
-                            .background(Capsule().fill(glass.opacity(0.85)))
-                            .overlay(Capsule().strokeBorder(gold.opacity(0.5)))
-                    }
-                    .buttonStyle(.plain)
+    private func bubbles(layout: DiscoveryLayout, center: CGPoint) -> some View {
+        let activeIds = Set(active.prefix(shown).map(\.id))
+        // One bubble per place or action: a promoted place leaves the background and comes forward.
+        let backs = background.filter { !activeIds.contains($0.id) && layout.spots[$0.id] != nil }
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || picked != nil)) { tl in
+            let t = reduceMotion ? 0 : tl.date.timeIntervalSinceReferenceDate
+            ZStack {
+                ForEach(Array(backs.enumerated()), id: \.element.id) { i, b in
+                    let home = layout.spots[b.id]!
+                    let at = CGPoint(x: home.x + 2 * sin(t * 0.35 + Double(i)), y: home.y + 2 * cos(t * 0.3 + Double(i) * 1.7))
+                    backgroundBubble(b)
+                        .position(at)
+                        .opacity(picked == nil ? (suggesting ? quietOpacity : restOpacity) : 0)
+                        .onTapGesture { select(b, at: at, center: center) }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(b.title)
+                        .accessibilityValue("Place in Northstar")
+                        .accessibilityHint(hint(for: b))
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction { select(b, at: at, center: center) }
                 }
-            }
-            .padding(.horizontal, 24)
-            .position(x: center.x, y: center.y + 20)
-        } else {
-            TimelineView(.animation(paused: reduceMotion || phase != .choosing)) { tl in
-                ZStack {
-                    ForEach(Array(paths.enumerated()), id: \.element.id) { i, p in
-                        let home = spot(i, of: paths.count, center: center, size: size, time: tl.date)
-                        let at = position(of: p, home: home)
-                        let d = hypot(at.x - center.x, at.y - center.y)
-                        // Apple Watch feel: bigger near the star, smaller toward the edges.
-                        let fisheye = reduceMotion ? 1 : max(0.7, min(1.08, 1.3 - d / (size.width * 0.9)))
-                        bubbleView(p, index: i)
-                            .scaleEffect(scale(for: p, fisheye: fisheye))
-                            .opacity(opacity(for: p, index: i))
-                            .position(at)
-                            .gesture(bubbleDrag(p, at: at, center: center))
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel(p.label)
-                            .accessibilityValue("Way forward \(i + 1) of \(paths.count)")
-                            .accessibilityHint("Starts a chat about this")
-                            .accessibilityAddTraits(.isButton)
-                            .accessibilityAction { choose(p, from: at, center: center) }
-                    }
+                if let more = layout.more {
+                    moreBubble
+                        .position(more)
+                        .opacity(picked == nil ? (suggesting ? quietOpacity : restOpacity) : 0)
+                        .onTapGesture { onMenu() }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("More places")
+                        .accessibilityHint("Opens the full menu")
+                        .accessibilityAddTraits(.isButton)
                 }
-                .id(round)
+                ForEach(Array(active.prefix(shown).enumerated()), id: \.element.id) { i, b in
+                    let home = layout.spots[b.id] ?? center
+                    let drift = CGPoint(x: home.x + 3 * sin(t * 0.8 + Double(i) * 1.3), y: home.y + 3 * cos(t * 0.6 + Double(i) * 1.3))
+                    let at = spot(of: b, home: drift)
+                    activeBubble(b, index: i)
+                        .scaleEffect(scale(of: b))
+                        .opacity(opacity(of: b))
+                        .position(at)
+                        .gesture(drag(b, at: at, center: center))
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(b.title)
+                        .accessibilityValue(kindName(b.kind))
+                        .accessibilityHint(hint(for: b))
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction { select(b, at: at, center: center) }
+                }
             }
         }
     }
 
-    /// Frosted glass: a deep navy body lit from above, a soft sheen, a gold-to-lavender rim and a faint glow.
-    private func bubbleView(_ p: PathOption, index: Int) -> some View {
-        let isPicked = picked == p
-        // Each bubble leans a little warmer or cooler, so they feel like different lights, not buttons.
+    private var restOpacity: Double { contrast == .increased ? 1 : 0.9 }
+    private var quietOpacity: Double { contrast == .increased ? 0.85 : 0.55 }
+
+    /// A place in Northstar: small, muted gray-blue, icon only (VoiceOver reads its name).
+    private func backgroundBubble(_ b: DiscoveryBubble) -> some View {
+        ZStack {
+            Circle().fill(mist.opacity(contrast == .increased ? 0.45 : 0.24))
+            Circle().strokeBorder(.white.opacity(contrast == .increased ? 0.6 : 0.28), lineWidth: 1)
+            Image(systemName: b.symbol ?? "circle")
+                .font(.system(size: 17, weight: .regular))
+                .foregroundStyle(.white.opacity(0.88))
+        }
+        .frame(width: backSize, height: backSize)
+        .contentShape(Circle())
+    }
+
+    private var moreBubble: some View {
+        ZStack {
+            Circle().fill(mist.opacity(0.18))
+            Circle().strokeBorder(.white.opacity(0.22), lineWidth: 1)
+            Image(systemName: "ellipsis")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.8))
+        }
+        .frame(width: backSize, height: backSize)
+        .contentShape(Circle())
+    }
+
+    /// Northstar's response: frosted glass, lit from above, gold-to-lavender rim. A promoted place keeps its icon.
+    private func activeBubble(_ b: DiscoveryBubble, index: Int) -> some View {
+        let isPicked = picked == b
         let tint = [lavender, gold, Color(red: 0.62, green: 0.80, blue: 1.0), lavender, gold][index % 5]
+        let quietKind = b.kind == .clarification
         return ZStack {
             Circle().fill(LinearGradient(colors: [Color(red: 0.20, green: 0.22, blue: 0.48), glass, Color(red: 0.05, green: 0.07, blue: 0.20)],
                                          startPoint: .top, endPoint: .bottom))
-                .opacity(0.88)
+                .opacity(0.9)
             Circle().fill(RadialGradient(colors: [tint.opacity(0.30), .clear], center: UnitPoint(x: 0.3, y: 0.25),
-                                         startRadius: 1, endRadius: bubble * 0.75))
+                                         startRadius: 1, endRadius: activeSize * 0.75))
             Ellipse()
-                .fill(LinearGradient(colors: [.white.opacity(0.28), .white.opacity(0)], startPoint: .top, endPoint: .bottom))
-                .frame(width: bubble * 0.62, height: bubble * 0.30)
-                .offset(y: -bubble * 0.26)
+                .fill(LinearGradient(colors: [.white.opacity(0.26), .white.opacity(0)], startPoint: .top, endPoint: .bottom))
+                .frame(width: activeSize * 0.62, height: activeSize * 0.30)
+                .offset(y: -activeSize * 0.26)
                 .blur(radius: 1.5)
             Circle().strokeBorder(
                 LinearGradient(colors: [gold.opacity(isPicked ? 1 : 0.85), tint.opacity(0.35), lavender.opacity(0.55)],
                                startPoint: .topLeading, endPoint: .bottomTrailing),
-                lineWidth: isPicked ? 2.5 : 1.2)
-            Text(p.label)
-                .font(.system(size: 12.5, weight: .medium))
-                .multilineTextAlignment(.center)
-                .lineLimit(3)
-                .minimumScaleFactor(0.8)
-                .padding(9)
-                .foregroundStyle(.white.opacity(0.96))
+                style: StrokeStyle(lineWidth: isPicked ? 2.5 : 1.2, dash: quietKind ? [4, 3] : []))
+            VStack(spacing: 2) {
+                if let symbol = b.kind == .destination ? b.symbol : nil {
+                    Image(systemName: symbol).font(.system(size: 14))
+                }
+                Text(b.title)
+                    .font(.system(size: 12, weight: .medium))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.75)
+            }
+            .padding(8)
+            .foregroundStyle(.white.opacity(0.96))
             if isPicked {
                 Image(systemName: "checkmark")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(gold)
-                    .offset(y: bubble * 0.36)
+                    .offset(y: activeSize * 0.36)
             }
         }
-        .frame(width: bubble, height: bubble)
-        .shadow(color: (isPicked ? gold : tint).opacity(isPicked ? 0.7 : 0.28), radius: isPicked ? 18 : 10)
+        .frame(width: activeSize, height: activeSize)
+        .shadow(color: (isPicked ? gold : tint).opacity(isPicked ? 0.7 : 0.25), radius: isPicked ? 18 : 9)
     }
 
     // MARK: The star
 
     private var star: some View {
         ZStack {
-            // A warm halo, so the star reads as the brightest light in the sky.
             Circle()
-                .fill(RadialGradient(colors: [gold.opacity(phase == .idle ? 0.16 : 0.32), gold.opacity(0.06), .clear],
+                .fill(RadialGradient(colors: [gold.opacity(suggesting ? 0.30 : 0.18), gold.opacity(0.06), .clear],
                                      center: .center, startRadius: 4, endRadius: starSize * 0.9))
                 .frame(width: starSize * 1.8, height: starSize * 1.8)
             NorthstarVisionStarMark(size: starSize)
         }
-        .shadow(color: gold.opacity(phase == .idle ? 0.25 : 0.5), radius: 34)
+        .shadow(color: gold.opacity(suggesting ? 0.5 : 0.28), radius: 34)
     }
 
-    /// Alone, the star waits a little smaller; once it understands, it grows into the center of the bubbles.
+    /// Alone it waits a little smaller; with suggestions it steps back so the bubbles have room.
     private var starScale: CGFloat {
-        switch phase {
-        case .idle: return 0.78
-        case .leaving: return 0.4
-        default: return 1
+        switch state {
+        case .showingSuggestions, .navigating, .requestingConnection: return 0.62
+        case .startingChat: return 0.4
+        default: return 0.78
         }
     }
+    private var starRadius: CGFloat { starSize * starScale * 0.42 }
 
-    // MARK: Geometry
+    // MARK: Bubble state
 
-    /// Where bubble i rests: evenly around the star, starting at the top, drifting gently.
-    private func spot(_ i: Int, of n: Int, center: CGPoint, size: CGSize, time: Date) -> CGPoint {
-        let r = min(size.width * 0.37, size.height * 0.30)
-        let a = -Double.pi / 2 + Double(i) * 2 * .pi / Double(max(n, 1))
-        let t = reduceMotion ? 0 : time.timeIntervalSinceReferenceDate
-        let drift = reduceMotion ? 0.0 : 4.0
-        return CGPoint(x: center.x + r * cos(a) + pan.width + drift * sin(t * 0.9 + Double(i) * 1.3),
-                       y: center.y + r * sin(a) + pan.height + drift * cos(t * 0.7 + Double(i) * 1.3))
-    }
-
-    private func position(of p: PathOption, home: CGPoint) -> CGPoint {
-        if picked == p, let mergeTo { return mergeTo }
-        if let dragging, dragging.id == p.id { return dragging.at }
+    private func spot(of b: DiscoveryBubble, home: CGPoint) -> CGPoint {
+        if picked == b, let pickedSpot { return pickedSpot }
+        if let dragging, dragging.id == b.id { return dragging.at }
         return home
     }
 
-    private func scale(for p: PathOption, fisheye: CGFloat) -> CGFloat {
-        if picked == p { return phase == .merging && mergeTo != nil ? 0.3 : 1.08 }
-        return fisheye
+    private func scale(of b: DiscoveryBubble) -> CGFloat {
+        guard picked == b else { return 1 }
+        return state == .startingChat ? 0.3 : 1.08
     }
 
-    private func opacity(for p: PathOption, index: Int) -> Double {
-        guard index < shown else { return 0 }
-        if let picked { return picked == p ? (phase == .merging ? 0 : 1) : 0 }
-        return 1
+    private func opacity(of b: DiscoveryBubble) -> Double {
+        guard let picked else { return 1 }
+        if picked != b { return 0 }
+        return state == .startingChat && pickedSpot != nil ? 0 : 1
+    }
+
+    private func kindName(_ k: DiscoveryBubbleKind) -> String {
+        switch k {
+        case .destination: return "Place in Northstar"
+        case .nativeCapability: return "Action"
+        case .connector: return "Connection"
+        case .clarification: return "Follow-up question"
+        }
+    }
+
+    private func hint(for b: DiscoveryBubble) -> String {
+        switch b.action {
+        case .navigate(let r): return NorthstarDestinations.info(r).hint
+        case .beginChat: return "Starts a chat about this"
+        case .connect: return "Opens the connection, then continues your request"
+        case .clarify: return "Asks you one more thing, then suggests new ways forward"
+        case .more: return "Opens the full menu"
+        }
     }
 
     // MARK: Gestures
 
-    /// Drag the sky: every bubble moves together, then settles back around the star.
-    private var skyPan: some Gesture {
-        DragGesture(minimumDistance: 8)
-            .onChanged { v in
-                guard phase == .choosing, !reduceMotion, dragging == nil else { return }
-                pan = CGSize(width: v.translation.width * 0.6, height: v.translation.height * 0.6)
-            }
-            .onEnded { _ in
-                withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) { pan = .zero }
-            }
-    }
-
-    /// Tap a bubble, or drag it into the star.
-    private func bubbleDrag(_ p: PathOption, at: CGPoint, center: CGPoint) -> some Gesture {
+    /// Tap an active bubble, or drag it into the star.
+    private func drag(_ b: DiscoveryBubble, at: CGPoint, center: CGPoint) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .named("discovery"))
             .onChanged { v in
-                guard phase == .choosing else { return }
-                if hypot(v.translation.width, v.translation.height) > 6 { dragging = (p.id, v.location) }
+                guard state == .showingSuggestions, picked == nil else { return }
+                if hypot(v.translation.width, v.translation.height) > 6 { dragging = (b.id, v.location) }
             }
             .onEnded { v in
-                guard phase == .choosing else { return }
+                guard state == .showingSuggestions, picked == nil else { return }
                 let moved = hypot(v.translation.width, v.translation.height)
                 let end = dragging?.at ?? at
                 if moved <= 6 || hypot(end.x - center.x, end.y - center.y) < 70 {
-                    choose(p, from: end, center: center)
+                    select(b, at: end, center: center)
                 } else {
                     withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) { dragging = nil }
                 }
@@ -461,77 +563,151 @@ struct DiscoveryView: View {
 
     // MARK: Steps
 
-    /// They said something (first time or to refine): the star reacts, then new bubbles come.
-    private func submit() {
+    /// They said something (first time, an edit, or an answer to a follow-up): interpret it and bring bubbles.
+    private func submit(again: Bool = false) {
         let said = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !said.isEmpty, phase == .idle || phase == .choosing else { return }
+        guard !said.isEmpty, state != .interpreting, picked == nil else { return }
         if speech.isRecording { speech.stopRecording() }
         typing = false
-        asked.append(said)
-        draft = ""
-        let context = asked.joined(separator: ". ")
+        // An answer to a follow-up keeps the original request with it.
+        if let question, !again {
+            request = "\(request). \(question) \(said)"
+            self.question = nil
+            draft = request
+        } else if !again {
+            request = said
+        }
         withAnimation(.easeOut(duration: 0.25)) { shown = 0 }
-        withAnimation(reduceMotion ? .easeInOut(duration: 0.25) : .easeInOut(duration: 0.6)) { phase = .thinking }
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.25) : .easeInOut(duration: 0.6)) { state = .interpreting }
         if !reduceMotion {
             withAnimation(.easeOut(duration: 0.2)) { pulse = true }
             withAnimation(.easeInOut(duration: 0.35).delay(0.2)) { pulse = false }
         }
         AccessibilityNotification.Announcement("Thinking about your way forward").post()
+        let words = request
         Task {
-            async let answer = PathService.ways(for: context)
+            async let answer = PathService.ways(for: words)
             try? await Task.sleep(for: .seconds(reduceMotion ? 0.3 : 1.0))
-            let r = await answer
-            // Crisis words: no bubbles, straight to chat, where Northstar's crisis help answers.
-            if r.crisis == true { finish(.words(context)); return }
+            guard let r = await answer else {
+                // Keep their words and every place; offer a retry. Never made-up results.
+                withAnimation(.easeInOut(duration: 0.3)) { state = .error; active = [] }
+                AccessibilityNotification.Announcement("Couldn't reach Northstar. Try again.").post()
+                return
+            }
+            if r.crisis == true { finish(.crisis(words)); return }
             reply = r
-            paths = Array((r.paths ?? PathService.fallback).prefix(5))
-            round += 1
-            pan = .zero
-            withAnimation(.easeInOut(duration: 0.3)) { phase = .choosing }
-            AccessibilityNotification.Announcement("\(paths.count) ways forward found").post()
-            for i in 0..<paths.count {
+            active = Self.bubbles(from: r.paths ?? [], request: words)
+            withAnimation(.easeInOut(duration: 0.3)) { state = .showingSuggestions }
+            AccessibilityNotification.Announcement("\(active.count) ways forward found").post()
+            for i in 0..<active.count {
                 if !reduceMotion { try? await Task.sleep(for: .milliseconds(120)) }
-                withAnimation(reduceMotion ? .easeInOut(duration: 0.25) : .spring(response: 0.6, dampingFraction: 0.75)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.25) : .spring(response: 0.6, dampingFraction: 0.8)) {
                     shown = i + 1
                 }
             }
         }
     }
 
-    private func choose(_ p: PathOption, from: CGPoint, center: CGPoint) {
-        guard phase == .choosing, picked == nil else { return }
-        let words = asked.joined(separator: ". ")
-        let opener = p.opener.isEmpty ? "Let's \(p.label.lowercased()) together. Where would you like to start?" : p.opener
-        UISelectionFeedbackGenerator().selectionChanged()
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            picked = p
-            dragging = nil
-            mergeTo = from
-        }
-        Task {
-            try? await Task.sleep(for: .milliseconds(reduceMotion ? 100 : 300))
-            phase = .merging
-            withAnimation(reduceMotion ? .easeInOut(duration: 0.25) : .easeIn(duration: 0.9)) { mergeTo = center }
-            try? await Task.sleep(for: .milliseconds(reduceMotion ? 250 : 900))
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            if !reduceMotion {
-                withAnimation(.easeOut(duration: 0.15)) { pulse = true }
-                withAnimation(.easeOut(duration: 0.9)) { ripple = true }
-                try? await Task.sleep(for: .milliseconds(160))
-                withAnimation(.easeInOut(duration: 0.25)) { pulse = false }
-                try? await Task.sleep(for: .milliseconds(250))
+    /// Paths from the brain → typed bubbles. A place keeps the background bubble's id, so it's promoted, not copied.
+    static func bubbles(from paths: [PathOption], request: String) -> [DiscoveryBubble] {
+        var seen = Set<String>()
+        var out: [DiscoveryBubble] = []
+        for (i, p) in paths.enumerated() {
+            let b: DiscoveryBubble
+            switch p.kind {
+            case "navigate":
+                guard let id = p.destination, let route = NorthstarRoute(rawValue: id) else { continue }
+                let d = NorthstarDestinations.info(route)
+                b = DiscoveryBubble(id: "dest.\(id)", title: d.title, symbol: d.symbol, kind: .destination,
+                                    action: .navigate(route), priority: i, isPersistent: true)
+            case "clarify":
+                b = DiscoveryBubble(id: "ask.\(p.label)", title: p.label, symbol: "questionmark.circle", kind: .clarification,
+                                    action: .clarify(question: p.opener.isEmpty ? p.label : p.opener), priority: i, isPersistent: false)
+            case "connector":
+                guard let c = p.connector else { continue }
+                b = DiscoveryBubble(id: "conn.\(c)", title: p.label, symbol: p.icon, kind: .connector,
+                                    action: .connect(connector: c, prompt: request), priority: i, isPersistent: false)
+            default:
+                let opener = p.opener.isEmpty ? "Let's \(p.label.lowercased()) together. Where would you like to start?" : p.opener
+                b = DiscoveryBubble(id: "do.\(p.label)", title: p.label, symbol: p.icon, kind: .nativeCapability,
+                                    action: .beginChat(prompt: request, capability: p.label, opener: opener), priority: i, isPersistent: false)
             }
-            finish(.path(label: p.label, words: words, opener: opener))
+            if seen.insert(b.id).inserted { out.append(b) }
+        }
+        return Array(out.prefix(5))
+    }
+
+    private func select(_ b: DiscoveryBubble, at: CGPoint, center: CGPoint) {
+        guard picked == nil, state != .interpreting else { return }
+        UISelectionFeedbackGenerator().selectionChanged()
+        switch b.action {
+        case .clarify(let q):
+            // Stay in Discovery: ask, then bring new bubbles after they answer.
+            withAnimation(.easeInOut(duration: 0.3)) {
+                question = q
+                draft = ""
+                shown = 0
+                active = []
+                state = .idle
+            }
+            typing = true
+            AccessibilityNotification.Announcement(q).post()
+        case .more:
+            onMenu()
+        case .navigate(let route):
+            // Highlight, ease a little toward the star, then open the place directly (no chat first).
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                picked = b
+                dragging = nil
+                pickedSpot = CGPoint(x: at.x + (center.x - at.x) * 0.25, y: at.y + (center.y - at.y) * 0.25)
+                state = .navigating
+            }
+            Task {
+                try? await Task.sleep(for: .milliseconds(reduceMotion ? 150 : 450))
+                onResult(.navigate(route))
+            }
+        case .connect(let connector, let prompt):
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                picked = b
+                dragging = nil
+                pickedSpot = CGPoint(x: at.x + (center.x - at.x) * 0.5, y: at.y + (center.y - at.y) * 0.5)
+                state = .requestingConnection
+            }
+            Task {
+                try? await Task.sleep(for: .milliseconds(reduceMotion ? 150 : 500))
+                onResult(.connect(connector: connector, prompt: prompt))
+            }
+        case .beginChat(let prompt, let capability, let opener):
+            // Merge into the star, then chat opens with their request and Northstar's first line.
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                picked = b
+                dragging = nil
+                pickedSpot = at
+            }
+            Task {
+                try? await Task.sleep(for: .milliseconds(reduceMotion ? 100 : 300))
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.25) : .easeIn(duration: 0.8)) { pickedSpot = center }
+                try? await Task.sleep(for: .milliseconds(reduceMotion ? 250 : 800))
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                if !reduceMotion {
+                    withAnimation(.easeOut(duration: 0.15)) { pulse = true }
+                    withAnimation(.easeOut(duration: 0.9)) { ripple = true }
+                    try? await Task.sleep(for: .milliseconds(160))
+                    withAnimation(.easeInOut(duration: 0.25)) { pulse = false }
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+                finish(.beginChat(prompt: prompt, capability: capability, opener: opener))
+            }
         }
     }
 
     /// The star rises and everything fades, so chat appears on the same sky.
-    private func finish(_ choice: PathChoice) {
+    private func finish(_ result: DiscoveryResult) {
         if speech.isRecording { speech.stopRecording() }
         Task {
-            withAnimation(reduceMotion ? .easeInOut(duration: 0.25) : .easeInOut(duration: 0.8)) { phase = .leaving }
-            try? await Task.sleep(for: .milliseconds(reduceMotion ? 250 : 800))
-            onChoose(choice)
+            withAnimation(reduceMotion ? .easeInOut(duration: 0.25) : .easeInOut(duration: 0.7)) { state = .startingChat }
+            try? await Task.sleep(for: .milliseconds(reduceMotion ? 250 : 700))
+            onResult(result)
         }
     }
 
@@ -541,5 +717,98 @@ struct DiscoveryView: View {
             guard await speech.requestPermissions() else { return }
             try? speech.startRecording()
         }
+    }
+}
+
+// MARK: - Layout
+
+/// Where every bubble goes, worked out the same way every time (no random placement):
+/// active bubbles on an inner ring, places on an outer ring, all clear of protected areas and each other.
+struct DiscoveryLayout {
+    var spots: [String: CGPoint] = [:]
+    var more: CGPoint?
+
+    /// Room kept at the top for "A few ways forward / You said".
+    static let topBand: CGFloat = 64
+
+    static func make(size: CGSize, center: CGPoint, active: [DiscoveryBubble], background: [DiscoveryBubble],
+                     suggesting: Bool, starRadius: CGFloat, activeSize: CGFloat, backSize: CGFloat,
+                     headingBelowStar: Bool, bigText: Bool) -> DiscoveryLayout {
+        var out = DiscoveryLayout()
+        let gap: CGFloat = 10
+        var placed: [(CGPoint, CGFloat)] = [(center, starRadius + 6)]   // (center, radius) of everything so far
+
+        // Protected rectangles: the heading (below the star when asking, at the top with suggestions).
+        var protected: [CGRect] = []
+        if headingBelowStar {
+            protected.append(CGRect(x: center.x - 150, y: center.y + 190 * 0.62 - 26, width: 300, height: 64))
+        } else {
+            protected.append(CGRect(x: 0, y: 0, width: size.width, height: topBand))
+        }
+
+        func fits(_ p: CGPoint, _ r: CGFloat) -> Bool {
+            guard p.x - r >= 6, p.x + r <= size.width - 6, p.y - r >= 6, p.y + r <= size.height - 6 else { return false }
+            let box = CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)
+            if protected.contains(where: { $0.intersects(box) }) { return false }
+            return placed.allSatisfy { hypot($0.0.x - p.x, $0.0.y - p.y) >= $0.1 + r + gap }
+        }
+
+        // 1. Active bubbles on an inner ellipse, evenly, starting at the top.
+        let ra = activeSize / 2
+        if !active.isEmpty {
+            if bigText {
+                // Big text: a simple column under the heading instead of a ring.
+                for (i, b) in active.enumerated() {
+                    let p = CGPoint(x: center.x, y: topBand + ra + CGFloat(i) * (activeSize + gap))
+                    out.spots[b.id] = p
+                    placed.append((p, ra))
+                }
+            } else {
+                let rx = min(size.width * 0.30, 122), ry = min(size.height * 0.26, 160)
+                for (i, b) in active.enumerated() {
+                    let a = -Double.pi / 2 + Double(i) * 2 * .pi / Double(active.count)
+                    var p = CGPoint(x: center.x + rx * cos(a), y: center.y + ry * sin(a))
+                    // Nudge outward a little if the heading band is in the way.
+                    var tries = 0
+                    while !fits(p, ra) && tries < 6 {
+                        p = CGPoint(x: center.x + (p.x - center.x) * 1.06, y: center.y + (p.y - center.y) * (p.y < center.y ? 0.94 : 1.04))
+                        tries += 1
+                    }
+                    out.spots[b.id] = p
+                    placed.append((p, ra))
+                }
+            }
+        }
+
+        // 2. Places on outer rings (two if needed), most important first; whatever doesn't fit goes behind "More".
+        let rb = backSize / 2
+        let activeIds = Set(active.map(\.id))
+        let places = background.filter { !activeIds.contains($0.id) }
+        var slots: [CGPoint] = []
+        for ring in 0..<2 {
+            let rx = size.width / 2 - rb - 8 - CGFloat(ring) * (backSize + 6)
+            let ry = size.height / 2 - rb - 8 - CGFloat(ring) * (backSize + 6)
+            guard rx > starRadius + backSize, ry > starRadius + backSize else { continue }
+            let count = 28 - ring * 6
+            for k in 0..<count {
+                let a = -Double.pi / 2 + Double(k) * 2 * .pi / Double(count)
+                slots.append(CGPoint(x: center.x + rx * cos(a), y: center.y + ry * sin(a)))
+            }
+        }
+        var free = slots.filter { fits($0, rb) }
+        var kept: [DiscoveryBubble] = []
+        for b in places {
+            guard let idx = free.indices.first(where: { fits(free[$0], rb) }) else { break }
+            let p = free.remove(at: idx)
+            out.spots[b.id] = p
+            placed.append((p, rb))
+            kept.append(b)
+        }
+        if kept.count < places.count, let last = kept.last, let p = out.spots[last.id] {
+            // Not enough room: the least important shown place gives its spot to "More" (opens the full menu).
+            out.spots[last.id] = nil
+            out.more = p
+        }
+        return out
     }
 }
