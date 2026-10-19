@@ -542,7 +542,7 @@ struct ContentView: View {
             isListenerPresented = true
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: "heart")
+                Image(systemName: "ear")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(NorthstarChatStyle.starGold)
                 Text("Listen")
