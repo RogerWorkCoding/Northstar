@@ -130,7 +130,14 @@ struct NearbyEventsRow: View {
                 .padding(.top, 8)
             }
         }
-        .task { events = await NearbyEvents.load() }
+        // Location can take a moment on first open, so try again a few times before giving up.
+        .task {
+            for attempt in 0..<4 {
+                events = await NearbyEvents.load()
+                if !events.isEmpty || Task.isCancelled { break }
+                try? await Task.sleep(for: .seconds(Double(attempt + 1) * 2))
+            }
+        }
         .sheet(item: $open) { e in
             NearbyEventSheet(event: e)
                 .presentationDetents([.medium, .large])
@@ -146,7 +153,7 @@ struct NearbyEventsRow: View {
                     NorthstarChatStyle.card
                 }
             }
-            .frame(width: 220, height: 124)
+            .frame(width: 280, height: 170)
             .clipped()
             .accessibilityHidden(true)
 
@@ -163,7 +170,7 @@ struct NearbyEventsRow: View {
             }
             .padding(10)
         }
-        .frame(width: 220, alignment: .leading)
+        .frame(width: 280, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(NorthstarChatStyle.card))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
