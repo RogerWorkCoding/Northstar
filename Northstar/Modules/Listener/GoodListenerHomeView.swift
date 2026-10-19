@@ -1,7 +1,7 @@
 import SwiftUI
 
-// 👂 Good Listener's own door (like the Concierge bell): the small "Listen" button just above the Chat text
-// field opens this. Shown only when Good Listener is switched on (Settings → Modules).
+// 👂 Good Listener's own door (like the Concierge bell): the ear in the Chat text field (next to the star and
+// the bell) opens this. Shown only when Good Listener is switched on (Settings → Modules).
 // Three calm choices: talk, write privately, or prepare notes for a counselor. Crisis help is always here.
 
 struct GoodListenerHomeView: View {

@@ -514,12 +514,7 @@ struct ContentView: View {
     }
 
     private var promptArea: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if listenerOn {
-                listenerDoor
-            }
-            composerBox
-        }
+        composerBox
         .opacity(launching ? 0 : 1)
         .allowsHitTesting(!launching)
         .accessibilityHidden(launching)
@@ -535,34 +530,19 @@ struct ContentView: View {
 
     private var listenerOn: Bool { modulesOn.split(separator: ",").contains("listener") }
 
-    /// Good Listener's door: a small button just above the text field, only when the module is on.
-    private var listenerDoor: some View {
+    /// Good Listener's door: the ear in the text field, next to the star and the bell (only when it's on).
+    private var listenerButton: some View {
         Button {
             isPromptFocused = false
             isListenerPresented = true
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "ear")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(NorthstarChatStyle.starGold)
-                Text("Listen")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(NorthstarChatStyle.text)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 32)
-            .background {
-                ZStack {
-                    Capsule().fill(.ultraThinMaterial)
-                    Capsule().fill(NorthstarChatStyle.cardStrong)
-                }
-            }
-            .overlay(Capsule().strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
+            Image(systemName: "ear")
+                .font(.system(size: 17, weight: .light))
+                .foregroundStyle(NorthstarChatStyle.text)
+                .frame(width: 34, height: 34)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.leading, 8)
         .accessibilityLabel("Good Listener")
         .accessibilityHint("Talk it through, write in your journal, or get help now")
     }
@@ -709,6 +689,11 @@ struct ContentView: View {
 
             // The concierge bell sits next to the star on every screen (both are "places to go").
             conciergeButton
+
+            // Good Listener's ear, only when it's switched on (Settings > Modules).
+            if listenerOn {
+                listenerButton
+            }
 
             // While listening: live voice bars, then their words appear as they speak.
             if speechRecognizer.isRecording {
