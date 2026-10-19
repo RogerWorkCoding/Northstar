@@ -153,12 +153,7 @@ struct DiscoveryView: View {
             GeometryReader { geo in
                 let size = geo.size
                 let center = CGPoint(x: size.width / 2, y: size.height * 0.5)
-                let layout = DiscoveryLayout.make(size: size, center: center, active: Array(active.prefix(shown)),
-                                                  background: background, suggesting: suggesting,
-                                                  starRadius: starRadius, activeSize: activeSize, backSize: backSize,
-                                                  headingBelowStar: !suggesting, bigText: bigText)
                 ZStack {
-                    constellation(center: center, layout: layout)
 
                     star
                         .scaleEffect(starScale * (pulse ? 1.18 : 1) * (speech.isRecording ? 1 + CGFloat(speech.level) * 0.08 : 1))
@@ -179,11 +174,12 @@ struct DiscoveryView: View {
 
                     wordsLayer(center: center, size: size)
 
-                    bubbles(layout: layout, center: center)
+                    orbits(center: center, size: size)
                 }
                 .frame(width: size.width, height: size.height)
                 .contentShape(Rectangle())
                 .coordinateSpace(name: "discovery")
+                .gesture(spinGesture(center: center))
                 .onTapGesture { typing = false }
             }
             composer
@@ -334,42 +330,45 @@ struct DiscoveryView: View {
             .multilineTextAlignment(.center)
             .padding(.horizontal, 24)
             .frame(width: size.width)
-            .position(x: center.x, y: DiscoveryLayout.topBand / 2)
+            .position(x: center.x, y: Orbits.topBand / 2)
             .opacity(picked == nil ? 1 : 0)
         }
     }
 
     // MARK: Bubbles
 
-    private func constellation(center: CGPoint, layout: DiscoveryLayout) -> some View {
-        Canvas { ctx, _ in
-            guard suggesting, !bigText else { return }
-            for b in active.prefix(shown) {
-                guard picked == nil || picked == b, let at = layout.spots[b.id] else { continue }
-                var line = Path()
-                line.move(to: center)
-                line.addLine(to: at)
-                ctx.stroke(line, with: .color(gold.opacity(0.16)), lineWidth: 1)
-            }
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
+    /// Planets around the star: places on an outer orbit, suggestions on an inner one turning the other way.
+    /// They drift on their own (about one turn every 2 minutes) and spin with a drag, then glide to a stop.
     @ViewBuilder
-    private func bubbles(layout: DiscoveryLayout, center: CGPoint) -> some View {
-        let activeIds = Set(active.prefix(shown).map(\.id))
-        // One bubble per place or action: a promoted place leaves the background and comes forward.
-        let backs = background.filter { !activeIds.contains($0.id) && layout.spots[$0.id] != nil }
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || picked != nil)) { tl in
-            let t = reduceMotion ? 0 : tl.date.timeIntervalSinceReferenceDate
+    private func orbits(center: CGPoint, size: CGSize) -> some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: picked != nil)) { tl in
+            let now = tl.date.timeIntervalSinceReferenceDate
+            let turn = rotation(at: now)
+            let o = Orbits.make(size: size, center: center, turn: turn, background: background,
+                                active: Array(active.prefix(shown)), suggesting: suggesting,
+                                starRadius: starRadius, activeSize: activeSize, backSize: backSize, bigText: bigText)
             ZStack {
-                ForEach(Array(backs.enumerated()), id: \.element.id) { i, b in
-                    let home = layout.spots[b.id]!
-                    let at = CGPoint(x: home.x + 2 * sin(t * 0.35 + Double(i)), y: home.y + 2 * cos(t * 0.3 + Double(i) * 1.7))
+                // Faint constellation lines from the star to each suggestion.
+                Canvas { ctx, _ in
+                    guard suggesting, !bigText else { return }
+                    for b in active.prefix(shown) {
+                        guard picked == nil || picked == b, let at = o.spots[b.id] else { continue }
+                        var line = Path()
+                        line.move(to: center)
+                        line.addLine(to: at)
+                        ctx.stroke(line, with: .color(gold.opacity(0.16)), lineWidth: 1)
+                    }
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+
+                ForEach(o.backs, id: \.id) { b in
+                    let at = o.spots[b.id] ?? center
+                    let seen = o.visibility[b.id] ?? 1
                     backgroundBubble(b)
                         .position(at)
-                        .opacity(picked == nil ? (suggesting ? quietOpacity : restOpacity) : 0)
+                        .opacity((picked == nil ? (suggesting ? quietOpacity : restOpacity) : 0) * seen)
+                        .allowsHitTesting(seen > 0.5 && picked == nil)
                         .onTapGesture { select(b, at: at, center: center) }
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(b.title)
@@ -378,10 +377,10 @@ struct DiscoveryView: View {
                         .accessibilityAddTraits(.isButton)
                         .accessibilityAction { select(b, at: at, center: center) }
                 }
-                if let more = layout.more {
+                if let more = o.more {
                     moreBubble
                         .position(more)
-                        .opacity(picked == nil ? (suggesting ? quietOpacity : restOpacity) : 0)
+                        .opacity((picked == nil ? (suggesting ? quietOpacity : restOpacity) : 0) * (o.visibility["more"] ?? 1))
                         .onTapGesture { onMenu() }
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel("More places")
@@ -389,9 +388,7 @@ struct DiscoveryView: View {
                         .accessibilityAddTraits(.isButton)
                 }
                 ForEach(Array(active.prefix(shown).enumerated()), id: \.element.id) { i, b in
-                    let home = layout.spots[b.id] ?? center
-                    let drift = CGPoint(x: home.x + 3 * sin(t * 0.8 + Double(i) * 1.3), y: home.y + 3 * cos(t * 0.6 + Double(i) * 1.3))
-                    let at = spot(of: b, home: drift)
+                    let at = spot(of: b, home: o.spots[b.id] ?? center)
                     activeBubble(b, index: i)
                         .scaleEffect(scale(of: b))
                         .opacity(opacity(of: b))
@@ -406,6 +403,51 @@ struct DiscoveryView: View {
                 }
             }
         }
+    }
+
+    // MARK: Spinning
+
+    @State private var spin: Double = 0               // where a drag left the orbits (radians)
+    @State private var flick: Double = 0              // how fast they were moving when let go (radians/second)
+    @State private var flickAt: TimeInterval = 0
+    @State private var lastAngle: Double?
+    @State private var lastTime: TimeInterval = 0
+    @State private var startedAt = Date.timeIntervalSinceReferenceDate
+
+    /// Total turn right now: a slow drift of their own, plus spins, plus a flick that glides to a stop.
+    private func rotation(at now: TimeInterval) -> Double {
+        let drift = reduceMotion ? 0 : (now - startedAt) * (2 * .pi / 120)
+        let glide = 0.6 * flick * (1 - exp(-(now - flickAt) / 0.6))
+        return drift + spin + glide
+    }
+
+    /// Drag anywhere on the sky to spin the planets around the star, like turning a dial.
+    private func spinGesture(center: CGPoint) -> some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .named("discovery"))
+            .onChanged { v in
+                guard picked == nil, dragging == nil else { return }
+                let now = Date.timeIntervalSinceReferenceDate
+                let angle = atan2(v.location.y - center.y, v.location.x - center.x)
+                if lastAngle == nil {
+                    // Fold any glide still running into the spin, so the planets don't jump.
+                    spin += 0.6 * flick * (1 - exp(-(now - flickAt) / 0.6))
+                    flick = 0
+                }
+                if let last = lastAngle {
+                    var d = angle - last
+                    if d > .pi { d -= 2 * .pi } else if d < -.pi { d += 2 * .pi }
+                    spin += d
+                    let dt = max(now - lastTime, 0.001)
+                    flick = 0.7 * flick + 0.3 * (d / dt)
+                }
+                lastAngle = angle
+                lastTime = now
+            }
+            .onEnded { _ in
+                lastAngle = nil
+                flickAt = Date.timeIntervalSinceReferenceDate
+                flick = max(-6, min(6, flick))
+            }
     }
 
     private var restOpacity: Double { contrast == .increased ? 1 : 0.9 }
@@ -720,95 +762,80 @@ struct DiscoveryView: View {
     }
 }
 
-// MARK: - Layout
+// MARK: - Orbits
 
-/// Where every bubble goes, worked out the same way every time (no random placement):
-/// active bubbles on an inner ring, places on an outer ring, all clear of protected areas and each other.
-struct DiscoveryLayout {
+/// Where every planet is at a given turn, worked out the same way every time (no random placement).
+/// Places go evenly around an outer orbit; suggestions around an inner one (turning the other way), so the
+/// two never meet. A planet passing behind the words fades out and can't be tapped until it's clear.
+struct Orbits {
     var spots: [String: CGPoint] = [:]
+    var visibility: [String: Double] = [:]
+    var backs: [DiscoveryBubble] = []
     var more: CGPoint?
 
     /// Room kept at the top for "A few ways forward / You said".
     static let topBand: CGFloat = 64
 
-    static func make(size: CGSize, center: CGPoint, active: [DiscoveryBubble], background: [DiscoveryBubble],
-                     suggesting: Bool, starRadius: CGFloat, activeSize: CGFloat, backSize: CGFloat,
-                     headingBelowStar: Bool, bigText: Bool) -> DiscoveryLayout {
-        var out = DiscoveryLayout()
-        let gap: CGFloat = 10
-        var placed: [(CGPoint, CGFloat)] = [(center, starRadius + 6)]   // (center, radius) of everything so far
+    static func make(size: CGSize, center: CGPoint, turn: Double, background: [DiscoveryBubble],
+                     active: [DiscoveryBubble], suggesting: Bool, starRadius: CGFloat,
+                     activeSize: CGFloat, backSize: CGFloat, bigText: Bool) -> Orbits {
+        var out = Orbits()
+        let rb = backSize / 2, ra = activeSize / 2
 
-        // Protected rectangles: the heading (below the star when asking, at the top with suggestions).
-        var protected: [CGRect] = []
-        if headingBelowStar {
-            protected.append(CGRect(x: center.x - 150, y: center.y + 190 * 0.62 - 26, width: 300, height: 64))
-        } else {
-            protected.append(CGRect(x: 0, y: 0, width: size.width, height: topBand))
+        // The words: under the star while asking, across the top with suggestions.
+        let words: CGRect = suggesting
+            ? CGRect(x: 0, y: 0, width: size.width, height: topBand)
+            : CGRect(x: center.x - 130, y: center.y + 190 * 0.62 - 24, width: 260, height: 60)
+
+        func visible(_ p: CGPoint, _ r: CGFloat) -> Double {
+            // 1 when clear of the words, fading to 0 within 18 points of them.
+            let dx = max(words.minX - (p.x + r), 0, (p.x - r) - words.maxX)
+            let dy = max(words.minY - (p.y + r), 0, (p.y - r) - words.maxY)
+            let d = (dx * dx + dy * dy).squareRoot()
+            let inside = dx == 0 && dy == 0
+            return inside ? 0 : min(1, Double(d / 18))
         }
 
-        func fits(_ p: CGPoint, _ r: CGFloat) -> Bool {
-            guard p.x - r >= 6, p.x + r <= size.width - 6, p.y - r >= 6, p.y + r <= size.height - 6 else { return false }
-            let box = CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)
-            if protected.contains(where: { $0.intersects(box) }) { return false }
-            return placed.allSatisfy { hypot($0.0.x - p.x, $0.0.y - p.y) >= $0.1 + r + gap }
-        }
-
-        // 1. Active bubbles on an inner ellipse, evenly, starting at the top.
-        let ra = activeSize / 2
+        // Suggestions: an inner orbit (or a simple column with big text).
         if !active.isEmpty {
             if bigText {
-                // Big text: a simple column under the heading instead of a ring.
                 for (i, b) in active.enumerated() {
-                    let p = CGPoint(x: center.x, y: topBand + ra + CGFloat(i) * (activeSize + gap))
-                    out.spots[b.id] = p
-                    placed.append((p, ra))
+                    out.spots[b.id] = CGPoint(x: center.x, y: topBand + ra + CGFloat(i) * (activeSize + 10))
                 }
             } else {
-                let rx = min(size.width * 0.30, 122), ry = min(size.height * 0.26, 160)
+                let rx = min(size.width * 0.26, 100), ry = min(size.height * 0.26, 150)
                 for (i, b) in active.enumerated() {
-                    let a = -Double.pi / 2 + Double(i) * 2 * .pi / Double(active.count)
-                    var p = CGPoint(x: center.x + rx * cos(a), y: center.y + ry * sin(a))
-                    // Nudge outward a little if the heading band is in the way.
-                    var tries = 0
-                    while !fits(p, ra) && tries < 6 {
-                        p = CGPoint(x: center.x + (p.x - center.x) * 1.06, y: center.y + (p.y - center.y) * (p.y < center.y ? 0.94 : 1.04))
-                        tries += 1
-                    }
-                    out.spots[b.id] = p
-                    placed.append((p, ra))
+                    let a = -Double.pi / 2 + Double(i) * 2 * .pi / Double(active.count) - turn * 0.5
+                    out.spots[b.id] = CGPoint(x: center.x + rx * cos(a), y: center.y + ry * sin(a))
                 }
             }
         }
 
-        // 2. Places on outer rings (two if needed), most important first; whatever doesn't fit goes behind "More".
-        let rb = backSize / 2
+        // Places: one outer orbit, as many as fit with room between them; the rest go behind "More".
         let activeIds = Set(active.map(\.id))
         let places = background.filter { !activeIds.contains($0.id) }
-        var slots: [CGPoint] = []
-        for ring in 0..<2 {
-            let rx = size.width / 2 - rb - 8 - CGFloat(ring) * (backSize + 6)
-            let ry = size.height / 2 - rb - 8 - CGFloat(ring) * (backSize + 6)
-            guard rx > starRadius + backSize, ry > starRadius + backSize else { continue }
-            let count = 28 - ring * 6
-            for k in 0..<count {
-                let a = -Double.pi / 2 + Double(k) * 2 * .pi / Double(count)
-                slots.append(CGPoint(x: center.x + rx * cos(a), y: center.y + ry * sin(a)))
+        let rx = size.width / 2 - rb - 8, ry = size.height / 2 - rb - 8
+        let around = 2 * Double.pi * (Double(rx * rx + ry * ry) / 2).squareRoot()
+        let room = max(4, Int(around / Double(backSize + 12)))
+        var shown = places
+        var hasMore = false
+        if places.count > room {
+            shown = Array(places.prefix(room - 1))
+            hasMore = true
+        }
+        let n = shown.count + (hasMore ? 1 : 0)
+        for k in 0..<n {
+            let a = -Double.pi / 2 + Double(k) * 2 * .pi / Double(n) + turn
+            let p = CGPoint(x: center.x + rx * cos(a), y: center.y + ry * sin(a))
+            if k < shown.count {
+                out.spots[shown[k].id] = p
+                out.visibility[shown[k].id] = visible(p, rb)
+            } else {
+                out.more = p
+                out.visibility["more"] = visible(p, rb)
             }
         }
-        var free = slots.filter { fits($0, rb) }
-        var kept: [DiscoveryBubble] = []
-        for b in places {
-            guard let idx = free.indices.first(where: { fits(free[$0], rb) }) else { break }
-            let p = free.remove(at: idx)
-            out.spots[b.id] = p
-            placed.append((p, rb))
-            kept.append(b)
-        }
-        if kept.count < places.count, let last = kept.last, let p = out.spots[last.id] {
-            // Not enough room: the least important shown place gives its spot to "More" (opens the full menu).
-            out.spots[last.id] = nil
-            out.more = p
-        }
+        out.backs = shown
         return out
     }
 }
