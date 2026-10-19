@@ -271,12 +271,12 @@ struct DiscoveryView: View {
                 .foregroundStyle(.white.opacity(0.85))
                 .accessibilityAddTraits(.isHeader)
             Spacer()
-            Button { onResult(.close) } label: {
+            Button { closeTapped() } label: {
                 Image(systemName: "xmark")
                     .font(.title3)
                     .frame(width: 44, height: 44)
             }
-            .accessibilityLabel("Back to chat")
+            .accessibilityLabel(atHome ? "Back to chat" : "Back to Discovery home")
         }
         .padding(.horizontal, 12)
         .opacity(state == .startingChat ? 0 : 1)
@@ -878,6 +878,34 @@ struct DiscoveryView: View {
                 finish(.beginChat(prompt: prompt, capability: capability, opener: opener))
             }
         }
+    }
+
+    // MARK: Home
+
+    /// Nothing showing yet: just the star and "What's on your mind?".
+    private var atHome: Bool {
+        !panel.isOpen && active.isEmpty && question == nil && !starMenu && (state == .idle || state == .listening)
+    }
+
+    /// ✕ takes them back to Discovery's home first; from home it goes back to chat.
+    private func closeTapped() {
+        guard !atHome else { onResult(.close); return }
+        guard state != .interpreting, state != .startingChat, picked == nil else { return }
+        if speech.isRecording { speech.stopRecording() }
+        starTap += 1
+        withAnimation(.easeInOut(duration: 0.4)) {
+            panel.close()
+            starMenu = false
+            question = nil
+            active = []
+            shown = 0
+            reply = nil
+            request = ""
+            draft = ""
+            state = .idle
+        }
+        typing = false
+        AccessibilityNotification.Announcement("Discovery home").post()
     }
 
     // MARK: The star's own orbs
