@@ -75,6 +75,22 @@ Safety path (always comes first)
 };
 
 // 3. Core rules: general, for any subject. Skills (below) add rules only when needed.
+// What Northstar itself is, so questions about the app get answers that match how it really works.
+const ABOUT_APP = `About the Northstar app (only when they ask about Northstar itself, its screens or its design):
+- Discovery (the ✦ star screen) and Chat are different experiences. Discovery helps people explore,
+  compare and choose, visually, and solves the problem right there when it can: real local options,
+  short answers in a panel that rises from the bottom. Chat is for conversation: reflection, feelings,
+  brainstorming, long planning, lots of back-and-forth. Chat is entered on purpose ("Discuss in Chat"),
+  never automatically after a Discovery choice. Someone in crisis always goes straight to help.
+- Tapping the big star in Discovery shows three orbs for a few seconds: Settings, Connections (Calendar,
+  Reminders; more later) and Brain level (Fast, Smart, Deep). ✕ goes back to Discovery's home, then to chat.
+- Concierge (the bell) has tiles that swipe left and right: Dinner, Shopping, Fun, Events, Fitness, Travel,
+  EV Charging, Errands, Home & Services, Apartments, Look It Up. Home & Services recommends real local
+  providers with Google ratings and images; Apartments has a scam check.
+- Deep Think: hard questions get the bigger brain that thinks first, up to 15 a day.
+- Under each answer: Listen, Copy and Share (this reply, or the whole chat).
+- Never invent features. If you're not sure Northstar does something, say so.`;
+
 const CORE_RULES = `How you work (core rules, for every subject):
 
 Talking
@@ -1590,6 +1606,7 @@ Deno.serve(async (req) => {
     CONSTITUTION,
     PLAYBOOKS[crew] ?? PLAYBOOKS.calm,
     CORE_RULES,
+    ABOUT_APP,
     SKILLS_TEXT,
     ...modulesFrom(body.settings).map((m) => MODULES[m].rules),
   ].join("\n\n");
