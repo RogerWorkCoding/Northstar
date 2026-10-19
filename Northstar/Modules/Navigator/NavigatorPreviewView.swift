@@ -22,9 +22,22 @@ struct NavigatorPreviewView: View {
     ]
 
     @State private var page = 1
+    /// Northstar Labs only: the working step 1 (find files on your Mac), while it's being built.
+    @State private var ownerPreview = false
 
     var body: some View {
         VStack(spacing: 16) {
+            if ownerPreview {
+                NavigationLink {
+                    NavigatorView()
+                } label: {
+                    Label("Open Navigator (owner preview)", systemImage: "sparkle.magnifyingglass")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.horizontal)
+            }
             Text("Coming soon")
                 .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 12)
@@ -32,7 +45,7 @@ struct NavigatorPreviewView: View {
                 .background(Capsule().fill(Color.yellow.opacity(0.25)))
                 .accessibilityAddTraits(.isHeader)
 
-            Text("Ask, and Northstar does things on your Mac for you: files, code, Xcode, GitHub, clicking and typing.")
+            Text("Ask, and Northstar does things on your Mac for you: finds and tidies your files, makes lists and summaries, and writes emails and events for you to send.")
                 .font(.body)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
@@ -68,6 +81,7 @@ struct NavigatorPreviewView: View {
                 .padding(.bottom, 8)
         }
         .padding(.top, 8)
+        .task { ownerPreview = await NavigatorService.status()?.allowed == true }
         .navigationTitle("Northstar Navigator")
         .navigationBarTitleDisplayMode(.inline)
     }
