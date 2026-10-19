@@ -73,3 +73,7 @@ Safety notice draft (first time it's switched on):
 
 - Mac only at first. Windows later?
 - Which three tasks come first for Roger (decides where step 1 starts).
+
+## Trust and audit
+
+The full trust, audit and approval model is in [navigator-trust-model.md](navigator-trust-model.md). It overrides anything simpler in this plan.
