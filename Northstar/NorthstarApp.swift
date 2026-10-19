@@ -17,7 +17,7 @@ struct NorthstarApp: App {
                         .transition(.opacity)
                 } else {
                     StarIntroView {
-                        withAnimation(.easeInOut(duration: 0.6)) { introDone = true }
+                        withAnimation(.easeInOut(duration: 1.4)) { introDone = true }
                     }
                     .transition(.opacity)
                 }

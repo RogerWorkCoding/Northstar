@@ -389,8 +389,13 @@ struct ContentView: View {
     private func scheduleWelcomeMessageFade() {
         isWelcomeMessageVisible = true
         Task {
+            // The text field softly appears as the star video finishes fading into Chat (Roger, Oct 19:
+            // one calm motion, no waiting screen).
+            if launching {
+                try? await Task.sleep(for: .seconds(reduceMotion ? 0.1 : 0.9))
+                withAnimation(.easeInOut(duration: reduceMotion ? 0.15 : 0.9)) { launching = false }
+            }
             try? await Task.sleep(for: .seconds(2.75))
-            withAnimation(.easeOut(duration: reduceMotion ? 0.15 : 0.6)) { launching = false }
             guard viewModel.messages.isEmpty else { return }
             withAnimation(.easeOut(duration: reduceMotion ? 0.15 : 0.6)) {
                 isWelcomeMessageVisible = false
