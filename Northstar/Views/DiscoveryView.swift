@@ -821,10 +821,11 @@ struct Orbits {
             return below >= 18 ? 1 : max(0, Double(below / 18))
         }
 
-        // Rings hug the star; the screen is tall, so each ring is a little taller than it is wide.
+        // Rings hug the star as true circles.
         let maxX = size.width / 2 - 6, maxY = size.height / 2 - 6
         func ring(_ r: CGFloat, _ half: CGFloat) -> (rx: CGFloat, ry: CGFloat) {
-            (min(r, maxX - half), min(r * 1.25, maxY - half))
+            let c = min(r, maxX - half, maxY - half)
+            return (c, c)
         }
         func perimeter(_ rx: CGFloat, _ ry: CGFloat) -> Double { 2 * .pi * (Double(rx * rx + ry * ry) / 2).squareRoot() }
 
@@ -866,7 +867,7 @@ struct Orbits {
             let fit = max(3, Int(perimeter(rx, ry) / Double(backSize + gap)))
             // No room for another ring after this one (sideways or up and down).
             let next = r + backSize + gap + rb
-            let last = next > maxX - rb || next * 1.25 > maxY - rb
+            let last = next > maxX - rb || next > maxY - rb
             var take = min(fit, queue.count)
             let needsMore = last && queue.count > fit
             if needsMore { take = fit - 1 }
