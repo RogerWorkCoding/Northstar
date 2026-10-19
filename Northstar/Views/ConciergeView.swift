@@ -27,6 +27,9 @@ struct ConciergeView: View {
     @State private var sources: [NorthstarInsight.Source] = []
     @State private var answer = ""        // Look It Up: the full answer
     @State private var booking = NorthstarInsight.Booking()
+    // Home & Services only: Northstar's one recommended provider (see Views/HomeServices).
+    @State private var homeState: HomeServicesState?
+    @State private var homeNeed = ""
 
     @State private var typed = ""
     @State private var speech = SpeechRecognizer()
@@ -245,6 +248,10 @@ struct ConciergeView: View {
                     .textSelection(.enabled)
             }
 
+            if service?.kind == .home, let homeState {
+                HomeServicesResultsView(need: homeNeed, state: homeState) { findProviders(homeNeed) }
+            }
+
             if !listings.isEmpty {
                 ApartmentCards(listings: listings, city: city)
             }
@@ -367,6 +374,11 @@ struct ConciergeView: View {
         clearResults()
         booking = .init()
         if s.kind == .events { return }  // a list of real events, no chat needed
+        if s.kind == .home {
+            // Keep the choice screen: pick a trade or say what's wrong, then one recommendation.
+            line = "What kind of help do you need? Pick one, or tell me what's wrong."
+            return
+        }
         if s.kind == .lookUp {
             line = "What should I look up? Say it or type it."
             typing = true
@@ -401,6 +413,7 @@ struct ConciergeView: View {
         sources = []
         answer = ""
         line = ""
+        homeState = nil
     }
 
     private func ask(_ text: String) {
@@ -412,6 +425,10 @@ struct ConciergeView: View {
         typed = ""
         typing = false
         NorthstarVoice.shared.stop()
+        if service?.kind == .home {
+            findProviders(clean)
+            return
+        }
         turns.append(MessageModel(role: .user, content: clean))
         working = true
         task = Task {
@@ -429,6 +446,19 @@ struct ConciergeView: View {
             if let found = answer.insight?.listings, !found.isEmpty { listings = found }
             sources = answer.insight?.sources ?? []
             if NorthstarVoice.autoSpeak, !answer.failed { NorthstarVoice.shared.speak(line) }
+        }
+    }
+
+    /// Home & Services: compare local providers and recommend one (nothing is contacted or booked).
+    private func findProviders(_ need: String) {
+        task?.cancel()
+        homeNeed = need
+        line = ""
+        homeState = .loading
+        task = Task {
+            let result = await HomeServicesProviderService.recommend(need: need)
+            guard !Task.isCancelled else { return }
+            homeState = result
         }
     }
 
