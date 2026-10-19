@@ -282,6 +282,21 @@ struct NearbyEventsList: View {
                 Text("Swipe for more · \(events.count) events")
                     .font(.footnote)
                     .foregroundStyle(NorthstarChatStyle.soft)
+                // Four more events with real photos, in a 2×2 grid, to fill the page.
+                if !moreFour.isEmpty {
+                    Text("MORE TO DO")
+                        .font(.caption.weight(.semibold))
+                        .tracking(2)
+                        .foregroundStyle(NorthstarChatStyle.label)
+                        .padding(.top, 8)
+                        .accessibilityAddTraits(.isHeader)
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                        ForEach(moreFour) { e in
+                            Button { open = e } label: { tile(e) }
+                                .buttonStyle(.plain)
+                        }
+                    }
+                }
                 Text("Events from " + Set(events.compactMap(\.source)).sorted().joined(separator: " and "))
                     .font(.caption2)
                     .foregroundStyle(NorthstarChatStyle.label)
@@ -292,6 +307,40 @@ struct NearbyEventsList: View {
             NearbyEventSheet(event: e)
                 .presentationDetents([.medium, .large])
         }
+    }
+
+    /// Up to 4 events with their own photo (not our built-in night-sky card), skipping the first one on screen.
+    private var moreFour: [NearbyEvent] {
+        let real = events.dropFirst().filter { !$0.image.absoluteString.contains("/assets/events/") }
+        let pick = Array(real.prefix(4))
+        return pick.count >= 2 ? Array(pick.prefix(pick.count >= 4 ? 4 : 2)) : []
+    }
+
+    private func tile(_ e: NearbyEvent) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            AsyncImage(url: e.image) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() } else { NorthstarChatStyle.card }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 150)
+            .clipped()
+            LinearGradient(colors: [.clear, .black.opacity(0.75)], startPoint: .center, endPoint: .bottom)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(e.name)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+                Text(e.whenText)
+                    .font(.caption)
+                    .opacity(0.9)
+            }
+            .foregroundStyle(.white)
+            .padding(10)
+        }
+        .frame(height: 150)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Shows tickets, directions and add to calendar")
     }
 
     private func load() async {
