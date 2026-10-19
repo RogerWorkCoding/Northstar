@@ -1634,7 +1634,9 @@ Deno.serve(async (req) => {
   const deepUser = userIdFrom(req.headers.get("Authorization") ?? "");
   const crisisNow = crisisNet(lastText);
   const askedDeep = !crisisNow && wantsDeep(lastText, str(body.source, 20), body.deep === true);
-  let left = askedDeep ? await deepLeft(deepUser) : 0;
+  // The dev copy (northstar-chat-dev) may Deep Think for a signed-out test call; the live brain never does.
+  const isDev = new URL(req.url).pathname.includes("-dev");
+  let left = askedDeep ? (deepUser || !isDev ? await deepLeft(deepUser) : 1) : 0;
   let deep = askedDeep && left > 0;
   let thinking = deep;
   const useBig = () => deep || crisisNow;
