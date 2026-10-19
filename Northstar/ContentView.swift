@@ -499,8 +499,10 @@ struct ContentView: View {
         .opacity(launching ? 0 : 1)
         .allowsHitTesting(!launching)
         .accessibilityHidden(launching)
-        .padding(.horizontal, 6)
-        .padding(.bottom, isPromptFocused ? 8 : 46)
+        // Low on the screen, just above the home bar (Roger, Oct 19), and a little narrower so its rounded
+        // ends sit inside the iPhone's rounded corners.
+        .padding(.horizontal, 12)
+        .padding(.bottom, isPromptFocused ? 8 : 4)
         .animation(.easeOut(duration: 0.2), value: isPromptFocused)
         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
             composerHeight = newHeight
