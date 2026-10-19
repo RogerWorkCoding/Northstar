@@ -22,6 +22,7 @@ struct ListenerNoticeView: View {
                     .font(.title3)
                     .fixedSize(horizontal: false, vertical: true)
 
+                point("heart", "Find Good Listener anytime: tap ♡ Listen, just above the text field in Chat.")
                 point("lock.shield", "You decide what is saved and what is shared. Your journal stays on this phone.")
                 point("phone.fill", "If you're ever in immediate danger, call emergency services.")
                 point("message.fill", "In the United States, you can also call or text 988 for immediate support.")

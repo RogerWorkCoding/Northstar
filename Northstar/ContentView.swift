@@ -21,6 +21,10 @@ struct ContentView: View {
     @AppStorage(SettingsKeys.appearance) private var appearance = Appearance.automatic
     /// First-run welcome (shown once; About can show it again).
     @AppStorage(SettingsKeys.welcomed) private var welcomed = false
+    /// Which modules are on (watched, so the Good Listener door appears as soon as it's switched on).
+    @AppStorage(SettingsKeys.modules) private var modulesOn = ""
+    /// Good Listener's own screen (its door sits just above the Chat text field).
+    @State private var isListenerPresented = false
     /// The one-time "New: Concierge" hint above the ask bar.
     @AppStorage("ns.conciergeHintSeen") private var conciergeHintSeen = false
 
@@ -184,6 +188,16 @@ struct ContentView: View {
                 .ignoresSafeArea()
         }
         .sheet(isPresented: $isFeedbackPresented, onDismiss: maybeReturnToDiscovery) { FeedbackView() }
+        .sheet(isPresented: $isListenerPresented) {
+            NavigationStack {
+                GoodListenerHomeView(onTalk: startListening, onJournal: {
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(450))
+                        open(.journal)
+                    }
+                })
+            }
+        }
         .sheet(isPresented: $isConciergePresented, onDismiss: maybeReturnToDiscovery) {
             ConciergeView(memory: { await memoryForEngine() })
             .presentationDetents([.large])
@@ -500,7 +514,12 @@ struct ContentView: View {
     }
 
     private var promptArea: some View {
-        composerBox
+        VStack(alignment: .leading, spacing: 8) {
+            if listenerOn {
+                listenerDoor
+            }
+            composerBox
+        }
         .opacity(launching ? 0 : 1)
         .allowsHitTesting(!launching)
         .accessibilityHidden(launching)
@@ -511,6 +530,51 @@ struct ContentView: View {
         .animation(.easeOut(duration: 0.2), value: isPromptFocused)
         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
             composerHeight = newHeight
+        }
+    }
+
+    private var listenerOn: Bool { modulesOn.split(separator: ",").contains("listener") }
+
+    /// Good Listener's door: a small button just above the text field, only when the module is on.
+    private var listenerDoor: some View {
+        Button {
+            isPromptFocused = false
+            isListenerPresented = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "heart")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(NorthstarChatStyle.starGold)
+                Text("Listen")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(NorthstarChatStyle.text)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .background {
+                ZStack {
+                    Capsule().fill(.ultraThinMaterial)
+                    Capsule().fill(NorthstarChatStyle.cardStrong)
+                }
+            }
+            .overlay(Capsule().strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, 8)
+        .accessibilityLabel("Good Listener")
+        .accessibilityHint("Talk it through, write in your journal, or get help now")
+    }
+
+    /// Good Listener > Talk it through: a fresh chat where Northstar speaks first and listens.
+    private func startListening() {
+        returnToDiscovery = false
+        if !viewModel.messages.isEmpty, !isThinking { startNewChat() }
+        Task {
+            try? await Task.sleep(for: .milliseconds(450))
+            appendAssistantMessage("I'm here, and I'm listening. What's on your mind?")
+            isPromptFocused = true
         }
     }
 
