@@ -381,8 +381,8 @@ struct DiscoveryView: View {
                         line.move(to: center)
                         line.addLine(to: at)
                         // A soft glow under a bright thin line, like light reaching each orb.
-                        ctx.stroke(line, with: .color(gold.opacity(0.14)), lineWidth: 5)
-                        ctx.stroke(line, with: .color(Color(red: 1.0, green: 0.92, blue: 0.75).opacity(0.5)), lineWidth: 1.2)
+                        ctx.stroke(line, with: .color(Color.white.opacity(0.07)), lineWidth: 5)
+                        ctx.stroke(line, with: .color(Color(red: 1.0, green: 0.96, blue: 0.88).opacity(0.45)), lineWidth: 1.2)
                     }
                 }
                 .allowsHitTesting(false)
@@ -516,17 +516,17 @@ struct DiscoveryView: View {
     private func activeBubble(_ b: DiscoveryBubble, index: Int) -> some View {
         let isPicked = picked == b
         let quietKind = b.kind == .clarification
-        let warm = Color(red: 1.0, green: 0.92, blue: 0.76)
+        let warm = Color(red: 1.0, green: 0.96, blue: 0.88)   // a touch of warmth, mostly white
         return ZStack {
             // Frosted glass body (lighter where the starlight hits, top left).
             Circle().fill(.ultraThinMaterial).opacity(0.55)
             Circle().fill(RadialGradient(
-                colors: [Color(white: 0.88).opacity(0.42), Color(red: 0.56, green: 0.58, blue: 0.68).opacity(0.30),
-                         Color(red: 0.20, green: 0.23, blue: 0.36).opacity(0.45)],
+                colors: [Color(white: 0.92).opacity(0.46), Color(red: 0.62, green: 0.64, blue: 0.72).opacity(0.32),
+                         Color(red: 0.26, green: 0.28, blue: 0.38).opacity(0.42)],
                 center: UnitPoint(x: 0.35, y: 0.28), startRadius: 0, endRadius: activeSize * 0.72))
             // Soft gold light just inside the edge.
             Circle()
-                .strokeBorder(gold.opacity(isPicked ? 0.6 : 0.38), lineWidth: 7)
+                .strokeBorder(Color.white.opacity(isPicked ? 0.4 : 0.22), lineWidth: 7)
                 .blur(radius: 5)
                 .clipShape(Circle())
             // Gentle shine near the top.
@@ -537,7 +537,7 @@ struct DiscoveryView: View {
                 .blur(radius: 2)
             // Bright warm rim.
             Circle().strokeBorder(
-                AngularGradient(colors: [warm.opacity(0.95), gold.opacity(0.65), warm.opacity(0.9), gold.opacity(0.55), warm.opacity(0.95)],
+                AngularGradient(colors: [.white.opacity(0.9), warm.opacity(0.7), .white.opacity(0.85), warm.opacity(0.6), .white.opacity(0.9)],
                                 center: .center),
                 style: StrokeStyle(lineWidth: isPicked ? 2.5 : 1.6, dash: quietKind ? [5, 3] : []))
             VStack(spacing: 2) {
@@ -561,7 +561,7 @@ struct DiscoveryView: View {
             }
         }
         .frame(width: activeSize, height: activeSize)
-        .shadow(color: gold.opacity(isPicked ? 0.75 : 0.45), radius: isPicked ? 20 : 14)
+        .shadow(color: (isPicked ? gold : warm).opacity(isPicked ? 0.6 : 0.3), radius: isPicked ? 18 : 12)
     }
 
     // MARK: The star
