@@ -134,6 +134,13 @@ struct DiscoveryView: View {
     private let glass = Color(red: 0.10, green: 0.14, blue: 0.38)
     private let mist = Color(red: 0.55, green: 0.63, blue: 0.80)      // muted gray-blue for background places
 
+    @State private var promptTick = 0
+    private var placeholder: String {
+        if speech.isRecording { return "Listening\u{2026}" }
+        if question != nil { return "Your answer\u{2026}" }
+        return promptTick % 2 == 0 ? "What's on your mind?" : "Type or speak\u{2026}"
+    }
+
     private var hasWords: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     private var bigText: Bool { typeSize.isAccessibilitySize }
     private var shownState: Phase { speech.isRecording ? .listening : state }
@@ -200,6 +207,13 @@ struct DiscoveryView: View {
             if speech.isRecording { draft = speech.transcript }
         }
         .onDisappear { if speech.isRecording { speech.stopRecording() } }
+        .task {
+            // Trade the two prompts every few seconds, softly.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3.5))
+                withAnimation(.easeInOut(duration: 0.6)) { promptTick += 1 }
+            }
+        }
     }
 
     // MARK: Top bar and composer
@@ -238,11 +252,20 @@ struct DiscoveryView: View {
                 VoiceBars(level: speech.level, color: gold, count: draft.isEmpty ? 14 : 6)
                     .transition(.opacity)
             }
-            TextField("", text: $draft,
-                      prompt: Text(speech.isRecording ? "Listening\u{2026}" : question == nil ? "Type or speak\u{2026}" : "Your answer\u{2026}")
-                        .foregroundStyle(.white.opacity(0.55)),
-                      axis: .vertical)
+            TextField("", text: $draft, axis: .vertical)
                 .lineLimit(1...4)
+                .overlay(alignment: .leading) {
+                    // The question lives in the field: "What's on your mind?" gently trades places with "Type or speak…".
+                    if draft.isEmpty {
+                        Text(placeholder)
+                            .id(placeholder)
+                            .transition(.opacity)
+                            .foregroundStyle(.white.opacity(0.6))
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .accessibilityLabel(question ?? "What's on your mind?")
                 .focused($typing)
                 .submitLabel(.send)
                 .onSubmit { if hasWords { submit() } }
@@ -280,44 +303,43 @@ struct DiscoveryView: View {
 
     @ViewBuilder
     private func wordsLayer(center: CGPoint, size: CGSize) -> some View {
-        let below = CGPoint(x: center.x, y: center.y + starSize * 0.62)
+        // All words sit in a band at the top, so the space around the star is free for the planets.
+        let top = CGPoint(x: center.x, y: Orbits.topBand / 2)
         switch shownState {
-        case .idle:
-            Text(question ?? "What's on your mind?")
-                .font(.system(size: question == nil ? 26 : 22, weight: .light))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-                .frame(width: size.width)
-                .position(below)
-                .transition(.opacity)
-                .accessibilityAddTraits(.isHeader)
-        case .listening:
-            Text("Listening\u{2026}")
-                .font(.system(size: 22, weight: .light))
-                .foregroundStyle(.white.opacity(0.85))
-                .position(below)
+        case .idle, .listening:
+            if let question {
+                Text(question)
+                    .font(.system(size: 20, weight: .light))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .padding(.horizontal, 24)
+                    .frame(width: size.width)
+                    .position(top)
+                    .transition(.opacity)
+                    .accessibilityAddTraits(.isHeader)
+            }
         case .interpreting:
             Text("Thinking about your way forward\u{2026}")
                 .font(.callout)
-                .foregroundStyle(.white.opacity(0.8))
-                .position(below)
+                .foregroundStyle(.white.opacity(0.85))
+                .position(top)
                 .transition(.opacity)
         case .error:
-            VStack(spacing: 10) {
-                Text("Couldn't reach Northstar just now.")
+            HStack(spacing: 10) {
+                Text("Couldn't reach Northstar.")
                     .font(.callout)
                 Button { submit(again: true) } label: {
                     Label("Try again", systemImage: "arrow.clockwise")
                         .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 14)
                         .frame(minHeight: 44)
                         .background(Capsule().fill(.white.opacity(0.14)))
                 }
                 .buttonStyle(.plain)
             }
-            .position(below)
+            .position(top)
         case .showingSuggestions, .navigating, .startingChat, .requestingConnection:
-            // Their exact words, never a rewording. Sits at the top, clear of every bubble.
+            // Their exact words, never a rewording.
             let heard = request.count > 60 ? String(request.prefix(57)) + "\u{2026}" : request
             VStack(spacing: 2) {
                 Text("A few ways forward")
@@ -330,7 +352,7 @@ struct DiscoveryView: View {
             .multilineTextAlignment(.center)
             .padding(.horizontal, 24)
             .frame(width: size.width)
-            .position(x: center.x, y: Orbits.topBand / 2)
+            .position(top)
             .opacity(picked == nil ? 1 : 0)
         }
     }
@@ -344,8 +366,8 @@ struct DiscoveryView: View {
         TimelineView(.animation(minimumInterval: 1.0 / 30, paused: picked != nil)) { tl in
             let now = tl.date.timeIntervalSinceReferenceDate
             let turn = rotation(at: now)
-            let o = Orbits.make(size: size, center: center, turn: turn, background: background,
-                                active: Array(active.prefix(shown)), suggesting: suggesting,
+            let o = Orbits.make(size: size, center: center, turn: turn, time: reduceMotion ? 0 : now, background: background,
+                                active: Array(active.prefix(shown)), wordsAtTop: wordsAtTop,
                                 starRadius: starRadius, activeSize: activeSize, backSize: backSize, bigText: bigText)
             ZStack {
                 // Faint constellation lines from the star to each suggestion.
@@ -448,6 +470,14 @@ struct DiscoveryView: View {
                 flickAt = Date.timeIntervalSinceReferenceDate
                 flick = max(-6, min(6, flick))
             }
+    }
+
+    /// Is there text in the top band right now? (Planets fade as they pass behind it.)
+    private var wordsAtTop: Bool {
+        switch shownState {
+        case .idle, .listening: return question != nil
+        default: return true
+        }
     }
 
     private var restOpacity: Double { contrast == .increased ? 1 : 0.9 }
@@ -776,64 +806,93 @@ struct Orbits {
     /// Room kept at the top for "A few ways forward / You said".
     static let topBand: CGFloat = 64
 
-    static func make(size: CGSize, center: CGPoint, turn: Double, background: [DiscoveryBubble],
-                     active: [DiscoveryBubble], suggesting: Bool, starRadius: CGFloat,
+    static func make(size: CGSize, center: CGPoint, turn: Double, time: Double, background: [DiscoveryBubble],
+                     active: [DiscoveryBubble], wordsAtTop: Bool, starRadius: CGFloat,
                      activeSize: CGFloat, backSize: CGFloat, bigText: Bool) -> Orbits {
         var out = Orbits()
         let rb = backSize / 2, ra = activeSize / 2
-
-        // The words: under the star while asking, across the top with suggestions.
-        let words: CGRect = suggesting
-            ? CGRect(x: 0, y: 0, width: size.width, height: topBand)
-            : CGRect(x: center.x - 130, y: center.y + 190 * 0.62 - 24, width: 260, height: 60)
+        let gap: CGFloat = 10
+        let words: CGRect? = wordsAtTop ? CGRect(x: 0, y: 0, width: size.width, height: topBand) : nil
 
         func visible(_ p: CGPoint, _ r: CGFloat) -> Double {
-            // 1 when clear of the words, fading to 0 within 18 points of them.
-            let dx = max(words.minX - (p.x + r), 0, (p.x - r) - words.maxX)
-            let dy = max(words.minY - (p.y + r), 0, (p.y - r) - words.maxY)
-            let d = (dx * dx + dy * dy).squareRoot()
-            let inside = dx == 0 && dy == 0
-            return inside ? 0 : min(1, Double(d / 18))
+            // 1 when clear of the words at the top, fading to 0 within 18 points of them.
+            guard let words else { return 1 }
+            let below = (p.y - r) - words.maxY
+            return below >= 18 ? 1 : max(0, Double(below / 18))
         }
 
-        // Suggestions: an inner orbit (or a simple column with big text).
+        // Rings hug the star; the screen is tall, so each ring is a little taller than it is wide.
+        let maxX = size.width / 2 - 6, maxY = size.height / 2 - 6
+        func ring(_ r: CGFloat, _ half: CGFloat) -> (rx: CGFloat, ry: CGFloat) {
+            (min(r, maxX - half), min(r * 1.25, maxY - half))
+        }
+        func perimeter(_ rx: CGFloat, _ ry: CGFloat) -> Double { 2 * .pi * (Double(rx * rx + ry * ry) / 2).squareRoot() }
+
+        // Each ring turns at its own pace (inner a little faster, alternate rings the other way),
+        // with a soft wobble, so the cluster feels free rather than like a grid.
+        func place(_ k: Int, of n: Int, ringIndex i: Int, rx: CGFloat, ry: CGFloat, seed: Int) -> CGPoint {
+            let pace = (i % 2 == 0 ? 1.0 : -0.75) / (1 + 0.35 * Double(i))
+            let a = -Double.pi / 2 + Double(k) * 2 * .pi / Double(max(n, 1)) + Double(i) * 0.4 + turn * pace
+            let wobble = 3 * sin(time * 0.6 + Double(seed) * 1.7)
+            return CGPoint(x: center.x + (rx + wobble) * cos(a), y: center.y + (ry + wobble) * sin(a))
+        }
+
+        var r = starRadius + gap
+
+        // Suggestions first, closest to the star.
         if !active.isEmpty {
             if bigText {
                 for (i, b) in active.enumerated() {
-                    out.spots[b.id] = CGPoint(x: center.x, y: topBand + ra + CGFloat(i) * (activeSize + 10))
+                    out.spots[b.id] = CGPoint(x: center.x, y: topBand + ra + CGFloat(i) * (activeSize + gap))
                 }
+                r = size.height  // big text: places step aside (the ≡ menu still has them all)
             } else {
-                let rx = min(size.width * 0.26, 100), ry = min(size.height * 0.26, 150)
-                for (i, b) in active.enumerated() {
-                    let a = -Double.pi / 2 + Double(i) * 2 * .pi / Double(active.count) - turn * 0.5
-                    out.spots[b.id] = CGPoint(x: center.x + rx * cos(a), y: center.y + ry * sin(a))
+                let (rx, ry) = ring(r + ra, ra)
+                for (k, b) in active.enumerated() {
+                    out.spots[b.id] = place(k, of: active.count, ringIndex: 0, rx: rx, ry: ry, seed: k)
                 }
+                r += activeSize + gap
             }
         }
 
-        // Places: one outer orbit, as many as fit with room between them; the rest go behind "More".
+        // Places in rings around that, most important closest; whatever doesn't fit goes behind "More".
         let activeIds = Set(active.map(\.id))
-        let places = background.filter { !activeIds.contains($0.id) }
-        let rx = size.width / 2 - rb - 8, ry = size.height / 2 - rb - 8
-        let around = 2 * Double.pi * (Double(rx * rx + ry * ry) / 2).squareRoot()
-        let room = max(4, Int(around / Double(backSize + 12)))
-        var shown = places
-        var hasMore = false
-        if places.count > room {
-            shown = Array(places.prefix(room - 1))
-            hasMore = true
-        }
-        let n = shown.count + (hasMore ? 1 : 0)
-        for k in 0..<n {
-            let a = -Double.pi / 2 + Double(k) * 2 * .pi / Double(n) + turn
-            let p = CGPoint(x: center.x + rx * cos(a), y: center.y + ry * sin(a))
-            if k < shown.count {
-                out.spots[shown[k].id] = p
-                out.visibility[shown[k].id] = visible(p, rb)
-            } else {
+        var queue = background.filter { !activeIds.contains($0.id) }[...]
+        var ringIndex = active.isEmpty || bigText ? 0 : 1
+        var shown: [DiscoveryBubble] = []
+        while !queue.isEmpty {
+            let (rx, ry) = ring(r + rb, rb)
+            guard r + rb <= maxY, r + rb <= maxX + 2 else { break }       // out of room on screen
+            let fit = max(3, Int(perimeter(rx, ry) / Double(backSize + gap)))
+            // No room for another ring after this one (sideways or up and down).
+            let next = r + backSize + gap + rb
+            let last = next > maxX - rb || next * 1.25 > maxY - rb
+            var take = min(fit, queue.count)
+            let needsMore = last && queue.count > fit
+            if needsMore { take = fit - 1 }
+            let ringItems = Array(queue.prefix(take))
+            queue = queue.dropFirst(take)
+            let n = ringItems.count + (needsMore ? 1 : 0)
+            for (k, b) in ringItems.enumerated() {
+                let p = place(k, of: n, ringIndex: ringIndex, rx: rx, ry: ry, seed: b.priority + 7)
+                out.spots[b.id] = p
+                out.visibility[b.id] = visible(p, rb)
+                shown.append(b)
+            }
+            if needsMore {
+                let p = place(n - 1, of: n, ringIndex: ringIndex, rx: rx, ry: ry, seed: 99)
                 out.more = p
                 out.visibility["more"] = visible(p, rb)
+                queue = []
             }
+            r += backSize + gap
+            ringIndex += 1
+            if last { break }
+        }
+        if !queue.isEmpty, out.more == nil, let lastShown = shown.popLast(), let p = out.spots[lastShown.id] {
+            out.spots[lastShown.id] = nil
+            out.more = p
+            out.visibility["more"] = out.visibility[lastShown.id] ?? 1
         }
         out.backs = shown
         return out
