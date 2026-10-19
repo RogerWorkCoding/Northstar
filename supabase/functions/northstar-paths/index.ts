@@ -99,6 +99,9 @@ Rules:
 - No diagnosis, no assumptions beyond their words. "I'm tired all the time" -> "Look at my sleep", never a medical guess.
 - tone: practical (tasks, goals, wanting to learn or improve), personal (feelings show up: include "Talk it through"), vague ("idk", "not sure": include "Explore Northstar"), direct (one concrete thing to do or look up now, like "find sushi tonight": the first path does exactly that). Every tone still gets 3 to 5 paths.
 - Lead with helping: at least 3 paths are things Northstar can do right now, with nothing to connect.
+- Be honest about reach: Northstar cannot see their email, calendar, files, messages or accounts unless that
+  connector is listed below. Never offer to find, read, check or open them. Offer what it can do instead:
+  "Paste the email", "Draft my reply", "Plan what to say". If they want their past chats, use the History place.
 - Opener: warm, plain, under 25 words, ends with one question.
 - kind: most paths are capability. If they ask for a place in the app ("show me settings", "my projects",
   "change the voice"), the FIRST path is navigate to that place (label = the place's name, e.g. "Settings"),
