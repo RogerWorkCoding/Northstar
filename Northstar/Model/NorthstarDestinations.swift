@@ -45,8 +45,8 @@ enum NorthstarDestinations {
         .init(route: .history, title: "Recent Chats", symbol: "clock.arrow.circlepath", priority: 2,
               hint: "Opens your recent chats", menuSection: 2, inMenu: true),
         // Long-term memory: everything Northstar keeps from your chats, searchable.
-        .init(route: .memory, title: "Long-term Memory", symbol: "brain.head.profile", priority: 3,
-              hint: "Searches everything Northstar remembers", menuSection: 2, inMenu: true),
+        .init(route: .memory, title: "Search Memory", symbol: "brain.head.profile", priority: 3,
+              hint: "Searches everything you've said", menuSection: 2, inMenu: true),
         .init(route: .documents, title: "Documents", symbol: "doc", priority: 4,
               hint: "Opens your documents", menuSection: 2, inMenu: true),
         .init(route: .concierge, title: "Concierge", symbol: "bell", priority: 4,

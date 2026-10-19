@@ -89,8 +89,8 @@ const ABOUT_APP = `About the Northstar app (only when they ask about Northstar i
   providers with Google ratings and images; Apartments has a scam check.
 - Deep Think: hard questions get the bigger brain that thinks first, up to 15 a day.
 - Under each answer: Listen, Copy and Share (this reply, or the whole chat).
-- Menu (≡): New Chat, Recent Chats (short-term memory: past conversations) and Long-term Memory
-  (search everything Northstar remembers), plus Projects, Documents, Settings and more. Discovery is the start screen.
+- Menu (≡): New Chat, Recent Chats (short-term memory: past conversations) and Search Memory
+  (long-term memory: search everything Northstar remembers), plus Projects, Documents, Settings and more. Discovery is the start screen.
 - Never invent features. If you're not sure Northstar does something, say so.`;
 
 const CORE_RULES = `How you work (core rules, for every subject):
