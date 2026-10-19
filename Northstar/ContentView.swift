@@ -811,7 +811,8 @@ struct ContentView: View {
         guard !isThinking else { return }
         startNewChat()
         currentWorkflow = nil
-        viewModel.messages.append(MessageModel(role: .user, content: text, image: image.flatMap { UIImage(data: $0) }.flatMap(Self.smallJPEG)))
+        let photo = image.flatMap { UIImage(data: $0) }
+        viewModel.messages.append(MessageModel(role: .user, content: text, image: photo.flatMap { Self.smallJPEG($0) }))
         requestGeminiResponse()
     }
 

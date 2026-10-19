@@ -420,6 +420,6 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         chatTitle = try? c.decodeIfPresent(String.self, forKey: .chatTitle)
         subjectUpdate = try? c.decodeIfPresent(SubjectUpdate.self, forKey: .subjectUpdate)
         schedule = try? c.decodeIfPresent(Schedule.self, forKey: .schedule)
-        journalEntry = AppModule.isOn(.listener) ? try? c.decodeIfPresent(JournalEntry.self, forKey: .journalEntry) : nil
+        journalEntry = try? c.decodeIfPresent(JournalEntry.self, forKey: .journalEntry)   // the brain only sends it with Good Listener on
     }
 }
