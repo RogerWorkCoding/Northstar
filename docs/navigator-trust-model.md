@@ -224,9 +224,9 @@ None of this needs inventing. Each piece is a proven pattern from another field.
 
 Build the trust system first and the abilities second. Each version must pass its gate before the next begins.
 
-1. **v1: Look and tidy (Pro launch).** Levels 1 and 2 only, inside your chosen folders. Plan preview, one-tap approval, saved copies, 30-day Undo, the ledger, "Why did this happen?", Big Stop. No sending, no deleting (moves to Northstar Trash).
+1. **v1: Look and tidy (Pro launch).** Levels 1 and 2 only, inside your chosen folders. Plan preview, one-tap approval, saved copies, 30-day Undo, the ledger, "Why did this happen?", Big Stop. No sending, no deleting (moves to Northstar Trash). **No coding:** no code, commands, Xcode, GitHub or databases (decided Oct 19, 2026; the full v1 list is in the Navigator plan).
     - Gate: 100 of your own real tasks with no lost work, and every Undo works.
-2. **v2: Hands on other apps.** Level 3 with per-action preview and Face ID: send email, calendar invites, git push, Trash. Leak-pattern check and size limits.
+2. **v2: Hands on other apps.** Level 3 with per-action preview and Face ID: send email, calendar invites, Trash. Leak-pattern check and size limits. Coding stays out until much later.
     - Gate: test users find no way to make it act on hidden instructions in content.
 3. **v3: Longer plans.** Multi-step plans across apps, pausing at each Level 3 step. Narrow, dated "always allow" rules. Monthly summary.
     - Gate: an outside security review of the rules and the ledger.
