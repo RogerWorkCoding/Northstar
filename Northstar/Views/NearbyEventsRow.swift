@@ -79,8 +79,11 @@ enum NearbyEvents {
     private nonisolated struct Reply: Decodable, Sendable { let events: [Lenient]? }
     private static var cached: (city: String, at: Date, events: [NearbyEvent])?
 
-    static func load() async -> [NearbyEvent] {
-        guard let city = await NearMe.shared.cityName() else { return [] }
+    /// Events near the person's own city, or in `chosenCity` when they picked another one ("Austin, TX").
+    static func load(chosenCity: String? = nil) async -> [NearbyEvent] {
+        let picked = chosenCity?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let found: String? = picked.isEmpty ? await NearMe.shared.cityName() : picked
+        guard let city = found else { return [] }
         if let c = cached, c.city == city, Date().timeIntervalSince(c.at) < 1800 { return c.events }
         // The city's center, not where the person is standing.
         guard let center = try? await CLGeocoder().geocodeAddressString(city).first?.location?.coordinate else { return [] }
@@ -242,22 +245,32 @@ struct NearbyEventsList: View {
     @State private var events: [NearbyEvent] = []
     @State private var loading = true
     @State private var open: NearbyEvent?
+    /// Another city they picked ("" = where they are). Kept for next time.
+    @AppStorage("ns.eventsCity") private var chosenCity = ""
+    @State private var editingCity = false
+    @State private var cityDraft = ""
+    @State private var hereName: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Happening near you")
+            Text(chosenCity.isEmpty ? "Happening near you" : "Happening in \(Self.short(chosenCity))")
                 .font(.system(size: 30, weight: .light))
                 .foregroundStyle(NorthstarChatStyle.text)
                 .accessibilityAddTraits(.isHeader)
 
+            cityBar
+
             if loading {
                 HStack(spacing: 10) {
                     ProgressView().tint(NorthstarChatStyle.text)
-                    Text("Finding events near you…").foregroundStyle(NorthstarChatStyle.soft)
+                    Text(chosenCity.isEmpty ? "Finding events near you…" : "Finding events in \(Self.short(chosenCity))…")
+                        .foregroundStyle(NorthstarChatStyle.soft)
                 }
                 .padding(.vertical, 8)
             } else if events.isEmpty {
-                Text("I couldn't find events near you right now. If Location is off for Northstar, turn it on in iPhone Settings, then try again.")
+                Text(chosenCity.isEmpty
+                     ? "I couldn't find events near you right now. If Location is off for Northstar, turn it on in iPhone Settings, then try again. Or tap Change city."
+                     : "I couldn't find events in \(chosenCity) right now. Check the spelling, or try a bigger city nearby.")
                     .font(.body)
                     .foregroundStyle(NorthstarChatStyle.soft)
                     .fixedSize(horizontal: false, vertical: true)
@@ -345,8 +358,81 @@ struct NearbyEventsList: View {
 
     private func load() async {
         loading = true
-        events = await NearbyEvents.load()
+        events = await NearbyEvents.load(chosenCity: chosenCity)
+        if chosenCity.isEmpty { hereName = await NearMe.shared.cityName() }
         loading = false
+    }
+
+    /// "Austin, TX, USA" → "Austin"
+    static func short(_ city: String) -> String {
+        city.split(separator: ",").first.map { String($0).trimmingCharacters(in: .whitespaces) } ?? city
+    }
+
+    // 📍 Which city, and a way to change it.
+    @ViewBuilder
+    private var cityBar: some View {
+        if editingCity {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(NorthstarChatStyle.soft)
+                    TextField("Type a city, like Austin, TX", text: $cityDraft)
+                        .textContentType(.addressCity)
+                        .autocorrectionDisabled()
+                        .submitLabel(.search)
+                        .onSubmit(useDraft)
+                    Button("Go", action: useDraft)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(NorthstarChatStyle.linkBlue)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .padding(.horizontal, 14)
+                .background(Capsule().fill(NorthstarChatStyle.card))
+                .overlay(Capsule().strokeBorder(NorthstarChatStyle.stroke))
+                HStack(spacing: 16) {
+                    Button {
+                        chosenCity = ""
+                        editingCity = false
+                        Task { await load() }
+                    } label: {
+                        Label("Use my location", systemImage: "location")
+                    }
+                    Button("Cancel") { editingCity = false }
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(NorthstarChatStyle.linkBlue)
+                .frame(minHeight: 44)
+            }
+        } else {
+            HStack(spacing: 10) {
+                Label(chosenCity.isEmpty ? (hereName.map { Self.short($0) } ?? "Near you") : chosenCity,
+                      systemImage: chosenCity.isEmpty ? "location.fill" : "mappin.and.ellipse")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(NorthstarChatStyle.text)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Button {
+                    cityDraft = ""
+                    editingCity = true
+                } label: {
+                    Text("Change city")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(NorthstarChatStyle.linkBlue)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 44)
+                        .overlay(Capsule().strokeBorder(NorthstarChatStyle.stroke))
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Shows events in another city")
+            }
+        }
+    }
+
+    private func useDraft() {
+        let city = cityDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !city.isEmpty else { return }
+        chosenCity = city
+        editingCity = false
+        Task { await load() }
     }
 
     private func card(_ e: NearbyEvent) -> some View {
