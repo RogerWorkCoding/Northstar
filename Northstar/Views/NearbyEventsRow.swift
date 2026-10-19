@@ -20,6 +20,30 @@ nonisolated struct NearbyEvent: Identifiable, Hashable, Sendable, Decodable {
     /// Where it came from: "Ticketmaster" or "SeatGeek" (for the credit line).
     var source: String? = nil
 
+    private enum CodingKeys: String, CodingKey { case name, date, time, venue, city, image, url, miles, source }
+
+    /// Forgiving: links with odd characters are cleaned up, and missing words become empty,
+    /// so one unusual event from Ticketmaster or SeatGeek never hides the whole row.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func link(_ key: CodingKeys) throws -> URL {
+            let raw = try c.decode(String.self, forKey: key).trimmingCharacters(in: .whitespacesAndNewlines)
+            if let u = URL(string: raw), u.scheme == "https" { return u }
+            if let fixed = raw.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed.union(.urlQueryAllowed)),
+               let u = URL(string: fixed), u.scheme == "https" { return u }
+            throw DecodingError.dataCorruptedError(forKey: key, in: c, debugDescription: "Not a usable link")
+        }
+        name = (try? c.decode(String.self, forKey: .name)) ?? ""
+        date = try c.decode(String.self, forKey: .date)
+        time = try? c.decodeIfPresent(String.self, forKey: .time)
+        venue = (try? c.decodeIfPresent(String.self, forKey: .venue)) ?? ""
+        city = (try? c.decodeIfPresent(String.self, forKey: .city)) ?? ""
+        image = try link(.image)
+        url = try link(.url)
+        miles = try? c.decodeIfPresent(Double.self, forKey: .miles)
+        source = try? c.decodeIfPresent(String.self, forKey: .source)
+    }
+
     var start: Date? {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
@@ -47,7 +71,12 @@ nonisolated struct NearbyEvent: Identifiable, Hashable, Sendable, Decodable {
 @MainActor
 enum NearbyEvents {
     private nonisolated struct Request: Encodable, Sendable { let lat: Double; let lng: Double }
-    private nonisolated struct Reply: Decodable, Sendable { let events: [NearbyEvent]? }
+    /// One event that can't be read is skipped, never the whole list.
+    private nonisolated struct Lenient: Decodable, Sendable {
+        let event: NearbyEvent?
+        init(from decoder: Decoder) throws { event = try? NearbyEvent(from: decoder) }
+    }
+    private nonisolated struct Reply: Decodable, Sendable { let events: [Lenient]? }
     private static var cached: (city: String, at: Date, events: [NearbyEvent])?
 
     static func load() async -> [NearbyEvent] {
@@ -61,7 +90,7 @@ enum NearbyEvents {
                 options: FunctionInvokeOptions(body: Request(lat: (center.latitude * 100).rounded() / 100,
                                                              lng: (center.longitude * 100).rounded() / 100))
             )
-            let events = reply.events ?? []
+            let events = (reply.events ?? []).compactMap(\.event).filter { !$0.name.isEmpty }
             // Remember only a real list, so an empty answer can be tried again soon.
             if !events.isEmpty { cached = (city, Date(), events) }
             return events
