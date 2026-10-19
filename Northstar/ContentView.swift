@@ -255,42 +255,9 @@ struct ContentView: View {
     private var adaptiveHeader: some View {
         if viewModel.messages.isEmpty {
             heroHeader
-                .overlay(alignment: .top) { chatTopButtons }
         } else {
             compactHeader
-                .overlay { chatTopButtons }
         }
-    }
-
-    /// ≡ top left opens the menu; ✕ top right goes back to Discovery.
-    private var chatTopButtons: some View {
-        HStack {
-            Button {
-                isPromptFocused = false
-                withAnimation(.easeInOut(duration: 0.25)) { isStarMenuPresented = true }
-            } label: {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 18, weight: .regular))
-                    .foregroundStyle(NorthstarChatStyle.soft)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel("Menu")
-            .accessibilityHint("Shows every place in Northstar")
-            Spacer()
-            Button {
-                isPromptFocused = false
-                isDiscoveryPresented = true
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(NorthstarChatStyle.soft)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel("Back to Discovery")
-        }
-        .padding(.horizontal, 8)
     }
 
     private var compactHeader: some View {

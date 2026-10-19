@@ -285,6 +285,28 @@ struct DiscoveryView: View {
     /// Always there: type or speak first, then edit and send again to refine.
     private var composer: some View {
         HStack(spacing: 10) {
+            // Same two as chat's text field, so every screen looks alike: ✦ Northstar and 🔔 Concierge.
+            Button {
+                if panel.isOpen { closePanel() }
+                if !starMenu { tapStar() }
+            } label: {
+                Image(systemName: "sparkle")
+                    .font(.system(size: 18, weight: .light))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Northstar")
+            .accessibilityHint("Shows Settings, Connections and Brain level")
+            Button { onResult(.navigate(.concierge)) } label: {
+                Image(systemName: "bell")
+                    .font(.system(size: 17, weight: .light))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Concierge")
+            .accessibilityHint("Find dinner, classes, things to do, travel and more")
             if speech.isRecording {
                 VoiceBars(level: speech.level, color: gold, count: draft.isEmpty ? 14 : 6)
                     .transition(.opacity)
@@ -326,7 +348,7 @@ struct DiscoveryView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: hasWords)
-        .padding(.leading, 16)
+        .padding(.leading, 8)
         .padding(.trailing, 6)
         .padding(.vertical, 2)
         .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.black.opacity(0.35)))
