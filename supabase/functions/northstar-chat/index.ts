@@ -15,6 +15,11 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = Deno.env.get("NORTHSTAR_MODEL") ?? "claude-sonnet-5-5";
+// ✦ Deep Think: hard questions go to the bigger brain, which thinks before it answers.
+// Everyday chat stays on MODEL (fast). Each person gets NS_DEEP_PER_DAY a day; crisis help never counts.
+const DEEP_MODEL = Deno.env.get("NORTHSTAR_DEEP_MODEL") ?? "claude-opus-5-5";
+const DEEP_PER_DAY = Number(Deno.env.get("NS_DEEP_PER_DAY") ?? 15);
+const DEEP_THINKING_TOKENS = Number(Deno.env.get("NS_DEEP_THINKING_TOKENS") ?? 6000);
 
 // 1. The Northstar Constitution
 const CONSTITUTION = `You are Northstar, a human-centered guide. You help people gain clarity, choose their own direction,
@@ -1097,6 +1102,41 @@ const LIMITS = {
 };
 // Claude Sonnet 5.5 prices, in millionths of a dollar per token (= dollars per million tokens).
 const PRICE = { input: 2, cacheWrite: 2.5, cacheRead: 0.1, output: 10, webSearch: 10_000 };
+// The bigger brain (Opus). Estimate; set NS_DEEP_PRICE_IN / _OUT if Anthropic's prices differ.
+const DEEP_PRICE = {
+  input: Number(Deno.env.get("NS_DEEP_PRICE_IN") ?? 5), output: Number(Deno.env.get("NS_DEEP_PRICE_OUT") ?? 25),
+};
+
+// Hard questions: plans, money, decisions, comparing, explaining why, debugging. Long messages too.
+const DEEP_WORDS = /\b(plan|planning|strategy|strategic|roadmap|compare|comparison|decide|decision|should i|pros and cons|trade-?offs?|budget|invest(ing|ment)?|retire(ment)?|401k|ira|debt|mortgage|loan|taxes|business|startup|pricing|revenue|profit|career|negotiat\w*|contract|lease|explain (why|how)|why (does|do|is|are|did)|step[- ]by[- ]step|analy[sz]e|analysis|figure out|help me think|think (it|this) through|what would you do|which (one|is better)|bug|debug|error|calculate|math|architecture)\b/i;
+function wantsDeep(text: string, source: string, forced: boolean): boolean {
+  if (forced) return true;
+  if (source === "concierge") return false; // quick local answers stay fast
+  const t = text.trim();
+  return t.length >= 400 || (t.length >= 25 && DEEP_WORDS.test(t));
+}
+
+/** Deep Think answers this person has left today (0 when unknown, so it falls back to the fast brain). */
+async function deepLeft(userId: string | null): Promise<number> {
+  if (!userId || DEEP_PER_DAY <= 0) return 0;
+  try {
+    const { data, error } = await serviceDb().rpc("deep_today", { p_user: userId });
+    if (error) throw error;
+    return Math.max(0, DEEP_PER_DAY - Number(data ?? 0));
+  } catch (e) {
+    console.error("deep check skipped:", String((e as Error)?.message ?? e).slice(0, 160));
+    return 0;
+  }
+}
+async function recordDeep(userId: string | null): Promise<void> {
+  if (!userId) return;
+  try {
+    const { error } = await serviceDb().rpc("add_deep", { p_user: userId });
+    if (error) throw error;
+  } catch (e) {
+    console.error("deep record skipped:", String((e as Error)?.message ?? e).slice(0, 160));
+  }
+}
 
 function serviceDb() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
@@ -1117,8 +1157,17 @@ function userIdFrom(auth: string): string | null {
 }
 
 /** What one Claude call cost, from its usage numbers. */
-function costMicros(usage: unknown): number {
+function costMicros(usage: unknown, deep = false): number {
   const u = (usage ?? {}) as Record<string, unknown>;
+  if (deep) {
+    const n = (k: string) => Number(u[k] ?? 0) || 0;
+    const searches = Number((u.server_tool_use as Record<string, unknown> | undefined)?.web_search_requests ?? 0) || 0;
+    return Math.round(
+      n("input_tokens") * DEEP_PRICE.input + n("cache_creation_input_tokens") * DEEP_PRICE.input * 1.25 +
+      n("cache_read_input_tokens") * DEEP_PRICE.input * 0.1 + n("output_tokens") * DEEP_PRICE.output +
+      searches * PRICE.webSearch,
+    );
+  }
   const n = (k: string) => Number(u[k] ?? 0) || 0;
   const searches = Number((u.server_tool_use as Record<string, unknown> | undefined)?.web_search_requests ?? 0) || 0;
   return Math.round(
@@ -1580,16 +1629,27 @@ Deno.serve(async (req) => {
       },
     ]
     : messages;
+  // ✦ Deep Think: the bigger brain thinks first on hard questions (while they have some left today).
+  // Crisis help always gets the bigger brain, answers right away (no long thinking) and never counts.
+  const deepUser = userIdFrom(req.headers.get("Authorization") ?? "");
+  const crisisNow = crisisNet(lastText);
+  const askedDeep = !crisisNow && wantsDeep(lastText, str(body.source, 20), body.deep === true);
+  let left = askedDeep ? await deepLeft(deepUser) : 0;
+  let deep = askedDeep && left > 0;
+  let thinking = deep;
+  const useBig = () => deep || crisisNow;
   const buildRequest = (withWeb: boolean) => JSON.stringify({
-    model: MODEL,
-    max_tokens: 4000,
+    model: useBig() ? DEEP_MODEL : MODEL,
+    max_tokens: thinking ? 4000 + DEEP_THINKING_TOKENS : 4000,
     system,
     messages: apiMessages,
     tools: withWeb ? [webTool, replyTool] : [replyTool],
     // (The tools are part of the cached prefix too: they come before the rules.)
     tool_choice: { type: "auto" },
+    ...(thinking ? { thinking: { type: "enabled", budget_tokens: DEEP_THINKING_TOKENS } } : {}),
   });
   let withWeb = true;
+  if (askedDeep) console.log("deep", JSON.stringify({ deep, left }));
 
   // Cost guard: over today's limit → a kind answer without calling Claude (crisis help still comes first).
   const usageUser = userIdFrom(req.headers.get("Authorization") ?? "");
@@ -1614,7 +1674,7 @@ Deno.serve(async (req) => {
       });
       if (res.ok) {
         data = await res.json();
-        spentMicros += costMicros(data?.usage);
+        spentMicros += costMicros(data?.usage, useBig());
         const u = (data?.usage ?? {}) as Record<string, number>;
         console.log("usage", JSON.stringify({ in: u.input_tokens, out: u.output_tokens, cached: u.cache_read_input_tokens, wrote: u.cache_creation_input_tokens }));
         // Rare slip: Claude writes the reply tool as plain text ("<invoke name=…>") instead of calling it.
@@ -1630,6 +1690,13 @@ Deno.serve(async (req) => {
       } else {
         const detail = (await res.text()).slice(0, 300);
         console.error("Claude error", res.status, "attempt", attempt, detail);
+        // The bigger brain or thinking isn't available: answer with the everyday brain instead.
+        if (res.status === 400 && (thinking || deep) && /thinking|model|budget/i.test(detail)) {
+          thinking = false;
+          deep = false;
+          attempt--;
+          continue;
+        }
         // Web search not enabled for this account (or a bad domain): answer without it.
         if (res.status === 400 && withWeb) {
           withWeb = false;
@@ -1659,6 +1726,10 @@ Deno.serve(async (req) => {
     if (rt?.waitUntil) rt.waitUntil(job); else job.catch(() => {});
   };
   later(recordUsage(usageUser, spentMicros));
+  if (deep) {
+    later(recordDeep(deepUser));
+    left = Math.max(0, left - 1);
+  }
 
   const blocks = (data.content ?? []) as Array<Record<string, unknown>>;
   const tool = blocks.find((b) => b.type === "tool_use" && b.name === "northstar_reply")?.input as
@@ -1895,6 +1966,9 @@ Deno.serve(async (req) => {
   }
 
   return json({
+    // ✦ Deep Think: true when the bigger brain thought this through; how many are left today.
+    deep,
+    deep_left: askedDeep ? left : null,
     reply,
     stage,
     stage_reason: str(tool.stage_reason, 200),

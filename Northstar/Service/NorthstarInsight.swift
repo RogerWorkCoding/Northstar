@@ -297,12 +297,21 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let listings: [Listing]
     /// The expert the brain used (nil for plain chat, personal moments and crisis).
     let used: Used?
+    /// ✦ Deep Think: the bigger brain thought this through.
+    var deep = false
+    /// Deep Think answers left today (nil when the question didn't need one).
+    var deepLeft: Int? = nil
 
     /// The quiet line at the end of an answer: "Wood carving · looked at 3 sources".
     /// Only what really happened; nil when nothing special did (so plain chat stays clean).
     var usedLine: String? {
         guard !crisis else { return nil }
         var parts: [String] = []
+        if deep {
+            parts.append("Deep Think" + (deepLeft.map { " (\($0) left today)" } ?? ""))
+        } else if deepLeft == 0 {
+            parts.append("Deep Think is used up for today")
+        }
         if let used { parts.append(used.expert) }
         if !sources.isEmpty { parts.append("looked at \(sources.count) source\(sources.count == 1 ? "" : "s")") }
         if !places.isEmpty { parts.append("\(places.count) on the map") }
@@ -350,6 +359,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case listings
         case booking
         case used
+        case deep
+        case deepLeft = "deep_left"
         case shots
         case videos
         case code
@@ -385,6 +396,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
             .filter { $0.url.scheme == "https" }
             .prefix(3))
         used = try? c.decodeIfPresent(Used.self, forKey: .used)
+        deep = (try? c.decodeIfPresent(Bool.self, forKey: .deep)) ?? false
+        deepLeft = (try? c.decodeIfPresent(Int.self, forKey: .deepLeft)) ?? nil
         shots = Array(((try? c.decodeIfPresent([Shot].self, forKey: .shots)) ?? []).prefix(5))
         videos = Array(((try? c.decodeIfPresent([LessonVideo].self, forKey: .videos)) ?? [])
             .filter { $0.id.range(of: "^[A-Za-z0-9_-]{11}$", options: .regularExpression) != nil }
