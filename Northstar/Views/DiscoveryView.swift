@@ -132,6 +132,8 @@ struct DiscoveryView: View {
     @State private var panel = DiscoveryPanelModel()
     /// Tapped the star: its three orbs (Settings, Connections, Brain level) are out.
     @State private var starMenu = false
+    /// Each star tap gets a number, so only the latest one can tuck the orbs away.
+    @State private var starTap = 0
     @FocusState private var typing: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -885,6 +887,7 @@ struct DiscoveryView: View {
         guard picked == nil, state != .interpreting, state != .startingChat else { return }
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         if starMenu {
+            starTap += 1
             withAnimation(.easeInOut(duration: 0.3)) {
                 starMenu = false
                 active = []
@@ -910,12 +913,24 @@ struct DiscoveryView: View {
             withAnimation(.easeInOut(duration: 0.3).delay(0.15)) { pulse = false }
         }
         AccessibilityNotification.Announcement("Settings, Connections and Brain level").post()
+        starTap += 1
+        let mine = starTap
         Task {
             for i in 0..<active.count {
                 if !reduceMotion { try? await Task.sleep(for: .milliseconds(110)) }
                 withAnimation(reduceMotion ? .easeInOut(duration: 0.25) : .spring(response: 0.6, dampingFraction: 0.8)) {
                     shown = i + 1
                 }
+            }
+            // They show for a few seconds, then tuck back into the star (tap the star to bring them back).
+            // Not while one is open, being picked, or when VoiceOver needs time to reach them.
+            try? await Task.sleep(for: .seconds(UIAccessibility.isVoiceOverRunning ? 30 : 4))
+            guard mine == starTap, starMenu, !panel.isOpen, picked == nil, state == .showingSuggestions else { return }
+            withAnimation(.easeInOut(duration: 0.5)) {
+                starMenu = false
+                shown = 0
+                active = []
+                state = .idle
             }
         }
     }
