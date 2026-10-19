@@ -279,32 +279,8 @@ struct ContentView: View {
                 .accessibilityAddTraits(.isHeader)
         }
         .frame(maxWidth: .infinity)
-        .overlay(alignment: .trailing) { chatShareMenu }
         .padding(.top, 6)
         .padding(.bottom, 8)
-    }
-
-    /// 📄 Copy the whole chat, or share it as a document that opens in Word.
-    private var chatShareMenu: some View {
-        Menu {
-            Button {
-                UIPasteboard.general.string = ChatExport.plainText(ChatExport.lines(viewModel.messages))
-            } label: {
-                Label("Copy whole chat", systemImage: "doc.on.doc")
-            }
-            ShareLink(item: ChatDocument(lines: ChatExport.lines(viewModel.messages)),
-                      preview: SharePreview("Northstar chat")) {
-                Label("Share as document (Word)", systemImage: "doc.richtext")
-            }
-        } label: {
-            Image(systemName: "square.and.arrow.up")
-                .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(NorthstarChatStyle.soft)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .padding(.trailing, 12)
-        .accessibilityLabel("Copy or share this chat")
     }
 
     /// The large star + wordmark + welcome-message lockup, used only for the
@@ -416,7 +392,8 @@ struct ContentView: View {
                                 subjectState: subjectStates[message.id],
                                 onKeepSubject: { offer in keepSubject(offer, for: message.id) },
                                 onDismissSubject: { subjectStates[message.id] = "dismissed" },
-                                onUndoSubject: { update in undoSubject(update, for: message.id) }
+                                onUndoSubject: { update in undoSubject(update, for: message.id) },
+                                wholeChat: { ChatExport.lines(viewModel.messages) }
                             )
                         }
                     }

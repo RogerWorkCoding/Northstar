@@ -137,6 +137,8 @@ struct NorthstarReplyView: View {
     var onKeepSubject: (NorthstarInsight.SubjectOffer) -> Void = { _ in }
     var onDismissSubject: () -> Void = {}
     var onUndoSubject: (NorthstarInsight.SubjectUpdate) -> Void = { _ in }
+    /// The whole conversation, read only when they open Share (for "Copy whole chat" / Word).
+    var wholeChat: () -> [ChatLine] = { [] }
 
     @State private var whyOpen = false
     @State private var removedPills: Set<NorthstarInsight.Heard> = []
@@ -178,6 +180,29 @@ struct NorthstarReplyView: View {
         .accessibilityLabel(copied ? "Copied" : "Copy this reply")
     }
 
+    /// ⬆︎ Share: this reply, or the whole chat (copy, or a document that opens in Word).
+    private var shareButton: some View {
+        Menu {
+            ShareLink(item: text) {
+                Label("Share this reply", systemImage: "text.bubble")
+            }
+            Button {
+                UIPasteboard.general.string = ChatExport.plainText(wholeChat())
+            } label: {
+                Label("Copy whole chat", systemImage: "doc.on.doc")
+            }
+            ShareLink(item: ChatDocument(lines: wholeChat()), preview: SharePreview("Northstar chat")) {
+                Label("Share whole chat (Word)", systemImage: "doc.richtext")
+            }
+        } label: {
+            Label("Share", systemImage: "square.and.arrow.up")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(NorthstarChatStyle.label)
+                .frame(minHeight: 32)
+        }
+        .accessibilityLabel("Share this reply or the whole chat")
+    }
+
     private var guiding: NorthstarInsight? {
         guard let insight, insight.isGuiding else { return nil }
         return insight
@@ -205,6 +230,7 @@ struct NorthstarReplyView: View {
             HStack(spacing: 18) {
                 speakButton
                 copyButton
+                shareButton
             }
 
             if let schedule = insight?.schedule {
