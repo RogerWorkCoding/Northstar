@@ -1,12 +1,13 @@
-# Northstar Helper: a module that does things on your Mac
+# Northstar Navigator: a module that does things on your Mac
 
-Working name: **Northstar Helper** (the name can change).
+Name: **Northstar Navigator** (chosen by Roger, Oct 19, 2026). The Mac program it installs is the
+"Navigator" app.
 Decided with Roger, Oct 19, 2026: build it as a **module** (off by default, switched on in
 Settings → Modules), and start **early**, for Roger first.
 
 ## Why
 
-Northstar helps people decide and move forward. The Helper lets it also **do the work**: organize
+Northstar helps people decide and move forward. Navigator lets it also **do the work**: organize
 files, write and build code, save to GitHub, fill in a web form, click through a program. That opened
 doors for Roger, and the goal is to give the same thing to people who aren't technical, in Northstar's
 calm, plain-words, step-by-step way.
@@ -16,7 +17,7 @@ calm, plain-words, step-by-step way.
 ```
 📱 Northstar on iPhone: "Add a Share button to the journal screen"
         ▼  task goes through the Northstar brain (Supabase), which already exists
-🖥 Northstar Helper on the Mac: a small Mac program, always on
+🖥 Navigator on the Mac: a small Mac program, always on
    ├─ 1st choice: APIs (GitHub, Claude)          fast, reliable
    ├─ 2nd choice: commands (Xcode builds, files) fast, reliable
    └─ last resort: clicks and typing on screen ("computer use")
@@ -26,15 +27,15 @@ calm, plain-words, step-by-step way.
 
 - The iPhone is the remote control. Apple doesn't let iPhone apps control other apps; Mac programs can,
   with the person's permission (Screen Recording + Accessibility, turned on once in Mac Settings).
-- The Helper uses Anthropic's developer tools (the Claude API, its agent tools and computer use).
+- Navigator uses Anthropic's developer tools (the Claude API, its agent tools and computer use).
 - It's downloaded from mynorthstarlabs.com, not the App Store. Apple's free safety check
   (Developer ID signing + notarization) is still required, and the existing Apple Developer membership covers it.
 
 ## The module switch
 
-- **Settings → Modules → Northstar Helper**: off by default, like Good Listener.
-- The first time it's switched on: a safety notice ("I Understand"), then a link to download the Mac Helper.
-- Off = Northstar never sends it a task. The Mac Helper can also be paused from its menu bar icon.
+- **Settings → Modules → Northstar Navigator**: off by default, like Good Listener.
+- The first time it's switched on: a safety notice ("I Understand"), then a link to download the Navigator Mac app.
+- Off = Northstar never sends it a task. Navigator can also be paused from its menu bar icon.
 
 ## Safety (built in, not just a disclaimer)
 
@@ -56,7 +57,7 @@ Safety notice draft (first time it's switched on):
 
 | Step | Who | What it can do | Effort |
 |---|---|---|---|
-| 0 | Roger + Claude | Design: the screens on the phone, the menu bar Helper, the approval card | Small |
+| 0 | Roger + Claude | Design: the screens on the phone, the Navigator menu bar icon, the approval card | Small |
 | 1 | Roger only | Files and documents; write code, build in Xcode, save to GitHub | Medium |
 | 2 | Roger only | Browser tasks (look up, fill in a form, with approval) | Medium |
 | 3 | Roger only | Full computer use: click and type in any program | Bigger |
@@ -70,6 +71,5 @@ Safety notice draft (first time it's switched on):
 
 ## Open questions
 
-- Final name (Helper? Hands? Do It?).
 - Mac only at first. Windows later?
 - Which three tasks come first for Roger (decides where step 1 starts).

@@ -1,9 +1,9 @@
 # Northstar roadmap
 
-## Early priority — Northstar Helper module (decided Oct 19)
+## Early priority — Northstar Navigator module (decided Oct 19)
 Northstar does real work on your Mac (files, code, Xcode, GitHub, then clicking in any program), controlled
 from the iPhone. A module: off by default, switched on in Settings → Modules, with safety built in.
-Roger first, then testers, then a paid module. Full plan: docs/northstar-helper-plan.md
+Roger first, then testers, then a paid module. Full plan: docs/northstar-navigator-plan.md
 
 ## Build 2 (version 1.0) — Concierge upgrade
 - Tiles on top: Dinner, Shopping, Fun, Fitness, Travel, Errands, Home & Services, Look It Up
