@@ -74,14 +74,14 @@ struct MemorySearchView: View {
         .environment(\.colorScheme, .dark)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .navigationTitle(
-            "Search Memory"
+            "Long-term Memory"
         )
         .navigationBarTitleDisplayMode(
             .inline
         )
         .searchable(
             text: $searchText,
-            prompt: "Search Memory"
+            prompt: "Search what Northstar remembers"
         )
         .task {
             await loadMemories()

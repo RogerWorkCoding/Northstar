@@ -30,7 +30,7 @@ struct HistoryView: View {
                 list
             }
         }
-        .navigationTitle("History")
+        .navigationTitle("Recent Chats")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .alert("Couldn't delete that chat", isPresented: $deleteFailed) {
