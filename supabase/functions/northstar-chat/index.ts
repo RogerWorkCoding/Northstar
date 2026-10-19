@@ -20,6 +20,8 @@ const MODEL = Deno.env.get("NORTHSTAR_MODEL") ?? "claude-sonnet-5-5";
 const DEEP_MODEL = Deno.env.get("NORTHSTAR_DEEP_MODEL") ?? "claude-opus-5-5";
 const DEEP_PER_DAY = Number(Deno.env.get("NS_DEEP_PER_DAY") ?? 15);
 const DEEP_THINKING_TOKENS = Number(Deno.env.get("NS_DEEP_THINKING_TOKENS") ?? 6000);
+// How hard it thinks: "low" | "medium" | "high" (the model decides how much within that).
+const DEEP_EFFORT = Deno.env.get("NS_DEEP_EFFORT") ?? "high";
 
 // 1. The Northstar Constitution
 const CONSTITUTION = `You are Northstar, a human-centered guide. You help people gain clarity, choose their own direction,
@@ -1648,7 +1650,7 @@ Deno.serve(async (req) => {
     tools: withWeb ? [webTool, replyTool] : [replyTool],
     // (The tools are part of the cached prefix too: they come before the rules.)
     tool_choice: { type: "auto" },
-    ...(thinking ? { thinking: { type: "enabled", budget_tokens: DEEP_THINKING_TOKENS } } : {}),
+    ...(thinking ? { thinking: { type: "adaptive" }, output_config: { effort: DEEP_EFFORT } } : {}),
   });
   let withWeb = true;
   if (askedDeep) console.log("deep", JSON.stringify({ deep, left }));
@@ -1693,8 +1695,13 @@ Deno.serve(async (req) => {
         const detail = (await res.text()).slice(0, 300);
         console.error("Claude error", res.status, "attempt", attempt, detail);
         // The bigger brain or thinking isn't available: answer with the everyday brain instead.
-        if (res.status === 400 && (thinking || deep) && /thinking|model|budget/i.test(detail)) {
+        // First try the bigger brain without thinking; if the model itself is the problem, the everyday brain.
+        if (res.status === 400 && thinking && /thinking|effort|output_config/i.test(detail)) {
           thinking = false;
+          attempt--;
+          continue;
+        }
+        if (res.status === 400 && deep && /model/i.test(detail)) {
           deep = false;
           attempt--;
           continue;
