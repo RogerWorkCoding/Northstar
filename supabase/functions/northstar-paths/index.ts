@@ -2,9 +2,13 @@
 // The person writes a few words ("I'm overwhelmed with work"); this suggests 3 to 5 ways forward.
 // They are outcomes, never apps, connectors or menu items. Fast model, one tool call, about a second.
 //   { text, destinations?: [{id,title}], offer?: [connector ids] }
-//     → { heard, tone, paths: [{ label, icon, opener, kind, destination?, connector? }] }   or   { crisis: true }
-// kind: capability (Northstar does it in chat) · navigate (opens a real place in the app; only ids the app sent)
-//       · clarify (one short follow-up question; Discovery stays open) · connector (only ones the app offers).
+//     → { heard, tone, paths: [{ label, icon, opener, kind, need?, destination?, connector? }] }   or   { crisis: true }
+// Discovery and Chat are different experiences (docs/discovery-and-chat.md): most paths are solved IN Discovery.
+// kind: find (real local businesses, shown in Discovery; `need` = short search words) · answer (a focused
+//       answer shown in Discovery; `opener` says what to answer) · chat ("Discuss in Chat": at most one, never
+//       first, only when conversation adds real value) · navigate (opens a real place in the app; only ids the
+//       app sent) · clarify (one short follow-up; Discovery stays open) · connector (only ones the app offers)
+//       · capability (older apps: Northstar does it in chat; kept so they keep working).
 // A path is a capability (Northstar helps right now) or, rarely, a connector that would make the answer
 // better. Connectors look the same, appear at most once, never alone, and only from NS_CONNECTORS:
 // the ones that really work in the app (comma list of ids, e.g. "calendar,microsoft365"). Empty = none.
@@ -55,11 +59,12 @@ const ICONS = new Set([
   "waveform", "camera", "bell", "square.and.pencil", "clock.arrow.circlepath",
 ]);
 
+const CHAT_LABEL = "Discuss in Chat";
 const FALLBACK = [
-  { label: "Organize priorities", icon: "list.number", opener: "Let's sort what matters from what can wait. What's on your plate right now?" },
-  { label: "Plan my week", icon: "calendar", opener: "Let's plan your week together. What's the one thing that matters most to finish?" },
-  { label: "Learn something new", icon: "book", opener: "Let's find a good way in. What would you love to learn?" },
-  { label: "Talk it through", icon: "bubble.left.and.bubble.right", opener: "I'm here. What's on your mind most today?" },
+  { label: "Organize priorities", icon: "list.number", kind: "answer", opener: "Give a short, simple way to sort priorities: what matters now, what can wait, what to drop." },
+  { label: "Plan my week", icon: "calendar", kind: "answer", opener: "Give a simple 5-step way to plan a week, in short bullets." },
+  { label: "Learn something new", icon: "book", kind: "answer", opener: "Give 4 short tips for starting to learn something new." },
+  { label: CHAT_LABEL, icon: "bubble.left.and.bubble.right", kind: "chat", opener: "I'm here. What's on your mind most today?" },
 ];
 
 const TOOL = {
@@ -77,8 +82,9 @@ const TOOL = {
           properties: {
             label: { type: "string", description: "2-3 words, at most 22 characters, verb first, sentence case, in their language. e.g. Plan my week" },
             icon: { type: "string", enum: [...ICONS] },
-            opener: { type: "string", description: "Northstar's first chat line for this path: under 25 words, names the path, ends with exactly one question." },
-            kind: { type: "string", enum: ["capability", "navigate", "clarify", "connector"], description: "capability = Northstar does it in chat; navigate = open one of the app's places; clarify = ask one short follow-up; connector = connect a listed app." },
+            opener: { type: "string", description: "answer: exactly what focused answer to give, as an instruction (e.g. 'List what to tell the dentist when calling, in 5 short bullets'). chat: Northstar's first chat line, under 25 words, ends with one question. clarify: the question itself." },
+            kind: { type: "string", enum: ["find", "answer", "chat", "navigate", "clarify", "connector"], description: "find = show real local businesses or places in Discovery; answer = a focused answer shown in Discovery; chat = 'Discuss in Chat' (at most one, never first); navigate = open one of the app's places; clarify = ask one short follow-up; connector = connect a listed app." },
+            need: { type: "string", description: "find only: 1-4 plain search words for the kind of business, e.g. 'dentist', 'emergency dentist', 'plumber', 'house cleaner'. No sentence, no location, no business name." },
             destination: { type: "string", description: "navigate only: the place id from the list you were given." },
             connector: { type: "string", description: "connector only: its id from the list you were given." },
           },
@@ -94,16 +100,24 @@ const RULES = `You are Northstar, a calm guide that helps people find clarity, d
 Someone just told you, in a few words, what is on their mind. Offer 3 to 5 different WAYS FORWARD.
 Rules:
 - Outcomes, never features: no app, connector, product or brand names, never "Use Concierge".
-- Each path a different kind of help: plan, do, understand, and when feelings show up, "Talk it through".
+- Each path a different kind of help: plan, do, understand, and when feelings show up, "Discuss in Chat".
 - Labels: 2-3 words, verb first, sentence case, in the person's language. "Plan my week", not "Weekly Planning".
 - No diagnosis, no assumptions beyond their words. "I'm tired all the time" -> "Look at my sleep", never a medical guess.
-- tone: practical (tasks, goals, wanting to learn or improve), personal (feelings show up: include "Talk it through"), vague ("idk", "not sure": include "Explore Northstar"), direct (one concrete thing to do or look up now, like "find sushi tonight": the first path does exactly that). Every tone still gets 3 to 5 paths.
+- tone: practical (tasks, goals, wanting to learn or improve), personal (feelings show up: include "Discuss in Chat"), vague ("idk", "not sure": include "Explore Northstar"), direct (one concrete thing to do or look up now, like "find sushi tonight": the first path does exactly that). Every tone still gets 3 to 5 paths.
 - Lead with helping: at least 3 paths are things Northstar can do right now, with nothing to connect.
 - Be honest about reach: Northstar cannot see their email, calendar, files, messages or accounts unless that
   connector is listed below. Never offer to find, read, check or open them. Offer what it can do instead:
   "Paste the email", "Draft my reply", "Plan what to say". If they want their past chats, use the History place.
-- Opener: warm, plain, under 25 words, ends with one question.
-- kind: most paths are capability. If they ask for a place in the app ("show me settings", "my projects",
+- Solve it in Discovery. Discovery and Chat are different: most paths are find or answer, shown right on
+  the Discovery screen. Chat is for when conversation really adds value.
+- find: they need a real local business, service or place (dentist, plumber, mechanic, vet, pharmacy,
+  charger). Put short search words in need. Never invent a business.
+- answer: focused help that fits on one card: a short checklist, what to say, next steps, a brief
+  comparison, how to prepare. The opener is the instruction for that answer.
+- chat: only for reflection, feelings, brainstorming, long planning or lots of back-and-forth. Label it
+  exactly "Discuss in Chat". At most one, never the first path, and not just because the words are broad.
+  When feelings show up, include it (instead of "Talk it through").
+- If they ask for a place in the app ("show me settings", "my projects",
   "change the voice"), the FIRST path is navigate to that place (label = the place's name, e.g. "Settings"),
   followed by 2-4 related paths (other places or capabilities). Never invent a place: use only the ids given.
 - clarify: at most one, only when one missing detail would change the help a lot. Its label is the short
@@ -163,33 +177,53 @@ Deno.serve(async (req) => {
     const data = await res.json();
     const out = (data?.content ?? []).find((b: { type: string }) => b.type === "tool_use")?.input ?? {};
     const seen = new Set<string>();
-    type Kind = "capability" | "navigate" | "clarify" | "connector";
-    type Path = { label: string; icon: string; opener: string; kind: Kind; destination?: string; connector?: string };
+    type Kind = "find" | "answer" | "chat" | "capability" | "navigate" | "clarify" | "connector";
+    type Path = { label: string; icon: string; opener: string; kind: Kind; need?: string; destination?: string; connector?: string };
     let clarifies = 0;
+    let chats = 0;
+    // find: 1-4 plain words (letters, spaces, & and -), else the path is dropped (never a misleading search).
+    const needOf = (v: unknown) => {
+      const n = String(v ?? "").toLowerCase().replace(/[^a-z &'-]/g, " ").replace(/\s+/g, " ").trim();
+      return n && n.split(" ").length <= 4 && n.length <= 40 ? n : "";
+    };
     const all: Path[] = (Array.isArray(out.paths) ? out.paths : [])
       .map((p: Record<string, unknown>): Path => {
         const c = String(p?.connector ?? "");
         const d = String(p?.destination ?? "");
         const live = String(p?.kind) === "connector" || c ? offered.includes(c) : false;
         const nav = !live && places.has(d) && (String(p?.kind) === "navigate" || !!d);
-        const clarify = !live && !nav && String(p?.kind) === "clarify" && clarifies++ === 0;
+        const asked = String(p?.kind ?? "");
+        const clarify = !live && !nav && asked === "clarify" && clarifies++ === 0;
         const label = String(p?.label ?? "").replace(/\s+/g, " ").trim().slice(0, 30);
+        const opener = String(p?.opener ?? "").trim().slice(0, 240);
+        const need = asked === "find" ? needOf(p?.need) : "";
+        const isChat = !live && !nav && !clarify && (asked === "chat" || label.toLowerCase() === CHAT_LABEL.toLowerCase());
+        const kind: Kind | "" = live ? "connector" : nav ? "navigate" : clarify ? "clarify"
+          : isChat ? (chats++ === 0 ? "chat" : "")
+          : asked === "find" ? (need ? "find" : "")
+          : asked === "answer" ? (opener ? "answer" : "")
+          : asked === "capability" ? "capability" : (opener ? "answer" : "");
         return {
-          label: live ? `Connect ${CONNECTOR_INFO[c].name}` : nav ? places.get(d)! : label,
+          label: live ? `Connect ${CONNECTOR_INFO[c].name}` : nav ? places.get(d)! : kind === "chat" ? CHAT_LABEL : label,
           icon: live ? CONNECTOR_INFO[c].icon : ICONS.has(String(p?.icon)) ? String(p.icon) : "sparkle",
-          opener: String(p?.opener ?? "").trim().slice(0, 200),
-          kind: live ? "connector" : nav ? "navigate" : clarify ? "clarify" : "capability",
+          opener,
+          kind: kind as Kind,
+          ...(kind === "find" ? { need } : {}),
           ...(live ? { connector: c } : {}),
           ...(nav ? { destination: d } : {}),
         };
       })
+      // Invalid paths are dropped, never turned into something misleading.
+      .filter((p: Path) => !!p.kind)
       // A "Connect …" label without a live connector behind it is dropped: never promise what doesn't work.
       .filter((p: Path) => p.kind === "connector" || !/^connect\b/i.test(p.label))
       .filter((p: Path) => p.label && !seen.has(p.label.toLowerCase()) && seen.add(p.label.toLowerCase()));
-    const helping = all.filter((p) => p.kind !== "connector").slice(0, 5);
+    // "Discuss in Chat" is never first: it goes last among the helping paths.
+    const chat = all.find((p) => p.kind === "chat");
+    const helping = [...all.filter((p) => p.kind !== "connector" && p.kind !== "chat"), ...(chat ? [chat] : [])].slice(0, 5);
     const connector = all.find((p) => p.kind === "connector");
     // Never connector-only, never one bubble: at least 3 ways that help now, at most 1 connector, 5 in all.
-    if (helping.length < 3) throw new Error("too few paths");
+    if (helping.length < 3 || helping.filter((p) => p.kind !== "chat").length < 2) throw new Error("too few paths");
     const paths = connector ? [...helping.slice(0, 4), connector] : helping;
     return json({
       heard: String(out.heard ?? "").replace(/["“”]/g, "").trim().slice(0, 60),

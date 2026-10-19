@@ -11,11 +11,16 @@ import Supabase
 //     A place they ask for is PROMOTED from the background (no duplicate bubble).
 // Three ways around: background bubbles (passive discovery), active bubbles (intelligent routing),
 // and the ≡ menu (the complete list). Their words are used for this answer only; nothing is saved here.
+//
+// Discovery and Chat are different experiences (docs/discovery-and-chat.md). "find" and "answer" bubbles open
+// a panel right here (DiscoveryPanel.swift); Chat opens only from "Discuss in Chat" (or for crisis help).
 
 // MARK: - Model
 
 enum DiscoveryBubbleKind: Equatable {
     case destination, nativeCapability, connector, clarification
+    /// Solved in Discovery: real places (find) or a short answer, shown in the panel.
+    case inPlace
 }
 
 enum DiscoveryAction: Equatable {
@@ -23,6 +28,8 @@ enum DiscoveryAction: Equatable {
     case beginChat(prompt: String, capability: String, opener: String)
     case connect(connector: String, prompt: String)
     case clarify(question: String)
+    case find(need: String)                     // real local options, in the Discovery panel
+    case answer(prompt: String)                 // a short answer, in the Discovery panel
     case more                                   // the full ≡ menu, when there isn't room for every place
 }
 
@@ -49,8 +56,10 @@ nonisolated struct PathOption: Hashable, Sendable, Decodable {
     let label: String
     let icon: String
     let opener: String
-    /// capability · navigate · clarify · connector
+    /// find · answer · chat · navigate · clarify · connector · capability (older brain)
     var kind: String? = nil
+    /// find only: short search words ("dentist").
+    var need: String? = nil
     var destination: String? = nil
     var connector: String? = nil
 }
@@ -119,6 +128,7 @@ struct DiscoveryView: View {
     @State private var pulse = false
     @State private var ripple = false
     @State private var speech = SpeechRecognizer()
+    @State private var panel = DiscoveryPanelModel()
     @FocusState private var typing: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -157,6 +167,10 @@ struct DiscoveryView: View {
     var body: some View {
         VStack(spacing: 0) {
             topBar
+            if panel.isOpen {
+                panelLayout
+                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+            } else {
             GeometryReader { geo in
                 let size = geo.size
                 let center = CGPoint(x: size.width / 2, y: size.height * 0.5)
@@ -189,6 +203,8 @@ struct DiscoveryView: View {
                 .gesture(spinGesture(center: center))
                 .onTapGesture { typing = false }
             }
+            .transition(.opacity)
+            }
             composer
                 .opacity(state == .startingChat || state == .navigating ? 0 : 1)
         }
@@ -206,7 +222,17 @@ struct DiscoveryView: View {
         .onChange(of: speech.transcript) {
             if speech.isRecording { draft = speech.transcript }
         }
-        .onDisappear { if speech.isRecording { speech.stopRecording() } }
+        .onDisappear {
+            if speech.isRecording { speech.stopRecording() }
+            panel.close()
+        }
+        .onChange(of: panel.crisis) {
+            // Safety first: if an answer turned out to be about a crisis, hand over to crisis help right away.
+            guard panel.crisis else { return }
+            let words = request
+            panel.close()
+            finish(.crisis(words))
+        }
         .task {
             // Trade the two prompts every few seconds, softly.
             while !Task.isCancelled {
@@ -616,13 +642,16 @@ struct DiscoveryView: View {
         case .nativeCapability: return "Action"
         case .connector: return "Connection"
         case .clarification: return "Follow-up question"
+        case .inPlace: return "Shows the result here"
         }
     }
 
     private func hint(for b: DiscoveryBubble) -> String {
         switch b.action {
         case .navigate(let r): return NorthstarDestinations.info(r).hint
-        case .beginChat: return "Starts a chat about this"
+        case .beginChat: return "Opens a chat about this"
+        case .find: return "Shows real local options here, in Discovery"
+        case .answer: return "Shows a short answer here, in Discovery"
         case .connect: return "Opens the connection, then continues your request"
         case .clarify: return "Asks you one more thing, then suggests new ways forward"
         case .more: return "Opens the full menu"
@@ -658,6 +687,8 @@ struct DiscoveryView: View {
         guard !said.isEmpty, state != .interpreting, picked == nil else { return }
         if speech.isRecording { speech.stopRecording() }
         typing = false
+        // A new request closes any open result (still Discovery) and brings fresh suggestions.
+        if panel.isOpen { withAnimation(.easeInOut(duration: 0.3)) { panel.close() } }
         // An answer to a follow-up keeps the original request with it.
         if let question, !again {
             request = "\(request). \(question) \(said)"
@@ -716,13 +747,32 @@ struct DiscoveryView: View {
                 guard let c = p.connector else { continue }
                 b = DiscoveryBubble(id: "conn.\(c)", title: p.label, symbol: p.icon, kind: .connector,
                                     action: .connect(connector: c, prompt: request), priority: i, isPersistent: false)
-            default:
+            case "find":
+                // Real local options, shown in Discovery. No search words = no bubble (never a vague search).
+                guard let need = p.need?.trimmingCharacters(in: .whitespacesAndNewlines), !need.isEmpty else { continue }
+                b = DiscoveryBubble(id: "find.\(p.label)", title: p.label, symbol: p.icon, kind: .inPlace,
+                                    action: .find(need: need), priority: i, isPersistent: false)
+            case "answer":
+                guard !p.opener.isEmpty else { continue }
+                b = DiscoveryBubble(id: "answer.\(p.label)", title: p.label, symbol: p.icon, kind: .inPlace,
+                                    action: .answer(prompt: p.opener), priority: i, isPersistent: false)
+            case "chat":
+                // The only bubble that opens Chat, and only when tapped.
+                let opener = p.opener.isEmpty ? "I'm here. What's on your mind most?" : p.opener
+                b = DiscoveryBubble(id: "chat", title: "Discuss in Chat", symbol: "bubble.left.and.bubble.right",
+                                    kind: .nativeCapability, action: .beginChat(prompt: request, capability: "Discuss in Chat", opener: opener),
+                                    priority: 99, isPersistent: false)
+            case nil, "capability":
                 let opener = p.opener.isEmpty ? "Let's \(p.label.lowercased()) together. Where would you like to start?" : p.opener
                 b = DiscoveryBubble(id: "do.\(p.label)", title: p.label, symbol: p.icon, kind: .nativeCapability,
                                     action: .beginChat(prompt: request, capability: p.label, opener: opener), priority: i, isPersistent: false)
+            default:
+                continue   // a kind this version doesn't know: skip it, never crash
             }
             if seen.insert(b.id).inserted { out.append(b) }
         }
+        // "Discuss in Chat" is never first.
+        if let i = out.firstIndex(where: { $0.id == "chat" }), out.count > 1 { out.append(out.remove(at: i)) }
         return Array(out.prefix(5))
     }
 
@@ -730,8 +780,13 @@ struct DiscoveryView: View {
         guard picked == nil, state != .interpreting else { return }
         UISelectionFeedbackGenerator().selectionChanged()
         switch b.action {
+        case .find(let need):
+            openPanel(.find(need: need), for: b)
+        case .answer(let prompt):
+            openPanel(.answer(title: b.title, prompt: prompt), for: b)
         case .clarify(let q):
             // Stay in Discovery: ask, then bring new bubbles after they answer.
+            if panel.isOpen { panel.close() }
             withAnimation(.easeInOut(duration: 0.3)) {
                 question = q
                 draft = ""
@@ -744,7 +799,8 @@ struct DiscoveryView: View {
         case .more:
             onMenu()
         case .navigate(let route):
-            // Highlight, ease a little toward the star, then open the place directly (no chat first).
+            // A place in the app that really needs its own screen (Projects, Settings…): open it directly.
+            if panel.isOpen { panel.close() }
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 picked = b
                 dragging = nil
@@ -755,7 +811,9 @@ struct DiscoveryView: View {
                 try? await Task.sleep(for: .milliseconds(reduceMotion ? 150 : 450))
                 onResult(.navigate(route))
             }
-        case .connect(let connector, let prompt):
+        case .connect(let connector, _):
+            // Connecting improves Discovery; it never moves them into Chat. iOS asks only after this tap.
+            if panel.isOpen { panel.close() }
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 picked = b
                 dragging = nil
@@ -763,9 +821,26 @@ struct DiscoveryView: View {
                 state = .requestingConnection
             }
             Task {
-                try? await Task.sleep(for: .milliseconds(reduceMotion ? 150 : 500))
-                onResult(.connect(connector: connector, prompt: prompt))
+                let connected = await NorthstarCalendar.shared.connect(connector)
+                withAnimation(.easeInOut(duration: 0.3)) { picked = nil; pickedSpot = nil }
+                if connected {
+                    AccessibilityNotification.Announcement("Connected. Updating your suggestions.").post()
+                    state = .showingSuggestions
+                    submit(again: true)
+                } else {
+                    // Not connected: keep every other way forward, minus this one. No access is claimed.
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        active.removeAll { $0.id == b.id }
+                        shown = active.count
+                        state = .showingSuggestions
+                    }
+                    AccessibilityNotification.Announcement("Not connected. Here are the other ways forward.").post()
+                }
             }
+        case .beginChat(let prompt, let capability, let opener) where panel.isOpen:
+            // "Discuss in Chat" tapped from the small row while a result is showing.
+            panel.close()
+            finish(.beginChat(prompt: prompt, capability: capability, opener: opener))
         case .beginChat(let prompt, let capability, let opener):
             // Merge into the star, then chat opens with their request and Northstar's first line.
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -788,6 +863,84 @@ struct DiscoveryView: View {
                 finish(.beginChat(prompt: prompt, capability: capability, opener: opener))
             }
         }
+    }
+
+    // MARK: The panel (results in place)
+
+    private func openPanel(_ content: DiscoveryPanelContent, for b: DiscoveryBubble) {
+        typing = false
+        dragging = nil
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.25) : .spring(response: 0.5, dampingFraction: 0.86)) {
+            panel.open(content, id: b.id, title: b.title, request: request)
+        }
+    }
+
+    private func closePanel() {
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.25) : .spring(response: 0.5, dampingFraction: 0.86)) {
+            panel.close()
+        }
+        AccessibilityNotification.Announcement("Back to suggestions").post()
+    }
+
+    /// "Discuss in Chat" from the panel: Chat starts from their words and what the panel really showed.
+    private func chatFromPanel() {
+        let opener = panel.chatOpener()
+        let title = panel.title
+        panel.close()
+        finish(.beginChat(prompt: request, capability: title, opener: opener))
+    }
+
+    /// With a result open: the star and the suggestions stay, smaller, at the top; the panel fills the rest.
+    private var panelLayout: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                star
+                    .scaleEffect(0.3)
+                    .frame(width: 60, height: 60)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("A few ways forward")
+                        .font(.subheadline.weight(.semibold))
+                    Text("You said: \u{201C}\(request)\u{201D}")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.7))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(active) { b in miniOrb(b) }
+                }
+                .padding(.horizontal, 16)
+            }
+            .accessibilityLabel("Ways forward")
+
+            DiscoveryPanelView(model: panel, onBack: closePanel, onChat: chatFromPanel)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 8)
+        }
+    }
+
+    /// A suggestion, small, while a result is open. The one showing has a warm rim.
+    private func miniOrb(_ b: DiscoveryBubble) -> some View {
+        let isOn = panel.selectedId == b.id
+        return Button { select(b, at: .zero, center: .zero) } label: {
+            Text(b.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 44)
+                .background(Capsule().fill(.white.opacity(isOn ? 0.22 : 0.1)))
+                .overlay(Capsule().strokeBorder(isOn ? gold : .white.opacity(0.3), lineWidth: isOn ? 1.6 : 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(isOn ? "Showing" : kindName(b.kind))
+        .accessibilityHint(hint(for: b))
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
     /// The star rises and everything fades, so chat appears on the same sky.

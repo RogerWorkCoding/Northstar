@@ -76,6 +76,16 @@ final class NorthstarCalendar {
 
     // MARK: - Access (the iPhone asks once; after that it remembers their answer)
 
+    /// Discovery's "Connect Calendar" / "Connect Reminders": asks iOS once, only after the person taps.
+    /// true when Northstar may now use it. Unknown connectors are never "connected".
+    func connect(_ connector: String) async -> Bool {
+        switch connector {
+        case "calendar": return await hasEventAccess()
+        case "reminders": return await hasReminderAccess()
+        default: return false
+        }
+    }
+
     private func hasEventAccess() async -> Bool {
         switch EKEventStore.authorizationStatus(for: .event) {
         case .fullAccess: return true

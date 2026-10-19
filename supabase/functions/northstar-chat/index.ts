@@ -707,6 +707,16 @@ function shotsFrom(raw: unknown): { title: string; seconds: number; framing: str
 }
 
 // 🛎 Concierge screen rules (only when the request comes from the Concierge screen).
+// Discovery panel: a focused answer that fits on one card (Discovery and Chat are different experiences).
+const DISCOVERY_RULES = `Discovery panel
+- This answer appears on a card inside Discovery, not in a chat. Answer the request directly.
+- About 3 to 7 short bullets or brief paragraphs. No long introduction, no sign-off.
+- Don't ask follow-up questions unless one is truly needed, and never say "let's chat" or "tell me more":
+  the person can tap "Discuss in Chat" if they want to talk.
+- Never claim you looked at their calendar, email, files or accounts. Never invent businesses,
+  availability, appointments, reviews or personal facts.
+- Keep any safety information that matters (for example when to get urgent care).`;
+
 const CONCIERGE_RULES = `Concierge screen
 - They're on the Concierge screen. The app shows your places as cards with a map and buttons (Reserve, Call,
   Ride, Order, Directions) and your products as cards with a View button. So keep the reply to 1–2 short
@@ -1113,7 +1123,7 @@ const DEEP_PRICE = {
 const DEEP_WORDS = /\b(plan|planning|strategy|strategic|roadmap|compare|comparison|decide|decision|should i|pros and cons|trade-?offs?|budget|invest(ing|ment)?|retire(ment)?|401k|ira|debt|mortgage|loan|taxes|business|startup|pricing|revenue|profit|career|negotiat\w*|contract|lease|explain (why|how)|why (does|do|is|are|did)|step[- ]by[- ]step|analy[sz]e|analysis|figure out|help me think|think (it|this) through|what would you do|which (one|is better)|bug|debug|error|calculate|math|architecture)\b/i;
 function wantsDeep(text: string, source: string, forced: boolean): boolean {
   if (forced) return true;
-  if (source === "concierge") return false; // quick local answers stay fast
+  if (source === "concierge" || source === "discovery") return false; // quick answers stay fast
   const t = text.trim();
   return t.length >= 400 || (t.length >= 25 && DEEP_WORDS.test(t));
 }
@@ -1586,6 +1596,7 @@ Deno.serve(async (req) => {
   const personPart = [
     nowLine(body.settings),
     str(body.source, 20) === "concierge" ? CONCIERGE_RULES : "",
+    str(body.source, 20) === "discovery" ? DISCOVERY_RULES : "",
     earlier,
     settingsRules(body.settings),
     subjectsBlock(subjects),
