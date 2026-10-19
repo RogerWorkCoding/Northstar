@@ -1,5 +1,6 @@
 import Foundation
 import CoreLocation
+import MapKit
 import Supabase
 
 // 🔧 Home & Services (Concierge only): the data behind Northstar's one provider recommendation.
@@ -184,7 +185,8 @@ enum HomeServicesProviderService {
         let status = CLLocationManager().authorizationStatus
         if status == .denied || status == .restricted { return .permissionRequired }
         guard let city = await NearMe.shared.cityName() else { return .locationUnavailable }
-        guard let center = try? await CLGeocoder().geocodeAddressString(city).first?.location?.coordinate else {
+        guard let request = MKGeocodingRequest(addressString: city),
+              let center = try? await request.mapItems.first?.location.coordinate else {
             return .locationUnavailable
         }
         do {
