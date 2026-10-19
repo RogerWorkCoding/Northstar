@@ -273,14 +273,13 @@ struct DiscoveryView: View {
                 .foregroundStyle(.white.opacity(0.85))
                 .accessibilityAddTraits(.isHeader)
             Spacer()
+            // ✕ always goes back to the screen they came from (Roger, Oct 19), even at the start.
             Button { closeTapped() } label: {
                 Image(systemName: "xmark")
                     .font(.title3)
                     .frame(width: 44, height: 44)
             }
-            .accessibilityLabel(atHome ? "Back to chat" : "Back to Discovery home")
-            .opacity(atHome && !canGoToChat ? 0 : 1)
-            .disabled(atHome && !canGoToChat)
+            .accessibilityLabel("Back")
         }
         .padding(.horizontal, 12)
         .opacity(state == .startingChat ? 0 : 1)
@@ -913,9 +912,15 @@ struct DiscoveryView: View {
         !panel.isOpen && active.isEmpty && question == nil && !starMenu && (state == .idle || state == .listening)
     }
 
-    /// ✕ takes them back to Discovery's home first; from home it goes back to chat.
+    /// ✕ goes back to the last screen. (resetToHome() is kept for a future "start over".)
     private func closeTapped() {
-        guard !atHome else { onResult(.close); return }
+        if speech.isRecording { speech.stopRecording() }
+        panel.close()
+        onResult(.close)
+    }
+
+    /// Back to Discovery's own home: just the star and "What's on your mind?".
+    private func resetToHome() {
         guard state != .interpreting, state != .startingChat, picked == nil else { return }
         if speech.isRecording { speech.stopRecording() }
         starTap += 1
