@@ -126,7 +126,7 @@ struct DiscoveryView: View {
     @Environment(\.colorSchemeContrast) private var contrast
 
     private let starSize: CGFloat = 190
-    private let activeSize: CGFloat = 76
+    private let activeSize: CGFloat = 86
     private let backSize: CGFloat = 44
 
     private let gold = Color(red: 1.0, green: 0.84, blue: 0.55)
@@ -380,7 +380,9 @@ struct DiscoveryView: View {
                         var line = Path()
                         line.move(to: center)
                         line.addLine(to: at)
-                        ctx.stroke(line, with: .color(gold.opacity(0.16)), lineWidth: 1)
+                        // A soft glow under a bright thin line, like light reaching each orb.
+                        ctx.stroke(line, with: .color(gold.opacity(0.14)), lineWidth: 5)
+                        ctx.stroke(line, with: .color(Color(red: 1.0, green: 0.92, blue: 0.75).opacity(0.5)), lineWidth: 1.2)
                     }
                 }
                 .allowsHitTesting(false)
@@ -510,38 +512,47 @@ struct DiscoveryView: View {
         .contentShape(Circle())
     }
 
-    /// Northstar's response: frosted glass, lit from above, gold-to-lavender rim. A promoted place keeps its icon.
+    /// A glass orb lit by the star: frosted light glass, a warm gold rim and glow, clear white words.
     private func activeBubble(_ b: DiscoveryBubble, index: Int) -> some View {
         let isPicked = picked == b
-        let tint = [lavender, gold, Color(red: 0.62, green: 0.80, blue: 1.0), lavender, gold][index % 5]
         let quietKind = b.kind == .clarification
+        let warm = Color(red: 1.0, green: 0.92, blue: 0.76)
         return ZStack {
-            Circle().fill(LinearGradient(colors: [Color(red: 0.20, green: 0.22, blue: 0.48), glass, Color(red: 0.05, green: 0.07, blue: 0.20)],
-                                         startPoint: .top, endPoint: .bottom))
-                .opacity(0.9)
-            Circle().fill(RadialGradient(colors: [tint.opacity(0.30), .clear], center: UnitPoint(x: 0.3, y: 0.25),
-                                         startRadius: 1, endRadius: activeSize * 0.75))
+            // Frosted glass body (lighter where the starlight hits, top left).
+            Circle().fill(.ultraThinMaterial).opacity(0.55)
+            Circle().fill(RadialGradient(
+                colors: [Color(white: 0.88).opacity(0.42), Color(red: 0.56, green: 0.58, blue: 0.68).opacity(0.30),
+                         Color(red: 0.20, green: 0.23, blue: 0.36).opacity(0.45)],
+                center: UnitPoint(x: 0.35, y: 0.28), startRadius: 0, endRadius: activeSize * 0.72))
+            // Soft gold light just inside the edge.
+            Circle()
+                .strokeBorder(gold.opacity(isPicked ? 0.6 : 0.38), lineWidth: 7)
+                .blur(radius: 5)
+                .clipShape(Circle())
+            // Gentle shine near the top.
             Ellipse()
-                .fill(LinearGradient(colors: [.white.opacity(0.26), .white.opacity(0)], startPoint: .top, endPoint: .bottom))
-                .frame(width: activeSize * 0.62, height: activeSize * 0.30)
-                .offset(y: -activeSize * 0.26)
-                .blur(radius: 1.5)
+                .fill(LinearGradient(colors: [.white.opacity(0.30), .white.opacity(0)], startPoint: .top, endPoint: .bottom))
+                .frame(width: activeSize * 0.58, height: activeSize * 0.26)
+                .offset(x: -activeSize * 0.05, y: -activeSize * 0.27)
+                .blur(radius: 2)
+            // Bright warm rim.
             Circle().strokeBorder(
-                LinearGradient(colors: [gold.opacity(isPicked ? 1 : 0.85), tint.opacity(0.35), lavender.opacity(0.55)],
-                               startPoint: .topLeading, endPoint: .bottomTrailing),
-                style: StrokeStyle(lineWidth: isPicked ? 2.5 : 1.2, dash: quietKind ? [4, 3] : []))
+                AngularGradient(colors: [warm.opacity(0.95), gold.opacity(0.65), warm.opacity(0.9), gold.opacity(0.55), warm.opacity(0.95)],
+                                center: .center),
+                style: StrokeStyle(lineWidth: isPicked ? 2.5 : 1.6, dash: quietKind ? [5, 3] : []))
             VStack(spacing: 2) {
                 if let symbol = b.kind == .destination ? b.symbol : nil {
-                    Image(systemName: symbol).font(.system(size: 14))
+                    Image(systemName: symbol).font(.system(size: 15, weight: .semibold))
                 }
                 Text(b.title)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 14, weight: .semibold))
                     .multilineTextAlignment(.center)
                     .lineLimit(3)
                     .minimumScaleFactor(0.75)
             }
-            .padding(8)
-            .foregroundStyle(.white.opacity(0.96))
+            .padding(10)
+            .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.45), radius: 2, y: 1)
             if isPicked {
                 Image(systemName: "checkmark")
                     .font(.caption2.weight(.bold))
@@ -550,7 +561,7 @@ struct DiscoveryView: View {
             }
         }
         .frame(width: activeSize, height: activeSize)
-        .shadow(color: (isPicked ? gold : tint).opacity(isPicked ? 0.7 : 0.25), radius: isPicked ? 18 : 9)
+        .shadow(color: gold.opacity(isPicked ? 0.75 : 0.45), radius: isPicked ? 20 : 14)
     }
 
     // MARK: The star
@@ -561,6 +572,10 @@ struct DiscoveryView: View {
                 .fill(RadialGradient(colors: [gold.opacity(suggesting ? 0.30 : 0.18), gold.opacity(0.06), .clear],
                                      center: .center, startRadius: 4, endRadius: starSize * 0.9))
                 .frame(width: starSize * 1.8, height: starSize * 1.8)
+            // A faint ring around the star while suggestions orbit.
+            Circle()
+                .stroke(gold.opacity(suggesting ? 0.22 : 0), lineWidth: 1)
+                .frame(width: starSize * 1.05, height: starSize * 1.05)
             NorthstarVisionStarMark(size: starSize)
         }
         .shadow(color: gold.opacity(suggesting ? 0.5 : 0.28), radius: 34)
@@ -569,7 +584,7 @@ struct DiscoveryView: View {
     /// Alone it waits a little smaller; with suggestions it steps back so the bubbles have room.
     private var starScale: CGFloat {
         switch state {
-        case .showingSuggestions, .navigating, .requestingConnection: return 0.62
+        case .showingSuggestions, .navigating, .requestingConnection: return 0.72
         case .startingChat: return 0.4
         default: return 0.78
         }
