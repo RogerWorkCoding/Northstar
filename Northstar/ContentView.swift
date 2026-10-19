@@ -157,6 +157,7 @@ struct ContentView: View {
         }
         .fullScreenCover(isPresented: $isDiscoveryPresented) {
             DiscoveryView(
+                canGoToChat: !viewModel.messages.isEmpty,
                 onResult: { result in startFromDiscovery(result) },
                 onMenu: {
                     isDiscoveryPresented = false
@@ -230,6 +231,15 @@ struct ContentView: View {
             // Reopen the chat they were in, right where they left off.
             if viewModel.messages.isEmpty, let id = UUID(uuidString: openChatId) {
                 openChat(id)
+            }
+            // Discovery is home: the app opens on it (their last chat waits underneath, one ✕ away).
+            if welcomed { isDiscoveryPresented = true }
+        }
+        .onChange(of: welcomed) {
+            guard welcomed else { return }
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))
+                isDiscoveryPresented = true
             }
         }
         .onChange(of: currentChatId) { openChatId = currentChatId?.uuidString ?? "" }
@@ -739,7 +749,13 @@ struct ContentView: View {
     /// Opens any place from the shared list (NorthstarDestinations): the ✦ menu and Discovery both use this.
     private func go(_ route: NorthstarRoute) {
         switch route {
-        case .newChat: startNewChat()
+        case .newChat:
+            // A new start is Discovery, the home screen (Chat opens from there when it's wanted).
+            startNewChat()
+            Task {
+                try? await Task.sleep(for: .milliseconds(350))
+                isDiscoveryPresented = true
+            }
         case .camera: isCameraPresented = true
         case .photoLibrary: isPhotoLibraryPresented = true
         case .projects: open(.projects)

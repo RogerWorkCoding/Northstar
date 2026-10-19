@@ -109,6 +109,8 @@ enum PathService {
 // MARK: - View
 
 struct DiscoveryView: View {
+    /// Is there a chat to go back to? (Discovery is home; with no chat, ✕ on home is hidden.)
+    var canGoToChat = true
     var onResult: (DiscoveryResult) -> Void
     var onMenu: () -> Void
 
@@ -277,6 +279,8 @@ struct DiscoveryView: View {
                     .frame(width: 44, height: 44)
             }
             .accessibilityLabel(atHome ? "Back to chat" : "Back to Discovery home")
+            .opacity(atHome && !canGoToChat ? 0 : 1)
+            .disabled(atHome && !canGoToChat)
         }
         .padding(.horizontal, 12)
         .opacity(state == .startingChat ? 0 : 1)
