@@ -11,6 +11,7 @@ struct ContentView: View {
         case memory
         case documents
         case history
+        case journal
         case settings
         case about
     }
@@ -740,6 +741,9 @@ struct ContentView: View {
             HistoryView(onOpen: openChat, onDeleted: { id in
                 if id == currentChatId { currentChatId = nil }  // the next message starts a new saved chat
             })
+        case .journal:
+            // Good Listener: the private journal. "Talk this through" starts a new chat with one entry.
+            JournalView(onTalk: talkThrough)
         case .settings:
             NorthstarSettingsView()
         case .about:
@@ -794,11 +798,21 @@ struct ContentView: View {
         case .memory: open(.memory)
         case .documents: open(.documents)
         case .history: open(.history)
+        case .journal: open(.journal)
         case .concierge: isConciergePresented = true
         case .settings: open(.settings)
         case .about: open(.about)
         case .feedback: isFeedbackPresented = true
         }
+    }
+
+    /// My Journal → "Talk this through": a new chat whose first message is their entry (and its photo).
+    private func talkThrough(_ text: String, _ image: Data?) {
+        guard !isThinking else { return }
+        startNewChat()
+        currentWorkflow = nil
+        viewModel.messages.append(MessageModel(role: .user, content: text, image: image.flatMap { UIImage(data: $0) }.flatMap(Self.smallJPEG)))
+        requestGeminiResponse()
     }
 
     private func open(_ destination: Destination) {

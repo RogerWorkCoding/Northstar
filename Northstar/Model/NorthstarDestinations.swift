@@ -7,7 +7,7 @@ import SwiftUI
 enum NorthstarRoute: String, CaseIterable, Hashable, Sendable {
     case newChat, camera, photoLibrary
     case projects, videos, voices
-    case memory, documents, history
+    case memory, documents, history, journal
     case concierge
     case settings, about, feedback
 }
@@ -49,6 +49,9 @@ enum NorthstarDestinations {
               hint: "Searches everything you've said", menuSection: 2, inMenu: true),
         .init(route: .documents, title: "Documents", symbol: "doc", priority: 4,
               hint: "Opens your documents", menuSection: 2, inMenu: true),
+        // Good Listener module only: the private journal (hidden unless the module is on).
+        .init(route: .journal, title: "My Journal", symbol: "book.closed", priority: 11,
+              hint: "Opens your private journal", menuSection: 2, inMenu: true),
         .init(route: .concierge, title: "Concierge", symbol: "bell", priority: 4,
               hint: "Opens the Concierge", menuSection: 2, inMenu: false),
         .init(route: .settings, title: "Settings", symbol: "gearshape", priority: 5,
@@ -59,12 +62,17 @@ enum NorthstarDestinations {
               hint: "Opens anonymous feedback", menuSection: 3, inMenu: true),
     ]
 
+    /// The places this person can open right now (My Journal only with Good Listener on).
+    static var available: [NorthstarDestinationInfo] {
+        all.filter { $0.route != .journal || AppModule.isOn(.listener) }
+    }
+
     static func info(_ route: NorthstarRoute) -> NorthstarDestinationInfo {
         all.first { $0.route == route }!
     }
 
     /// Sent to the brain so Discovery can suggest opening a real place (never one that doesn't exist).
     static var forBrain: [[String: String]] {
-        all.map { ["id": $0.route.rawValue, "title": $0.title] }
+        available.map { ["id": $0.route.rawValue, "title": $0.title] }
     }
 }

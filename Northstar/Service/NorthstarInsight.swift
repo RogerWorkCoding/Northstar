@@ -52,6 +52,12 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     }
 
     /// A new subject Northstar offers to keep ("Keep this?").
+    /// Good Listener: a journal entry to look over. Saved on this phone only when they tap Save.
+    nonisolated struct JournalEntry: Hashable, Sendable, Decodable {
+        let title: String
+        let text: String
+    }
+
     /// A calendar event or reminder Northstar offers to add (added only when they tap Add).
     nonisolated struct Schedule: Hashable, Sendable, Decodable {
         let kind: String          // event | reminder
@@ -337,6 +343,8 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
     let subjectUpdate: SubjectUpdate?
     /// A calendar event or reminder to offer (nil for most replies).
     let schedule: Schedule?
+    /// Good Listener: a journal entry they said yes to saving (nil for most replies).
+    let journalEntry: JournalEntry?
 
     /// Approved design rule: stage, pills and save cards only show when
     /// Northstar is guiding. Quick questions get just the answer.
@@ -370,6 +378,7 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         case chatTitle = "chat_title"
         case subjectUpdate = "subject_update"
         case schedule
+        case journalEntry = "journal_entry"
     }
 
     init(from decoder: Decoder) throws {
@@ -411,5 +420,6 @@ nonisolated struct NorthstarInsight: Hashable, Sendable, Decodable {
         chatTitle = try? c.decodeIfPresent(String.self, forKey: .chatTitle)
         subjectUpdate = try? c.decodeIfPresent(SubjectUpdate.self, forKey: .subjectUpdate)
         schedule = try? c.decodeIfPresent(Schedule.self, forKey: .schedule)
+        journalEntry = AppModule.isOn(.listener) ? try? c.decodeIfPresent(JournalEntry.self, forKey: .journalEntry) : nil
     }
 }

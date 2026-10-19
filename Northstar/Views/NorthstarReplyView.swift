@@ -237,6 +237,10 @@ struct NorthstarReplyView: View {
                 ScheduleCard(schedule: schedule)
             }
 
+            if let entry = insight?.journalEntry, insight?.crisis != true {
+                JournalOfferCard(entry: entry)
+            }
+
             if let offer = insight?.subjectOffer {
                 SubjectOfferCard(offer: offer, state: subjectState, onKeep: onKeepSubject, onDismiss: onDismissSubject)
             }

@@ -391,7 +391,36 @@ const MODULES: Record<string, { name: string; rules: string }> = {
   trademarked look; suggest an original direction instead.
 - Remember their design projects as subjects (e.g. "Personal Calm app": next step "finalize the orb").`,
   },
+  listener: {
+    name: "Good Listener",
+    rules: `Module: Good Listener (this person switched it on: they want to feel heard, reflect and keep a private journal)
+- You are not a therapist, counselor, psychiatrist, psychologist or medical provider. Never diagnose, treat,
+  evaluate or label them or anyone in their life. Never say they "have" a condition.
+- Listen first. Reflect back what you heard, in their own words. Move slowly. Keep replies short.
+- Ask at most ONE question in a reply. Don't rush into advice; offer solutions only when they ask.
+- Avoid lists and headings in emotional conversations. Never judge, criticize, shame or minimize.
+- Privacy: what they share belongs to them. Nothing is saved on its own; their journal stays on their phone.
+- Journal: when they've shared something they may want to keep, you may offer ONCE in the conversation:
+  "Would you like me to save this as a journal entry?" If they say no, never ask again in this conversation.
+  Only when they say yes (now or later), fill journal_entry: a calm, neutral title (2–6 words, never their
+  first sentence, no labels or diagnoses) and the entry text in their own words, first person, as they told it.
+  Say the entry is ready to look over; the app shows it and saves it only when they tap Save.
+- Documents and journal entries they share: read them together with them, with compassion and without
+  judgment. Explore what it means to them, grounded in their words. No critique, scoring, diagnosis or
+  clinical interpretation.
+- The crisis rules always come first, before anything in this module.`,
+  },
 };
+
+// Good Listener → "Notes for my counselor": the person picked some of their own journal entries.
+const COUNSELOR_RULES = `Notes for my counselor: the message holds journal entries this person chose to bring to their
+own counselor. Write neutral notes they can hand over, in plain words and in their own language:
+- "What happened": the events, briefly, in order.
+- "How I described feeling": their own words for how they felt (quote short phrases they used).
+- "Questions I want to discuss": questions taken from what they wrote, or that follow plainly from it.
+Write it in the first person, as them. No diagnosis, no clinical labels, no treatment recommendations,
+no speculation about causes or about other people. Short sections with these three headings, nothing else.
+If the entries mention danger to them or someone else, the crisis rules come first.`;
 
 /** The modules this person switched on (only known ones). */
 function modulesFrom(settings: unknown): string[] {
@@ -631,6 +660,15 @@ const REPLY_TOOL = {
           repeat: { type: "string", enum: ["none", "daily", "weekly", "monthly", "yearly"] },
         },
         required: ["kind", "title", "date", "time"],
+      },
+      journal_entry: {
+        type: "object",
+        description: "Good Listener module only, and only after they said YES to saving a journal entry: the entry for them to look over (the app saves it only when they tap Save). Omit otherwise.",
+        properties: {
+          title: { type: "string", description: "A calm, neutral title, 2–6 words. Never their first sentence, never a label or diagnosis." },
+          text: { type: "string", description: "The entry in their own words, first person, as they told it." },
+        },
+        required: ["title", "text"],
       },
       chat_title: {
         type: "string",
@@ -1014,6 +1052,13 @@ function calendarBlock(c: unknown): string {
 }
 
 // One calendar event or reminder for the app to offer (validated).
+function journalFrom(x: unknown) {
+  const o = (x ?? null) as Record<string, unknown> | null;
+  if (!o) return null;
+  const title = str(o.title, 80), text = str(o.text, 8000);
+  return title && text ? { title, text } : null;
+}
+
 function scheduleFrom(x: unknown) {
   const o = (x ?? null) as Record<string, unknown> | null;
   if (!o) return null;
@@ -1616,6 +1661,7 @@ Deno.serve(async (req) => {
     nowLine(body.settings),
     str(body.source, 20) === "concierge" ? CONCIERGE_RULES : "",
     str(body.source, 20) === "discovery" ? DISCOVERY_RULES : "",
+    str(body.source, 20) === "counselor" ? COUNSELOR_RULES : "",
     earlier,
     settingsRules(body.settings),
     subjectsBlock(subjects),
@@ -1977,7 +2023,7 @@ Deno.serve(async (req) => {
 
   // Quietly keep a one-liner for Search, after the reply is on its way.
   const note = str(tool.note, 300);
-  if (note && memoryOn && !personal && !crisis && auth.startsWith("Bearer ")) {
+  if (note && memoryOn && !personal && !crisis && str(body.source, 20) !== "counselor" && auth.startsWith("Bearer ")) {
     const chatId = /^[0-9a-f-]{36}$/i.test(str(body.chat_id, 40)) ? str(body.chat_id, 40) : null;
     const job = keepNote(auth, note, plainText(reply), destination, linkedSubjectId, chatId);
     // deno-lint-ignore no-explicit-any
@@ -2030,6 +2076,8 @@ Deno.serve(async (req) => {
     directions,
     // A calendar event or reminder the app offers to add (only added when they tap Add).
     schedule: crisis ? null : scheduleFrom(tool.schedule),
+    // Good Listener: a journal entry to look over (saved on their phone only when they tap Save).
+    journal_entry: crisis || !modulesFrom(body.settings).includes("listener") ? null : journalFrom(tool.journal_entry),
     // Real places to show on a map (the app finds them in Apple Maps).
     places: personal || crisis ? [] : placesFrom(tool.places, found),
     // "What Northstar used" for the quiet line at the end of the answer (never in personal or crisis moments).

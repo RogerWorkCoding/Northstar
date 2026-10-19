@@ -34,7 +34,7 @@ struct StarMenuView: View {
                 // The rows come from the one shared list (NorthstarDestinations), in its order and groups.
                 ForEach(Self.sections, id: \.self) { section in
                     if section != Self.sections.first { sectionDivider }
-                    ForEach(NorthstarDestinations.all.filter { $0.inMenu && $0.menuSection == section }) { d in
+                    ForEach(NorthstarDestinations.available.filter { $0.inMenu && $0.menuSection == section }) { d in
                         menuButton(title: d.title, systemImage: d.symbol) { onOpen(d.route) }
                     }
                 }

@@ -165,7 +165,7 @@ struct DiscoveryView: View {
 
     // Every place in Northstar, most important first (the same list the ≡ menu uses).
     private var background: [DiscoveryBubble] {
-        NorthstarDestinations.all.sorted { $0.priority < $1.priority }.map { d in
+        NorthstarDestinations.available.sorted { $0.priority < $1.priority }.map { d in
             DiscoveryBubble(id: "dest.\(d.route.rawValue)", title: d.title, symbol: d.symbol, kind: .destination,
                             action: .navigate(d.route), priority: d.priority, isPersistent: true)
         }

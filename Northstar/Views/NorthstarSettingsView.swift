@@ -80,6 +80,9 @@ struct NorthstarSettingsView: View {
 
     @State private var confirmDeleteAll = false
     @State private var moduleOn: Set<AppModule> = Set(AppModule.enabled)
+    /// Good Listener's one-time safety notice (the module turns on only after "I Understand").
+    @State private var showListenerNotice = false
+    @AppStorage(AppModule.listenerNoticeKey) private var listenerNoticeSeen = false
     @State private var confirmSignOut = false
     @State private var confirmDeleteAccount = false
     @State private var accountMessage: String?
@@ -280,6 +283,10 @@ struct NorthstarSettingsView: View {
                     Toggle(isOn: Binding(
                         get: { moduleOn.contains(module) },
                         set: { on in
+                            if on, module == .listener, !listenerNoticeSeen {
+                                showListenerNotice = true
+                                return
+                            }
                             AppModule.set(module, on: on)
                             if on { moduleOn.insert(module) } else { moduleOn.remove(module) }
                         }
@@ -310,6 +317,16 @@ struct NorthstarSettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .sheet(isPresented: $showListenerNotice) {
+            ListenerNoticeView(onUnderstand: {
+                listenerNoticeSeen = true
+                AppModule.set(.listener, on: true)
+                moduleOn.insert(.listener)
+                showListenerNotice = false
+            }, onCancel: { showListenerNotice = false })
+            .presentationDetents([.large])
+            .interactiveDismissDisabled()
+        }
         .task { await loadExport() }
         .task { await account.refresh() }
         .task { insights = await InsightsService.load(days: 7) }

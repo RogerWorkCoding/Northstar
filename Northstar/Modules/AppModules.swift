@@ -8,6 +8,7 @@ nonisolated enum AppModule: String, CaseIterable, Identifiable, Sendable {
     case woodcarving
     case coding
     case design
+    case listener
 
     var id: String { rawValue }
 
@@ -16,6 +17,7 @@ nonisolated enum AppModule: String, CaseIterable, Identifiable, Sendable {
         case .woodcarving: return "Wood carving"
         case .coding: return "Coding"
         case .design: return "Design"
+        case .listener: return "Good Listener"
         }
     }
 
@@ -24,6 +26,7 @@ nonisolated enum AppModule: String, CaseIterable, Identifiable, Sendable {
         case .woodcarving: return "hammer"
         case .coding: return "chevron.left.forwardslash.chevron.right"
         case .design: return "paintpalette"
+        case .listener: return "heart.text.square"
         }
     }
 
@@ -32,6 +35,7 @@ nonisolated enum AppModule: String, CaseIterable, Identifiable, Sendable {
         case .woodcarving: return "Tools, wood, cuts, sharpening and safety, with video lessons."
         case .coding: return "A patient senior engineer: plain-words explanations, code you can copy, help with errors."
         case .design: return "A creative director: honest feedback on your designs, colors and type, and AI image prompts you can copy."
+        case .listener: return "Someone to listen while you put your thoughts into words, with a private journal on this phone."
         }
     }
 
@@ -40,6 +44,9 @@ nonisolated enum AppModule: String, CaseIterable, Identifiable, Sendable {
         let saved = UserDefaults.standard.string(forKey: SettingsKeys.modules) ?? ""
         return saved.split(separator: ",").compactMap { AppModule(rawValue: String($0)) }
     }
+
+    /// Good Listener shows its safety notice once, before it's first switched on.
+    static let listenerNoticeKey = "ns.listenerNoticeSeen"
 
     static func isOn(_ module: AppModule) -> Bool { enabled.contains(module) }
 
