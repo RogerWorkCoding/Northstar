@@ -313,6 +313,9 @@ struct ConciergeView: View {
     private var askBar: some View {
         // Same order as the main ask bar: words on the left, mic and send on the right.
         HStack(spacing: 10) {
+            if speech.isRecording {
+                VoiceBars(level: speech.level, color: NorthstarChatStyle.listening, count: typed.isEmpty ? 12 : 5)
+            }
             TextField(speech.isRecording ? "Listening…" : "Say or type what you want", text: $typed, axis: .vertical)
                 .focused($typing)
                 .lineLimit(1...3)
@@ -326,6 +329,7 @@ struct ConciergeView: View {
                     .foregroundStyle(speech.isRecording ? .white : NorthstarChatStyle.onPrimary)
                     .frame(width: 44, height: 44)
                     .background(Circle().fill(speech.isRecording ? NorthstarChatStyle.listening : NorthstarChatStyle.primaryFill))
+                    .background { ListeningRing(active: speech.isRecording, color: NorthstarChatStyle.listening) }
             }
             .buttonStyle(.plain)
             .accessibilityLabel(speech.isRecording ? "Stop and send" : "Speak")

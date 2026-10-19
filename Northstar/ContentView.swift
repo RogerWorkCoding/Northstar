@@ -606,7 +606,13 @@ struct ContentView: View {
             // The concierge bell sits next to the star on every screen (both are "places to go").
             conciergeButton
 
-            TextField("Ask Northstar...", text: $promptText, axis: .vertical)
+            // While listening: live voice bars, then their words appear as they speak.
+            if speechRecognizer.isRecording {
+                VoiceBars(level: speechRecognizer.level, count: promptText.isEmpty ? 14 : 6)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .leading)))
+            }
+
+            TextField(speechRecognizer.isRecording ? "Listening\u{2026}" : "Ask Northstar...", text: $promptText, axis: .vertical)
                 .focused($isPromptFocused)
                 .foregroundStyle(NorthstarChatStyle.text)
                 .lineLimit(1...6)
@@ -619,7 +625,9 @@ struct ContentView: View {
                     .font(.system(size: 18))
                     .foregroundStyle(speechRecognizer.isRecording ? NorthstarChatStyle.listening : NorthstarChatStyle.text)
                     .frame(width: 34, height: 34)
+                    .background { ListeningRing(active: speechRecognizer.isRecording) }
             }
+            .accessibilityLabel(speechRecognizer.isRecording ? "Stop listening" : "Speak")
 
             Button {
                 isThinking ? stopResponse() : sendMessage()

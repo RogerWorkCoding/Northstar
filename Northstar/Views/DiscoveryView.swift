@@ -111,7 +111,9 @@ struct DiscoveryView: View {
                     constellation(center: center, size: size)
 
                     star
-                        .scaleEffect(starScale * (pulse ? 1.18 : 1))
+                        .scaleEffect(starScale * (pulse ? 1.18 : 1) * (speech.isRecording ? 1 + CGFloat(speech.level) * 0.08 : 1))
+                        .brightness(speech.isRecording ? Double(speech.level) * 0.15 : 0)
+                        .animation(.easeOut(duration: 0.12), value: speech.level)
                         .position(phase == .leaving ? CGPoint(x: center.x, y: -40) : center)
                         .opacity(phase == .leaving ? 0 : 1)
                         .accessibilityHidden(true)
@@ -188,6 +190,10 @@ struct DiscoveryView: View {
     /// Always there: type or speak first, then again to refine.
     private var inputBar: some View {
         HStack(spacing: 10) {
+            if speech.isRecording {
+                VoiceBars(level: speech.level, color: gold, count: draft.isEmpty ? 14 : 6)
+                    .transition(.opacity)
+            }
             TextField("", text: $draft,
                       prompt: Text(speech.isRecording ? "Listening\u{2026}"
                                    : asked.isEmpty ? "Type or speak\u{2026}" : "Add more, or pick a bubble\u{2026}")
@@ -200,7 +206,9 @@ struct DiscoveryView: View {
             Button { toggleMic() } label: {
                 Image(systemName: speech.isRecording ? "stop.circle.fill" : "mic")
                     .font(.title3)
+                    .foregroundStyle(speech.isRecording ? gold : .white)
                     .frame(width: 40, height: 44)
+                    .background { ListeningRing(active: speech.isRecording, color: gold).frame(width: 34, height: 34) }
             }
             .accessibilityLabel(speech.isRecording ? "Stop listening" : "Speak")
             if hasWords {

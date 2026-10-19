@@ -2,6 +2,7 @@ import Foundation
 import Speech
 import AVFoundation
 import Observation
+import UIKit
 
 /// Thrown by startRecording() instead of silently returning, so a caller can
 /// actually observe and report the failure.
@@ -39,6 +40,8 @@ final class SpeechRecognizer {
 
     var transcript = ""
     var isRecording = false
+    /// How loud they're speaking right now, 0…1 (for the live voice bars). Never stored or sent anywhere.
+    var level: Float = 0
 
     func requestPermissions() async -> Bool {
         let speechStatus =
@@ -127,8 +130,17 @@ final class SpeechRecognizer {
             onBus: 0,
             bufferSize: 1024,
             format: recordingFormat
-        ) { buffer, _ in
+        ) { [weak self] buffer, _ in
             request.append(buffer)
+            // Loudness for the voice bars: the average energy of this slice, on a 0…1 scale.
+            guard let data = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return }
+            let n = Int(buffer.frameLength)
+            var sum: Float = 0
+            for i in 0..<n { sum += data[i] * data[i] }
+            let rms = (sum / Float(n)).squareRoot()
+            let db = 20 * log10(max(rms, 0.000_01))
+            let value = max(0, min(1, (db + 50) / 45))
+            Task { @MainActor in self?.level = value }
         }
 
         tapInstalled = true
@@ -137,10 +149,14 @@ final class SpeechRecognizer {
         try audioEngine.start()
 
         isRecording = true
+        // A small tap so they feel it start, even without looking.
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
 
     func stopRecording() {
+        if isRecording { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
         isRecording = false
+        level = 0
 
         if audioEngine.isRunning {
             audioEngine.stop()
