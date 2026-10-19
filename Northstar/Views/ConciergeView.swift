@@ -30,6 +30,8 @@ struct ConciergeView: View {
     // Home & Services only: Northstar's one recommended provider (see Views/HomeServices).
     @State private var homeState: HomeServicesState?
     @State private var homeNeed = ""
+    /// Which page of tiles is showing (tiles swipe left and right).
+    @State private var tilePage: Int? = 0
 
     @State private var typed = ""
     @State private var speech = SpeechRecognizer()
@@ -69,6 +71,9 @@ struct ConciergeView: View {
         .init(id: "travel", title: "Travel", icon: "airplane",
               request: "Help me with travel: a ride, a hotel or a flight. Ask me which one and where I'm going, then show the best 3 options.",
               quick: ["Ride", "Hotel", "Flight", "Airport", "This weekend"]),
+        .init(id: "ev", title: "EV Charging", icon: "bolt.car",
+              request: "Find EV chargers near me: the best 3 fast chargers, with the network, speed and how many plugs.",
+              quick: ["Fast charging", "On my way home", "Open 24 hours", "Near food", "Cheapest"]),
         .init(id: "errands", title: "Errands", icon: "bag",
               request: "Find the 3 nearest open pharmacies or stores near me.",
               quick: ["Pharmacy", "Grocery", "Hardware", "Post office", "Open now"]),
@@ -180,10 +185,9 @@ struct ConciergeView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            // Ten tiles, in pairs.
-            LazyVGrid(columns: columns, spacing: 10) {
-                ForEach(services) { s in tile(s) }
-            }
+            // Tiles in pages of 6 (2 across, 3 down). Swipe left and right for more,
+            // so new services can keep being added without making the page longer.
+            tilePages
 
             NearbyEventsRow {
                 if let events = services.first(where: { $0.kind == .events }) { start(events) }
@@ -194,6 +198,47 @@ struct ConciergeView: View {
                 .foregroundStyle(NorthstarChatStyle.label)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 8)
+        }
+    }
+
+    private var pages: [[Service]] {
+        stride(from: 0, to: services.count, by: 6).map { Array(services[$0..<min($0 + 6, services.count)]) }
+    }
+
+    private var tilePages: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 14) {
+                    ForEach(Array(pages.enumerated()), id: \.offset) { i, page in
+                        LazyVGrid(columns: columns, spacing: 10) {
+                            ForEach(page) { s in tile(s) }
+                        }
+                        .containerRelativeFrame(.horizontal)
+                        .id(i)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.viewAligned)
+            .scrollPosition(id: $tilePage)
+            .scrollClipDisabled()
+
+            if pages.count > 1 {
+                HStack(spacing: 8) {
+                    ForEach(pages.indices, id: \.self) { i in
+                        Circle()
+                            .fill(i == (tilePage ?? 0) ? NorthstarChatStyle.text : NorthstarChatStyle.label.opacity(0.4))
+                            .frame(width: 7, height: 7)
+                    }
+                    Text("Swipe for more")
+                        .font(.footnote)
+                        .foregroundStyle(NorthstarChatStyle.soft)
+                        .padding(.leading, 4)
+                }
+                .frame(maxWidth: .infinity)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Page \((tilePage ?? 0) + 1) of \(pages.count). Swipe left or right for more services.")
+            }
         }
     }
 
