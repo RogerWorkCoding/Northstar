@@ -104,9 +104,32 @@ struct NearbyEventsRow: View {
     @State private var events: [NearbyEvent] = []
     @State private var open: NearbyEvent?
 
+    @State private var finished = false
+
     var body: some View {
-        Group {
-            if !events.isEmpty {
+        // A VStack (not a Group): an empty Group never starts its .task, so the row never loaded.
+        VStack(alignment: .leading, spacing: 0) {
+            if events.isEmpty && !finished {
+                // Placeholder image cards while it looks.
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("HAPPENING NEAR YOU")
+                        .font(.caption.weight(.semibold))
+                        .tracking(2)
+                        .foregroundStyle(NorthstarChatStyle.label)
+                    HStack(spacing: 12) {
+                        ForEach(0..<2, id: \.self) { _ in
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(NorthstarChatStyle.card)
+                                .frame(width: 280, height: 236)
+                                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(NorthstarChatStyle.stroke, lineWidth: 1))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .clipped()
+                    .accessibilityLabel("Finding events near you")
+                }
+                .padding(.top, 8)
+            } else if !events.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("HAPPENING NEAR YOU")
                         .font(.caption.weight(.semibold))
@@ -137,6 +160,7 @@ struct NearbyEventsRow: View {
                 if !events.isEmpty || Task.isCancelled { break }
                 try? await Task.sleep(for: .seconds(Double(attempt + 1) * 2))
             }
+            finished = true
         }
         .sheet(item: $open) { e in
             NearbyEventSheet(event: e)
