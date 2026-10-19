@@ -366,7 +366,9 @@ struct DiscoveryView: View {
         TimelineView(.animation(minimumInterval: 1.0 / 30, paused: picked != nil)) { tl in
             let now = tl.date.timeIntervalSinceReferenceDate
             let turn = rotation(at: now)
-            let o = Orbits.make(size: size, center: center, turn: turn, time: reduceMotion ? 0 : now, background: background,
+            // Only suggestions orbit now: the small place icons were removed (Roger, Oct 19). Places stay in the ≡ menu,
+            // and a suggestion can still open one. To bring them back, pass `background` instead of [].
+            let o = Orbits.make(size: size, center: center, turn: turn, time: reduceMotion ? 0 : now, background: [],
                                 active: Array(active.prefix(shown)), wordsAtTop: wordsAtTop,
                                 starRadius: starRadius, activeSize: activeSize, backSize: backSize, bigText: bigText)
             ZStack {
