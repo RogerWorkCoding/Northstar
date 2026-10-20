@@ -202,7 +202,8 @@ final class NavigatorModel {
         // Read and email offer only the best few, and remember exactly which files they were.
         let isCandidates = intent == "read" || intent == "email"
         let shown = isCandidates ? Array(outcome.files.prefix(5)) : outcome.files
-        if isCandidates { Candidates.save(shown.map(\.url), for: id) }
+        // Remember exactly which files were listed, so "Open #2" (or "read #2") is the file the person saw.
+        Candidates.save(shown.map(\.url), for: id)
 
         let iso = ISO8601DateFormatter()
         let files: [[String: Any]] = shown.map {
@@ -234,6 +235,10 @@ final class NavigatorModel {
         stopRequested = false
         defer { isWorking = false; now = nil }
         let intent = plan["intent"] as? String ?? "find"
+        if intent == "open" {
+            await openFound(id: id, request: request, choice: choice, key: key)
+            return
+        }
         let saved = Candidates.load(for: id)
         let index = choice["index"] as? Int
         let file: URL? = index.flatMap { $0 >= 0 && $0 < saved.count ? saved[$0] : nil }
@@ -282,6 +287,27 @@ final class NavigatorModel {
         }
         Candidates.clear(for: id)
         if recent.count > 8 { recent.removeLast(recent.count - 8) }
+    }
+
+    /// The person tapped Open or Show in Finder on a file Navigator found. Opens nothing else.
+    private func openFound(id: String, request: String, choice: [String: Any], key: String) async {
+        let source = choice["source"] as? String ?? ""
+        let index = choice["index"] as? Int ?? -1
+        let reveal = (choice["how"] as? String) == "reveal"
+        let files = Candidates.load(for: source)
+        guard index >= 0, index < files.count, FileManager.default.fileExists(atPath: files[index].path) else {
+            _ = try? await Brain.send(["action": "result", "device_key": key, "task_id": id,
+                                       "error": "That file has moved or this Mac lost track of it. Ask again to find it."])
+            return
+        }
+        let url = files[index]
+        if reveal {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else {
+            NSWorkspace.shared.open(url)
+        }
+        LocalRecord.write(reveal ? "revealed_in_finder" : "opened", task: id, detail: ["file": url.lastPathComponent, "you_asked": true])
+        _ = try? await Brain.send(["action": "opened", "device_key": key, "task_id": id])
     }
 
     // MARK: Showing things

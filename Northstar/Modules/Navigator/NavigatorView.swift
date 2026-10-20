@@ -38,6 +38,7 @@ nonisolated struct NavigatorEvent: Decodable, Hashable, Sendable {
         let auto: Bool?
         let kind: String?
         let always_allow: Bool?
+        let how: String?
     }
     let at: String
     let actor: String
@@ -59,6 +60,8 @@ nonisolated struct NavigatorEvent: Decodable, Hashable, Sendable {
         case "approved":
             let what = "\(detail?.what ?? "go ahead")\(detail?.file.map { " (\($0))" } ?? "")"
             return detail?.auto == true ? "Went ahead (Always allow is on): \(what)" : "You OK'd: \(what)"
+        case "opened":
+            return detail?.how == "reveal" ? "Showed \(detail?.file ?? "the file") in Finder" : "Opened \(detail?.file ?? "the file") on your Mac"
         case "permission_changed":
             return "You turned \(detail?.always_allow == true ? "on" : "off") Always allow: \(NavigatorView.permissionTitle(detail?.kind ?? ""))"
         case "continuing": return "\(detail?.mac ?? "Your Mac") picked it up again"
@@ -140,6 +143,7 @@ enum NavigatorService {
         var kind: String? = nil
         var on: Bool? = nil
         var auto: Bool? = nil
+        var how: String? = nil
     }
     nonisolated struct Always: Decodable, Sendable { let always: [String: Bool]? }
     nonisolated struct Status: Decodable, Sendable { let allowed: Bool?; let macs: [NavigatorMacInfo]? }
@@ -173,6 +177,10 @@ enum NavigatorService {
     static func finish(_ id: String, added: Bool, where place: String?, auto: Bool = false) async {
         let _: Ok? = await call(Body(action: "finish", task_id: id, outcome: added ? "added" : "cancelled", place: place,
                                      auto: auto ? true : nil))
+    }
+    /// Open a found file on the Mac, or show it in Finder. The tap is the OK.
+    static func openFile(_ taskId: String, index: Int, reveal: Bool) async -> Bool {
+        (await call(Body(action: "open_file", task_id: taskId, file_index: index, how: reveal ? "reveal" : "open")) as Ok?)?.ok == true
     }
     /// "Always allow" switches (all off at first).
     static func permissions() async -> [String: Bool] { (await call(Body(action: "permissions")) as Always?)?.always ?? [:] }
@@ -233,7 +241,7 @@ struct NavigatorView: View {
                     header
                     macCard
                     askCard
-                    ForEach(tasks) { task in
+                    ForEach(tasks.filter { $0.intent != "open" || $0.isActive || $0.status == "failed" }) { task in
                         if task.isActive {
                             statusCard(task)
                         } else if task.status == "needs_ok" {
@@ -394,7 +402,7 @@ struct NavigatorView: View {
                 let prev = i > 0 ? events[i - 1].kind : ""
                 let id = "\(t.id)-\(i)"
                 switch e.kind {
-                case "approved":
+                case "approved" where t.intent == "read" || t.intent == "email":
                     let what = t.intent == "read" ? "Read \(e.detail?.file ?? "a file")" : "Open the email draft in Mail"
                     rows.append(PermissionRow(id: id, allowed: true, auto: e.detail?.auto == true, what: what, request: t.request,
                                               time: e.time, at: e.at, reason: Self.reason(for: t.intent)))
@@ -722,6 +730,8 @@ struct NavigatorView: View {
                      ("Writing your answer", kinds.contains("answered"))]
         case ("email", true):
             steps = [("You OK'd the draft", true), ("Opening it in Mail on your Mac", kinds.contains("draft_opened"))]
+        case ("open", _):
+            steps = [(task.choice?.how == "reveal" ? "Showing \(file) in Finder" : "Opening \(file) on your Mac", kinds.contains("opened"))]
         case ("read", false), ("email", false):
             steps = [(picked, kinds.contains("picked_up")), (searching, kinds.contains("found")),
                      ("Ask you before going further", false)]
@@ -862,7 +872,7 @@ struct NavigatorView: View {
                         .font(.caption.weight(.bold))
                         .tracking(0.8)
                         .foregroundStyle(NavStyle.soft)
-                    ForEach(files, id: \.self) { f in
+                    ForEach(Array(files.enumerated()), id: \.offset) { i, f in
                         HStack(spacing: 12) {
                             Image(systemName: icon(for: f.kind))
                                 .font(.title3)
@@ -875,15 +885,20 @@ struct NavigatorView: View {
                                     .font(.footnote)
                                     .foregroundStyle(NavStyle.soft)
                             }
+                            .accessibilityElement(children: .combine)
                             Spacer(minLength: 0)
+                            fileButton(onMac ? "Open" : "Open on Mac", "arrow.up.forward.app") {
+                                _ = await NavigatorService.openFile(task.id, index: i, reveal: false)
+                            }
+                            if onMac {
+                                fileButton("Show in Finder", "folder") {
+                                    _ = await NavigatorService.openFile(task.id, index: i, reveal: true)
+                                }
+                            }
                         }
                         .padding(12)
                         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NavStyle.card2))
-                        .accessibilityElement(children: .combine)
                     }
-                    Text("To open one, click it in Navigator on your Mac (the star in the menu bar).")
-                        .font(.footnote)
-                        .foregroundStyle(NavStyle.soft)
                 }
             }
             if let events = task.events, !events.isEmpty {
@@ -1145,6 +1160,26 @@ struct NavigatorView: View {
     }
 
     // MARK: Helpers
+
+    /// Running on the Mac itself (the iPhone app in a Mac window): "Open" happens right here.
+    private var onMac: Bool { ProcessInfo.processInfo.isiOSAppOnMac }
+
+    private func fileButton(_ title: String, _ symbol: String, action: @escaping @MainActor () async -> Void) -> some View {
+        Button {
+            Task { await act(action) }
+        } label: {
+            Label(title, systemImage: symbol)
+                .labelStyle(.titleOnly)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(NavStyle.text)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 36)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(NavStyle.stroke, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(busyTask != nil)
+        .accessibilityLabel(title)
+    }
 
     private func card() -> some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)

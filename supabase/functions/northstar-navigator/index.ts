@@ -12,6 +12,7 @@
 //   { action: "ask", text, today, time, tz } → { task_id }      (the plan is made right away)
 //   { action: "approve", task_id, file_index } → { ok }          (read this file / use this attachment)
 //   { action: "finish", task_id, outcome, place, auto? } → { ok } (event/reminder added or cancelled on the iPhone)
+//   { action: "open_file", task_id, file_index, how } → { ok }  (open a found file, or show it in Finder, on the Mac)
 //   { action: "permissions" }             → { always: { read, email, event, reminder } }   ("Always allow" switches, all off at first)
 //   { action: "set_permission", kind, on } → { always }
 //   { action: "tasks" }                   → { tasks: [{ id, request, status, created_at, result, error, events: [...] }] }
@@ -23,6 +24,7 @@
 //   { action: "result", device_key, task_id, result | error, stage? } → { ok }   (stage "candidates": wait for an OK)
 //   { action: "read_text", device_key, task_id, name, text } → { ok }   (the file the person OK'd; answered, not kept)
 //   { action: "draft_opened", device_key, task_id } → { ok }
+//   { action: "opened", device_key, task_id } → { ok }          (a file opened / shown in Finder, as asked)
 //
 // Owner only for now: the person must be listed in NS_ADMIN_USERS (the same list as Insights).
 // Step 1 never changes anything on the Mac. The plan is a SEARCH plan, nothing else.
@@ -109,7 +111,7 @@ type Schedule = {
   minutes: number | null; alert_minutes: number | null; location: string | null; repeat: string | null;
 };
 type Plan = {
-  intent: typeof INTENTS[number];
+  intent: typeof INTENTS[number] | "open";
   words: string[]; kinds: string[]; modified_within_days: number | null; say: string;
   question?: string;
   email?: { to: string; subject: string; body: string; attach: boolean };
@@ -281,7 +283,7 @@ Deno.serve(async (req) => {
       return json({ device_key: key, name });
     }
 
-    if (action === "next" || action === "event" || action === "result" || action === "read_text" || action === "draft_opened") {
+    if (action === "next" || action === "event" || action === "result" || action === "read_text" || action === "draft_opened" || action === "opened") {
       const dev = await deviceFrom(body.device_key);
       if (!dev) return json({ error: "This Mac isn't linked. Link it again from your iPhone." }, 401);
 
@@ -326,6 +328,14 @@ Deno.serve(async (req) => {
         const result = { ...(task.result as Record<string, unknown> ?? {}), answer, file: name };
         await d.from("navigator_tasks").update({ status: "done", result, updated_at: new Date().toISOString() }).eq("id", task.id);
         await record(dev.user_id, task.id, "brain", "answered", { file: name, model: MODEL, rules: RULES_VERSION, kept_file_text: false });
+        return json({ ok: true });
+      }
+
+      if (action === "opened") {
+        if (task.status !== "running") return json({ ok: true });
+        const choice = task.choice as { name?: string; how?: string } | null;
+        await d.from("navigator_tasks").update({ status: "done", result: { opened: true }, updated_at: new Date().toISOString() }).eq("id", task.id);
+        await record(dev.user_id, task.id, "mac", "opened", { file: choice?.name ?? null, how: choice?.how ?? "open", changed: 0 });
         return json({ ok: true });
       }
 
@@ -453,6 +463,25 @@ Deno.serve(async (req) => {
       await d.from("navigator_tasks").update({ status: outcome === "added" ? "done" : "stopped", result, updated_at: new Date().toISOString() }).eq("id", id);
       await record(me, id, "iphone", outcome, outcome === "added" ? { place, auto } : {});
       return json({ ok: true });
+    }
+
+    if (action === "open_file") {
+      // The person tapped Open / Show in Finder on a file Navigator found. The tap is the OK.
+      const srcId = String(body.task_id ?? "");
+      const how = body.how === "reveal" ? "reveal" : "open";
+      const { data: src } = await d.from("navigator_tasks").select("id, result").eq("id", srcId).eq("user_id", me).maybeSingle();
+      const files = ((src?.result as { files?: Array<{ name: string }> } | null)?.files ?? []);
+      const idx = Number(body.file_index);
+      if (!src || !(Number.isInteger(idx) && idx >= 0 && idx < files.length)) return json({ error: "That file isn't in the list anymore." }, 400);
+      const name = files[idx].name;
+      const plan = { intent: "open", words: [], kinds: ["any"], modified_within_days: null, say: how === "reveal" ? "Showing it in Finder." : "Opening it." };
+      const choice = { index: idx, name, source: srcId, how };
+      const { data: task, error } = await d.from("navigator_tasks").insert({
+        user_id: me, request: `${how === "reveal" ? "Show in Finder" : "Open"}: ${name}`.slice(0, 500), plan, status: "approved", choice,
+      }).select("id").single();
+      if (error || !task) return json({ error: "Couldn't send that to your Mac. Please try again." }, 500);
+      await record(me, task.id, "iphone", "approved", { what: how === "reveal" ? "show this file in Finder" : "open this file", file: name });
+      return json({ ok: true, task_id: task.id });
     }
 
     if (action === "permissions") {
