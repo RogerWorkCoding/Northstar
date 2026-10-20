@@ -37,7 +37,7 @@ struct MenuView: View {
                 Text(statusText).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Text("Looks only")
+            Text("Asks first")
                 .font(.caption2.weight(.semibold))
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
@@ -134,7 +134,7 @@ struct MenuView: View {
             }
             Text("Recent").font(.subheadline.weight(.semibold)).padding(.top, 4)
             if model.recent.isEmpty {
-                Text("Ask on your iPhone, for example: \u{201C}Find my car insurance PDF.\u{201D}")
+                Text("Ask in Northstar, for example: \u{201C}What does my lease say about pets?\u{201D}")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -143,7 +143,7 @@ struct MenuView: View {
                     ForEach(model.recent) { task in
                         VStack(alignment: .leading, spacing: 4) {
                             Text("\u{201C}\(task.request)\u{201D}").font(.callout.weight(.medium)).lineLimit(2)
-                            Text(task.failed ?? "Found \(task.files.count)")
+                            Text(task.failed ?? (task.files.isEmpty ? task.say : "Found \(task.files.count)"))
                                 .font(.caption)
                                 .foregroundStyle(task.failed == nil ? Color.secondary : Color.red)
                             ForEach(task.files.prefix(5)) { file in

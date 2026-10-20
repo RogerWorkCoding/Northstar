@@ -1,8 +1,10 @@
 import SwiftUI
 import Supabase
 
-// 🧭 Northstar Navigator, step 1 (owner preview): ask your Mac to FIND files. Look only.
-// Shown only when the brain says this account is an owner (NS_ADMIN_USERS). See docs/navigator-step1.md.
+// 🧭 Northstar Navigator (owner preview). Level 1: find files. Level 2: read ONE file you OK and answer
+// from it. Level 3: drafts you approve (an email opened in Mail on your Mac, or an event / reminder added
+// here when you tap Add). It never sends, moves, deletes or buys. See docs/navigator-levels-2-3.md.
+// Shown only when the brain says this account is an owner (NS_ADMIN_USERS).
 
 // MARK: - Talking to northstar-navigator
 
@@ -30,6 +32,9 @@ nonisolated struct NavigatorEvent: Decodable, Hashable, Sendable {
         let mac: String?
         let error: String?
         let plan: Plan?
+        let file: String?
+        let what: String?
+        let place: String?
     }
     let at: String
     let actor: String
@@ -41,12 +46,20 @@ nonisolated struct NavigatorEvent: Decodable, Hashable, Sendable {
         switch kind {
         case "asked": return "You asked: \u{201C}\(detail?.request ?? "")\u{201D}"
         case "picked_up": return "\(detail?.mac ?? "Your Mac") picked it up"
-        case "planned": return "Plan: \(detail?.plan?.say ?? "search your folders") (look only)"
+        case "planned": return "Plan: \(detail?.plan?.say ?? "search your folders")"
         case "searching": return "Searched: \((detail?.folders ?? []).joined(separator: ", "))"
         case "done":
             var s = "Found \(detail?.found ?? 0). Changed nothing."
             if let n = detail?.skipped_protected, n > 0 { s += " Skipped \(n) in protected places." }
             return s
+        case "found": return "Found \(detail?.found ?? 0). Waiting for your OK."
+        case "approved": return "You OK'd: \(detail?.what ?? "go ahead")\(detail?.file.map { " (\($0))" } ?? "")"
+        case "continuing": return "\(detail?.mac ?? "Your Mac") picked it up again"
+        case "reading": return "Read: \(detail?.file ?? "the file you picked")"
+        case "answered": return "Wrote your answer from that file. The file's text wasn't kept."
+        case "draft_opened": return "Opened the draft in Mail on your Mac. Not sent: you send it."
+        case "added": return "You added it to \(detail?.place ?? "your calendar")"
+        case "cancelled": return "You said no. Nothing was added."
         case "stopped", "stopped_on_mac": return "Stopped"
         case "failed": return "Problem: \(detail?.error ?? "unknown")"
         default: return kind.replacingOccurrences(of: "_", with: " ").capitalized
@@ -65,16 +78,42 @@ nonisolated struct NavigatorTask: Decodable, Hashable, Sendable, Identifiable {
     nonisolated struct Result: Decodable, Hashable, Sendable {
         let files: [NavigatorFile]?
         let searched: [String]?
+        let answer: String?
+        let file: String?
+        let note: String?
+        let opened: Bool?
+        let outcome: String?
+        let place: String?
+    }
+    nonisolated struct Plan: Decodable, Hashable, Sendable {
+        nonisolated struct Email: Decodable, Hashable, Sendable {
+            let to: String?
+            let subject: String?
+            let body: String?
+            let attach: Bool?
+        }
+        let intent: String?
+        let say: String?
+        let question: String?
+        let email: Email?
+        let schedule: NorthstarInsight.Schedule?
+    }
+    nonisolated struct Choice: Decodable, Hashable, Sendable {
+        let index: Int?
+        let name: String?
     }
     let id: String
     let request: String
     let status: String
     let created_at: String
+    let plan: Plan?
+    let choice: Choice?
     let result: Result?
     let error: String?
     let events: [NavigatorEvent]?
 
-    var isActive: Bool { status == "queued" || status == "running" }
+    var isActive: Bool { status == "queued" || status == "running" || status == "approved" }
+    var intent: String { plan?.intent ?? "find" }
 }
 
 @MainActor
@@ -84,6 +123,12 @@ enum NavigatorService {
         var text: String? = nil
         var task_id: String? = nil
         var device_id: String? = nil
+        var today: String? = nil
+        var time: String? = nil
+        var tz: String? = nil
+        var file_index: Int? = nil
+        var outcome: String? = nil
+        var place: String? = nil
     }
     nonisolated struct Status: Decodable, Sendable { let allowed: Bool?; let macs: [NavigatorMacInfo]? }
     nonisolated struct Code: Decodable, Sendable { let code: String?; let expires_at: String? }
@@ -99,7 +144,23 @@ enum NavigatorService {
     static func status() async -> Status? { await call(Body(action: "status")) }
     static func pairCode() async -> Code? { await call(Body(action: "pair_code")) }
     static func unlink(_ id: String) async { let _: Ok? = await call(Body(action: "unlink", device_id: id)) }
-    static func ask(_ text: String) async -> String? { (await call(Body(action: "ask", text: text)) as Asked?)?.task_id }
+    static func ask(_ text: String) async -> String? {
+        let now = Date()
+        let day = DateFormatter(), clock = DateFormatter()
+        day.locale = Locale(identifier: "en_US_POSIX"); day.dateFormat = "yyyy-MM-dd"
+        clock.locale = Locale(identifier: "en_US_POSIX"); clock.dateFormat = "HH:mm"
+        let body = Body(action: "ask", text: text, today: day.string(from: now), time: clock.string(from: now),
+                        tz: TimeZone.current.identifier)
+        return (await call(body) as Asked?)?.task_id
+    }
+    /// The person's OK: read this file, or open the email draft with this attachment (nil = none).
+    static func approve(_ id: String, fileIndex: Int?) async -> Bool {
+        (await call(Body(action: "approve", task_id: id, file_index: fileIndex)) as Ok?)?.ok == true
+    }
+    /// Event / reminder drafts: added on this iPhone, or the person said no.
+    static func finish(_ id: String, added: Bool, where place: String?) async {
+        let _: Ok? = await call(Body(action: "finish", task_id: id, outcome: added ? "added" : "cancelled", place: place))
+    }
     static func tasks() async -> [NavigatorTask] { (await call(Body(action: "tasks")) as Tasks?)?.tasks ?? [] }
     static func stop(_ id: String) async { let _: Ok? = await call(Body(action: "stop", task_id: id)) }
 }
@@ -130,9 +191,13 @@ struct NavigatorView: View {
     @State private var problem: String?
     @State private var loaded = false
     @State private var openRecords: Set<String> = []
+    /// Which file the person picked on an OK card (task id → index; -1 = no attachment).
+    @State private var picks: [String: Int] = [:]
+    @State private var busyTask: String?
     @FocusState private var askFocused: Bool
 
-    private let examples = ["Find my car insurance PDF", "Find images from last week", "Where's my lease?"]
+    private let examples = ["Find my car insurance PDF", "What does my lease say about pets?",
+                            "Email my insurance card to Sam", "Remind me to renew my registration Friday"]
 
     var body: some View {
         ScrollView {
@@ -143,6 +208,8 @@ struct NavigatorView: View {
                 ForEach(tasks) { task in
                     if task.isActive {
                         statusCard(task)
+                    } else if task.status == "needs_ok" {
+                        okCard(task)
                     } else {
                         resultCard(task)
                     }
@@ -186,13 +253,13 @@ struct NavigatorView: View {
             Text("Navigator")
                 .font(.system(size: 30, weight: .semibold))
                 .accessibilityAddTraits(.isHeader)
-            Text("Looks only")
+            Text("Asks first")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(NavStyle.ink)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
                 .background(Capsule().fill(NavStyle.green))
-                .accessibilityLabel("Looks only. It never moves, changes, sends or deletes anything.")
+                .accessibilityLabel("Asks first. It asks before reading a file or making a draft, and never sends, moves or deletes anything.")
             Spacer(minLength: 0)
         }
     }
@@ -276,7 +343,7 @@ struct NavigatorView: View {
     private var askCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                TextField("What should Navigator find?", text: $draft, axis: .vertical)
+                TextField("Find, read or draft\u{2026}", text: $draft, axis: .vertical)
                     .lineLimit(1...3)
                     .focused($askFocused)
                     .submitLabel(.send)
@@ -287,7 +354,7 @@ struct NavigatorView: View {
                     Task { await send() }
                 } label: {
                     Group {
-                        if sending { ProgressView().tint(NavStyle.ink) } else { Text("Find").font(.headline) }
+                        if sending { ProgressView().tint(NavStyle.ink) } else { Text("Ask").font(.headline) }
                     }
                     .foregroundStyle(NavStyle.ink)
                     .frame(minWidth: 72, minHeight: 44)
@@ -319,7 +386,7 @@ struct NavigatorView: View {
             if let problem {
                 Text(problem).foregroundStyle(NavStyle.red).font(.footnote)
             }
-            Text(macs.isEmpty ? "Link a Mac first." : "Your Mac looks only in the folders it's allowed to (Desktop, Documents and Downloads to start).")
+            Text(macs.isEmpty ? "Link a Mac first." : "Navigator finds files, reads one you OK, and drafts emails, events and reminders for you to approve. It never sends, moves or deletes anything. Your Mac looks only in Desktop, Documents and Downloads.")
                 .font(.footnote)
                 .foregroundStyle(NavStyle.soft)
         }
@@ -334,12 +401,23 @@ struct NavigatorView: View {
         let kinds = Set(events.map(\.kind))
         let mac = events.first(where: { $0.kind == "picked_up" })?.detail?.mac ?? macs.first?.name ?? "your Mac"
         let folders = events.first(where: { $0.kind == "searching" })?.detail?.folders ?? []
-        let steps: [(String, Bool)] = [
-            (task.status == "queued" && !kinds.contains("picked_up") ? "Waiting for your Mac" : "Your Mac picked it up", kinds.contains("picked_up")),
-            ("Made a plan (look only)", kinds.contains("planned")),
-            (folders.isEmpty ? "Searching your folders" : "Searching \(folders.joined(separator: ", "))", kinds.contains("done")),
-            ("Show you what it found", false),
-        ]
+        let searching = folders.isEmpty ? "Searching your folders" : "Searching \(folders.joined(separator: ", "))"
+        let picked = (task.status == "queued" && !kinds.contains("picked_up")) ? "Waiting for your Mac" : "Your Mac picked it up"
+        let file = task.choice?.name ?? "the file"
+        let steps: [(String, Bool)]
+        switch (task.intent, task.choice != nil) {
+        case ("read", true):
+            steps = [("You OK'd reading \(file)", true), ("Reading it on your Mac", kinds.contains("reading")),
+                     ("Writing your answer", kinds.contains("answered"))]
+        case ("email", true):
+            steps = [("You OK'd the draft", true), ("Opening it in Mail on your Mac", kinds.contains("draft_opened"))]
+        case ("read", false), ("email", false):
+            steps = [(picked, kinds.contains("picked_up")), (searching, kinds.contains("found")),
+                     ("Ask you before going further", false)]
+        default:
+            steps = [(picked, kinds.contains("picked_up")), ("Made a plan", kinds.contains("planned")),
+                     (searching, kinds.contains("done")), ("Show you what it found", false)]
+        }
         let doneCount = steps.filter(\.1).count
         let current = steps.firstIndex(where: { !$0.1 }) ?? steps.count - 1
 
@@ -415,7 +493,41 @@ struct NavigatorView: View {
             case "failed":
                 Text(task.error ?? "Something went wrong.").foregroundStyle(NavStyle.red)
             case "stopped":
-                Text("Stopped. Nothing was changed.").foregroundStyle(NavStyle.soft)
+                Text(task.result?.outcome == "cancelled" ? "You said no. Nothing was added." : "Stopped. Nothing was changed.")
+                    .foregroundStyle(NavStyle.soft)
+            case "done" where task.intent == "unsupported":
+                Text(task.result?.note ?? "Navigator can't do that yet.")
+                    .font(.body)
+            case "done" where task.intent == "read":
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(task.result?.answer ?? "")
+                        .font(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                    if let f = task.result?.file {
+                        Label("From \(f)", systemImage: "doc.text")
+                            .font(.footnote)
+                            .foregroundStyle(NavStyle.soft)
+                    }
+                    Text("AI answers can be wrong. Check the file for anything important.")
+                        .font(.caption)
+                        .foregroundStyle(NavStyle.soft)
+                }
+            case "done" where task.intent == "email":
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("The draft is open in Mail on your Mac.", systemImage: "envelope.open")
+                        .font(.headline)
+                    Text("Check it and press Send there. Navigator didn't send anything.")
+                        .font(.subheadline)
+                        .foregroundStyle(NavStyle.soft)
+                    if let f = task.choice?.name {
+                        Label("Attached: \(f)", systemImage: "paperclip").font(.footnote).foregroundStyle(NavStyle.soft)
+                    }
+                }
+            case "done" where task.intent == "event" || task.intent == "reminder":
+                Label("Added to \(task.result?.place ?? (task.intent == "event" ? "Calendar" : "Reminders"))", systemImage: "checkmark.circle.fill")
+                    .font(.headline)
+                    .foregroundStyle(NavStyle.green)
             default:
                 let files = task.result?.files ?? []
                 let searched = (task.result?.searched ?? []).joined(separator: ", ")
@@ -463,6 +575,221 @@ struct NavigatorView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(card())
+    }
+
+    // MARK: Waiting for your OK (Levels 2 and 3)
+
+    @ViewBuilder
+    private func okCard(_ task: NavigatorTask) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "hand.raised").foregroundStyle(NavStyle.gold).accessibilityHidden(true)
+                Text("Needs your OK").font(.caption.weight(.bold)).tracking(0.8).foregroundStyle(NavStyle.gold)
+            }
+            Text("\u{201C}\(task.request)\u{201D}")
+                .font(.subheadline)
+                .foregroundStyle(NavStyle.soft)
+            switch task.intent {
+            case "read": readOK(task)
+            case "email": emailOK(task)
+            default: scheduleOK(task)
+            }
+            if let events = task.events, !events.isEmpty {
+                recordView(task.id, events)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(NavStyle.card)
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(NavStyle.gold, lineWidth: 1))
+        )
+    }
+
+    /// Level 2: "Read this file to answer?" The file's text goes to Northstar's brain only after this OK.
+    @ViewBuilder
+    private func readOK(_ task: NavigatorTask) -> some View {
+        let files = task.result?.files ?? []
+        if files.isEmpty {
+            Text("Nothing found to read.").font(.headline)
+            Text(tryInstead(task.request)).font(.subheadline).foregroundStyle(NavStyle.soft)
+            secondaryButton("OK") { await NavigatorService.stop(task.id) }
+        } else {
+            Text("Read this file to answer?").font(.headline)
+            filePicker(task, files, allowNone: false)
+            Text("Your Mac reads just this file and sends its text to Northstar's brain to write the answer. The text isn't kept.")
+                .font(.footnote)
+                .foregroundStyle(NavStyle.soft)
+            HStack(spacing: 10) {
+                primaryButton("Read it", busy: busyTask != nil) {
+                    _ = await NavigatorService.approve(task.id, fileIndex: picks[task.id] ?? 0)
+                }
+                secondaryButton("No thanks") { await NavigatorService.stop(task.id) }
+            }
+        }
+    }
+
+    /// Level 3: an email draft. Mail opens on the Mac with it; the person presses Send.
+    @ViewBuilder
+    private func emailOK(_ task: NavigatorTask) -> some View {
+        let e = task.plan?.email
+        let files = task.result?.files ?? []
+        VStack(alignment: .leading, spacing: 6) {
+            draftLine("To", (e?.to ?? "").isEmpty ? "You'll add it in Mail" : e?.to ?? "")
+            draftLine("Subject", e?.subject ?? "")
+            Text(e?.body ?? "")
+                .font(.body)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NavStyle.card2))
+        }
+        if e?.attach == true {
+            Text(files.isEmpty ? "No file found to attach. You can add one in Mail." : "Attach which file?")
+                .font(.subheadline.weight(.semibold))
+            if !files.isEmpty { filePicker(task, files, allowNone: true) }
+        }
+        Text("Mail opens on your Mac with this draft. Navigator never sends it: you press Send.")
+            .font(.footnote)
+            .foregroundStyle(NavStyle.soft)
+        HStack(spacing: 10) {
+            primaryButton("Put it in Mail on my Mac", busy: busyTask != nil) {
+                let pick = picks[task.id] ?? (files.isEmpty || e?.attach != true ? -1 : 0)
+                _ = await NavigatorService.approve(task.id, fileIndex: pick < 0 ? nil : pick)
+            }
+            secondaryButton("Cancel") { await NavigatorService.stop(task.id) }
+        }
+    }
+
+    /// Level 3: an event or reminder, added on this iPhone (or this Mac) when the person taps Add.
+    @ViewBuilder
+    private func scheduleOK(_ task: NavigatorTask) -> some View {
+        if let sc = task.plan?.schedule {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: sc.isEvent ? "calendar" : "checklist")
+                    .font(.title2)
+                    .foregroundStyle(NavStyle.gold)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(sc.title).font(.headline)
+                    Text(sc.whenText).font(.subheadline)
+                    if let loc = sc.location, !loc.isEmpty {
+                        Text(loc).font(.footnote).foregroundStyle(NavStyle.soft)
+                    }
+                    if let r = sc.repeatRule { Text("Repeats \(r)").font(.footnote).foregroundStyle(NavStyle.soft) }
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NavStyle.card2))
+            HStack(spacing: 10) {
+                primaryButton(sc.isEvent ? "Add to Calendar" : "Add to Reminders", busy: busyTask != nil) {
+                    do {
+                        let place = try await NorthstarCalendar.shared.add(sc)
+                        await NavigatorService.finish(task.id, added: true, where: place)
+                    } catch {
+                        problem = error.localizedDescription
+                    }
+                }
+                secondaryButton("No thanks") { await NavigatorService.finish(task.id, added: false, where: nil) }
+            }
+        } else {
+            Text("This draft is missing its details. Please ask again.").foregroundStyle(NavStyle.soft)
+            secondaryButton("OK") { await NavigatorService.stop(task.id) }
+        }
+    }
+
+    /// The files to choose from (the best few the Mac found). Tap one to pick it.
+    private func filePicker(_ task: NavigatorTask, _ files: [NavigatorFile], allowNone: Bool) -> some View {
+        let picked = picks[task.id] ?? 0
+        return VStack(spacing: 8) {
+            ForEach(Array(files.enumerated()), id: \.offset) { i, f in
+                Button { picks[task.id] = i } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: picked == i ? "largecircle.fill.circle" : "circle")
+                            .foregroundStyle(picked == i ? NavStyle.gold : NavStyle.soft)
+                        Image(systemName: icon(for: f.kind)).foregroundStyle(NavStyle.gold).frame(width: 22)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(f.name).font(.subheadline.weight(.semibold)).lineLimit(2)
+                            Text([f.folder, shortDate(f.modified).map { "changed \($0)" }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                                .font(.caption)
+                                .foregroundStyle(NavStyle.soft)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundStyle(NavStyle.text)
+                    .padding(10)
+                    .frame(minHeight: 44)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(picked == i ? NavStyle.card2 : Color.clear))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(picked == i ? .isSelected : [])
+            }
+            if allowNone {
+                Button { picks[task.id] = -1 } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: picked == -1 ? "largecircle.fill.circle" : "circle")
+                            .foregroundStyle(picked == -1 ? NavStyle.gold : NavStyle.soft)
+                        Text("No attachment").font(.subheadline)
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundStyle(NavStyle.text)
+                    .padding(10)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(picked == -1 ? .isSelected : [])
+            }
+        }
+    }
+
+    private func draftLine(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label).font(.footnote.weight(.semibold)).foregroundStyle(NavStyle.soft).frame(width: 60, alignment: .leading)
+            Text(value).font(.subheadline)
+        }
+    }
+
+    private func primaryButton(_ title: String, busy: Bool, action: @escaping @MainActor () async -> Void) -> some View {
+        Button {
+            Task { await act(action) }
+        } label: {
+            Group {
+                if busy { ProgressView().tint(NavStyle.ink) } else { Text(title).font(.headline) }
+            }
+            .foregroundStyle(NavStyle.ink)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NavStyle.gold))
+        }
+        .buttonStyle(.plain)
+        .disabled(busyTask != nil)
+    }
+
+    private func secondaryButton(_ title: String, action: @escaping @MainActor () async -> Void) -> some View {
+        Button {
+            Task { await act(action) }
+        } label: {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(NavStyle.text)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(NavStyle.stroke, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(busyTask != nil)
+    }
+
+    /// Runs one button's work, then refreshes the list.
+    private func act(_ work: @MainActor () async -> Void) async {
+        guard busyTask == nil else { return }
+        busyTask = "busy"
+        problem = nil
+        await work()
+        await refresh()
+        busyTask = nil
     }
 
     /// "What Navigator did": every step, with the time.
