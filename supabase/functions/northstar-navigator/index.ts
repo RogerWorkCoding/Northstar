@@ -11,7 +11,9 @@
 //   { action: "unlink", device_id }       → { ok }
 //   { action: "ask", text, today, time, tz } → { task_id }      (the plan is made right away)
 //   { action: "approve", task_id, file_index } → { ok }          (read this file / use this attachment)
-//   { action: "finish", task_id, outcome, place } → { ok }       (event/reminder added or cancelled on the iPhone)
+//   { action: "finish", task_id, outcome, place, auto? } → { ok } (event/reminder added or cancelled on the iPhone)
+//   { action: "permissions" }             → { always: { read, email, event, reminder } }   ("Always allow" switches, all off at first)
+//   { action: "set_permission", kind, on } → { always }
 //   { action: "tasks" }                   → { tasks: [{ id, request, status, created_at, result, error, events: [...] }] }
 //   { action: "stop", task_id }           → { ok }
 // The Mac (no session; its own device key in the body) sends:
@@ -248,6 +250,14 @@ async function answerFromFile(question: string, name: string, text: string): Pro
   }
 }
 
+const PERMISSION_KINDS = ["read", "email", "event", "reminder"] as const;
+
+async function alwaysFor(userId: string): Promise<Record<string, boolean>> {
+  const { data } = await db().from("navigator_permissions").select("always").eq("user_id", userId).maybeSingle();
+  const raw = (data?.always ?? {}) as Record<string, unknown>;
+  return Object.fromEntries(PERMISSION_KINDS.map((k) => [k, raw[k] === true]));
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
@@ -351,6 +361,19 @@ Deno.serve(async (req) => {
         // Level 2/3: stop here and wait for the person's OK on which file to read or attach.
         await d.from("navigator_tasks").update({ status: "needs_ok", result, updated_at: new Date().toISOString() }).eq("id", task.id);
         await record(dev.user_id, task.id, "mac", "found", { found: files.length, searched: result.searched, skipped_protected: result.skipped, changed: 0 });
+        // "Always allow" on for this kind: go ahead with the best match (or no attachment), and say so in the record.
+        const plan = task.plan as Plan | null;
+        const intent = plan?.intent ?? "find";
+        const always = await alwaysFor(dev.user_id);
+        if ((intent === "read" && always.read && files.length > 0) || (intent === "email" && always.email)) {
+          const index = files.length > 0 && (intent === "read" || plan?.email?.attach) ? 0 : null;
+          const choice = { index, name: index === null ? null : files[index].name };
+          await d.from("navigator_tasks").update({ status: "approved", choice, updated_at: new Date().toISOString() }).eq("id", task.id).eq("status", "needs_ok");
+          await record(dev.user_id, task.id, "brain", "approved", {
+            what: intent === "read" ? "read this file" : "open this draft in Mail", file: choice.name, auto: true,
+            because: "Always allow is on for this",
+          });
+        }
         return json({ ok: true });
       }
       await d.from("navigator_tasks").update({ status: "done", result, updated_at: new Date().toISOString() }).eq("id", task.id);
@@ -423,12 +446,28 @@ Deno.serve(async (req) => {
       const id = String(body.task_id ?? "");
       const outcome = body.outcome === "added" ? "added" : "cancelled";
       const place = clip(body.place, 30);
+      const auto = body.auto === true;
       const { data: t } = await d.from("navigator_tasks").select("id, result").eq("id", id).eq("user_id", me).eq("status", "needs_ok").maybeSingle();
       if (!t) return json({ ok: true });
       const result = { ...(t.result as Record<string, unknown> ?? {}), outcome, place };
       await d.from("navigator_tasks").update({ status: outcome === "added" ? "done" : "stopped", result, updated_at: new Date().toISOString() }).eq("id", id);
-      await record(me, id, "iphone", outcome, outcome === "added" ? { place } : {});
+      await record(me, id, "iphone", outcome, outcome === "added" ? { place, auto } : {});
       return json({ ok: true });
+    }
+
+    if (action === "permissions") {
+      return json({ always: await alwaysFor(me) });
+    }
+
+    if (action === "set_permission") {
+      const kind = String(body.kind ?? "");
+      if (!(PERMISSION_KINDS as readonly string[]).includes(kind)) return json({ error: "Unknown permission." }, 400);
+      const on = body.on === true;
+      const always = { ...(await alwaysFor(me)), [kind]: on };
+      const { error } = await d.from("navigator_permissions").upsert({ user_id: me, always, updated_at: new Date().toISOString() });
+      if (error) return json({ error: "Couldn't save that. Please try again." }, 500);
+      await record(me, null, "iphone", "permission_changed", { kind, always_allow: on });
+      return json({ always });
     }
 
     if (action === "stop") {

@@ -35,6 +35,9 @@ nonisolated struct NavigatorEvent: Decodable, Hashable, Sendable {
         let file: String?
         let what: String?
         let place: String?
+        let auto: Bool?
+        let kind: String?
+        let always_allow: Bool?
     }
     let at: String
     let actor: String
@@ -53,7 +56,11 @@ nonisolated struct NavigatorEvent: Decodable, Hashable, Sendable {
             if let n = detail?.skipped_protected, n > 0 { s += " Skipped \(n) in protected places." }
             return s
         case "found": return "Found \(detail?.found ?? 0). Waiting for your OK."
-        case "approved": return "You OK'd: \(detail?.what ?? "go ahead")\(detail?.file.map { " (\($0))" } ?? "")"
+        case "approved":
+            let what = "\(detail?.what ?? "go ahead")\(detail?.file.map { " (\($0))" } ?? "")"
+            return detail?.auto == true ? "Went ahead (Always allow is on): \(what)" : "You OK'd: \(what)"
+        case "permission_changed":
+            return "You turned \(detail?.always_allow == true ? "on" : "off") Always allow: \(NavigatorView.permissionTitle(detail?.kind ?? ""))"
         case "continuing": return "\(detail?.mac ?? "Your Mac") picked it up again"
         case "reading": return "Read: \(detail?.file ?? "the file you picked")"
         case "answered": return "Wrote your answer from that file. The file's text wasn't kept."
@@ -130,7 +137,11 @@ enum NavigatorService {
         var file_index: Int? = nil
         var outcome: String? = nil
         var place: String? = nil
+        var kind: String? = nil
+        var on: Bool? = nil
+        var auto: Bool? = nil
     }
+    nonisolated struct Always: Decodable, Sendable { let always: [String: Bool]? }
     nonisolated struct Status: Decodable, Sendable { let allowed: Bool?; let macs: [NavigatorMacInfo]? }
     nonisolated struct Code: Decodable, Sendable { let code: String?; let expires_at: String? }
     nonisolated struct Asked: Decodable, Sendable { let task_id: String? }
@@ -159,8 +170,14 @@ enum NavigatorService {
         (await call(Body(action: "approve", task_id: id, file_index: fileIndex)) as Ok?)?.ok == true
     }
     /// Event / reminder drafts: added on this iPhone, or the person said no.
-    static func finish(_ id: String, added: Bool, where place: String?) async {
-        let _: Ok? = await call(Body(action: "finish", task_id: id, outcome: added ? "added" : "cancelled", place: place))
+    static func finish(_ id: String, added: Bool, where place: String?, auto: Bool = false) async {
+        let _: Ok? = await call(Body(action: "finish", task_id: id, outcome: added ? "added" : "cancelled", place: place,
+                                     auto: auto ? true : nil))
+    }
+    /// "Always allow" switches (all off at first).
+    static func permissions() async -> [String: Bool] { (await call(Body(action: "permissions")) as Always?)?.always ?? [:] }
+    static func setPermission(_ kind: String, on: Bool) async -> [String: Bool]? {
+        (await call(Body(action: "set_permission", kind: kind, on: on)) as Always?)?.always
     }
     static func tasks() async -> [NavigatorTask] { (await call(Body(action: "tasks")) as Tasks?)?.tasks ?? [] }
     static func stop(_ id: String) async { let _: Ok? = await call(Body(action: "stop", task_id: id)) }
@@ -195,6 +212,9 @@ struct NavigatorView: View {
     /// Which file the person picked on an OK card (task id → index; -1 = no attachment).
     @State private var picks: [String: Int] = [:]
     @State private var busyTask: String?
+    /// "Always allow" switches, from the brain. Off unless turned on.
+    @State private var always: [String: Bool] = [:]
+    @State private var autoTried: Set<String> = []
     /// "Why?" reasons the person opened (task id or row id).
     @State private var openReasons: Set<String> = []
     @FocusState private var askFocused: Bool
@@ -265,6 +285,47 @@ struct NavigatorView: View {
 
     // MARK: Reasons (why Navigator asks, why something stopped)
 
+    static func permissionTitle(_ kind: String) -> String {
+        switch kind {
+        case "read": return "Read a file to answer"
+        case "email": return "Open email drafts in Mail"
+        case "event": return "Add calendar events"
+        case "reminder": return "Add reminders"
+        default: return kind
+        }
+    }
+
+    /// The "Always allow" switches: off = Navigator asks every time; on = it goes ahead and records it.
+    private var alwaysAllowSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("ALWAYS ALLOW")
+                .font(.caption.weight(.bold))
+                .tracking(0.8)
+                .foregroundStyle(NavStyle.soft)
+            ForEach(["read", "email", "event", "reminder"], id: \.self) { kind in
+                Toggle(isOn: Binding(
+                    get: { always[kind] == true },
+                    set: { on in
+                        always[kind] = on
+                        Task {
+                            if let saved = await NavigatorService.setPermission(kind, on: on) { always = saved }
+                            await refresh()
+                        }
+                    }
+                )) {
+                    Text(Self.permissionTitle(kind)).font(.footnote)
+                }
+                .tint(NavStyle.gold)
+            }
+            Text("Off: Navigator asks you every time. On: it goes ahead, and still writes it in the history. Sending, deleting and moving always need you.")
+                .font(.caption)
+                .foregroundStyle(NavStyle.soft)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .background(card())
+    }
+
     /// Why Navigator needs this permission, in plain words. Shown behind "Why?".
     static func reason(for intent: String) -> String {
         switch intent {
@@ -317,6 +378,7 @@ struct NavigatorView: View {
     private struct PermissionRow: Identifiable {
         let id: String
         let allowed: Bool
+        var auto = false
         let what: String
         let request: String
         let time: String
@@ -334,11 +396,11 @@ struct NavigatorView: View {
                 switch e.kind {
                 case "approved":
                     let what = t.intent == "read" ? "Read \(e.detail?.file ?? "a file")" : "Open the email draft in Mail"
-                    rows.append(PermissionRow(id: id, allowed: true, what: what, request: t.request, time: e.time, at: e.at,
-                                              reason: Self.reason(for: t.intent)))
-                case "added":
-                    rows.append(PermissionRow(id: id, allowed: true, what: "Add to \(e.detail?.place ?? "Calendar")", request: t.request,
+                    rows.append(PermissionRow(id: id, allowed: true, auto: e.detail?.auto == true, what: what, request: t.request,
                                               time: e.time, at: e.at, reason: Self.reason(for: t.intent)))
+                case "added":
+                    rows.append(PermissionRow(id: id, allowed: true, auto: e.detail?.auto == true, what: "Add to \(e.detail?.place ?? "Calendar")",
+                                              request: t.request, time: e.time, at: e.at, reason: Self.reason(for: t.intent)))
                 case "cancelled":
                     rows.append(PermissionRow(id: id, allowed: false, what: t.intent == "event" ? "Add to Calendar" : "Add to Reminders",
                                               request: t.request, time: e.time, at: e.at, reason: Self.reason(for: t.intent)))
@@ -417,6 +479,8 @@ struct NavigatorView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(card())
 
+            alwaysAllowSection
+
             // Permissions history: every Allow once and Decline, with the reason behind "Why?"
             Text("PERMISSIONS")
                 .font(.caption.weight(.bold))
@@ -436,7 +500,7 @@ struct NavigatorView: View {
                                 .foregroundStyle(row.allowed ? NavStyle.green : NavStyle.soft)
                                 .accessibilityHidden(true)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("\(row.allowed ? "Allowed once" : "Declined"): \(row.what)")
+                                Text("\(row.allowed ? (row.auto ? "Always allowed" : "Allowed once") : "Declined"): \(row.what)")
                                     .font(.footnote.weight(.semibold))
                                     .fixedSize(horizontal: false, vertical: true)
                                 Text("\(row.time) · \u{201C}\(row.request)\u{201D}")
@@ -1134,7 +1198,17 @@ struct NavigatorView: View {
             if loaded && macs.count > before { code = nil }
         }
         tasks = await NavigatorService.tasks()
+        if !loaded { always = await NavigatorService.permissions() }
         loaded = true
+        // "Always allow" on for events or reminders: add them here (this device has the Calendar), and record it.
+        for t in tasks where t.status == "needs_ok" && (t.intent == "event" || t.intent == "reminder")
+            && always[t.intent] == true && !autoTried.contains(t.id) {
+            autoTried.insert(t.id)
+            guard let sc = t.plan?.schedule else { continue }
+            if let place = try? await NorthstarCalendar.shared.add(sc) {
+                await NavigatorService.finish(t.id, added: true, where: place, auto: true)
+            }
+        }
     }
 
     private func send() async {

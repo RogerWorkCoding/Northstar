@@ -52,3 +52,13 @@ When Navigator starts changing files (Level 4), Stop follows this rule (Roger, O
 1. Run `supabase/migrations/20261022_navigator_levels.sql` in the Supabase SQL editor.
 2. Deploy `northstar-navigator`.
 Both need Roger's "make it live".
+
+## Allow once, Decline, and Always allow (Roger, Oct 19)
+
+- Every OK card says **Allow once** or **Decline**, with a hidden **"Why is Navigator asking?"** reason.
+- **Always allow** switches (like modules), all **off** at first: read a file, open email drafts,
+  add events, add reminders. On = Navigator goes ahead with the best match and still records it
+  ("Went ahead (Always allow is on)"). Turning a switch on or off is itself recorded.
+  Stored in `navigator_permissions` (migration 20261023). Sending, deleting and moving always need you.
+- **Permissions history**: every Allow, Always allowed and Decline, with its reason on tap.
+- **Every stop says why**: you pressed Stop, you chose Decline, Stop on the Mac, or what went wrong.
