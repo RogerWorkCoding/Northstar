@@ -33,43 +33,40 @@ enum Brain {
 
 // MARK: - The device key, kept in this Mac's Keychain
 
+/// This Mac's link key (what connects it to the iPhone). Kept in a private file only this Mac's user can read
+/// (owner-only permissions), not the Keychain: while Navigator is rebuilt for testing, the Keychain sees each
+/// build as a new app and kept asking Roger for his Mac password (Oct 19). The key only lets this Mac pick up
+/// look-only tasks, and Unlink (here or on the iPhone) cancels it for good. Read once, then kept in memory.
 enum DeviceKey {
-    private static let service = "com.mynorthstarlabs.navigator"
-    private static let account = "device-key"
+    private static var cached: String?
+    private static var loaded = false
+
+    private static var file: URL { LocalRecord.folder.appendingPathComponent("device-key") }
 
     static func load() -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
+        if loaded { return cached }
+        loaded = true
+        if let data = try? Data(contentsOf: file),
+           let key = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !key.isEmpty {
+            cached = key
+        }
+        return cached
     }
 
     static func save(_ key: String) {
-        delete()
-        let add: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-            kSecValueData as String: Data(key.utf8),
-        ]
-        SecItemAdd(add as CFDictionary, nil)
+        let fm = FileManager.default
+        try? fm.createDirectory(at: LocalRecord.folder, withIntermediateDirectories: true)
+        try? Data(key.utf8).write(to: file, options: [.atomic])
+        try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+        cached = key
+        loaded = true
     }
 
     static func delete() {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        SecItemDelete(query as CFDictionary)
+        try? FileManager.default.removeItem(at: file)
+        cached = nil
+        loaded = true
     }
 }
 
