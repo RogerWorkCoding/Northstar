@@ -25,6 +25,10 @@ struct ContentView: View {
     @AppStorage(SettingsKeys.modules) private var modulesOn = ""
     /// Good Listener's own screen (its door sits just above the Chat text field).
     @State private var isListenerPresented = false
+    /// Navigator (owner preview): its compass shows in the text field's bottom row for Northstar Labs only,
+    /// while step 1 is tested. When it's ready for testers it becomes a switch in Settings > Modules.
+    @State private var navigatorAllowed = false
+    @State private var isNavigatorPresented = false
     /// The one-time "New: Concierge" hint above the ask bar.
     @AppStorage("ns.conciergeHintSeen") private var conciergeHintSeen = false
 
@@ -188,6 +192,17 @@ struct ContentView: View {
                 .ignoresSafeArea()
         }
         .sheet(isPresented: $isFeedbackPresented, onDismiss: maybeReturnToDiscovery) { FeedbackView() }
+        .sheet(isPresented: $isNavigatorPresented) {
+            NavigationStack {
+                NavigatorView()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") { isNavigatorPresented = false }
+                        }
+                    }
+            }
+        }
+        .task { navigatorAllowed = await NavigatorService.status()?.allowed == true }
         .sheet(isPresented: $isListenerPresented) {
             NavigationStack {
                 GoodListenerHomeView(onTalk: startListening, onJournal: {
@@ -547,6 +562,23 @@ struct ContentView: View {
         .accessibilityHint("Talk it through, write in your journal, or get help now")
     }
 
+    /// Navigator's door (owner preview): the compass in the text field's bottom row.
+    private var navigatorButton: some View {
+        Button {
+            isPromptFocused = false
+            isNavigatorPresented = true
+        } label: {
+            Image(systemName: "safari")
+                .font(.system(size: 17, weight: .light))
+                .foregroundStyle(NorthstarChatStyle.text)
+                .frame(width: 40, height: 40)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Navigator")
+        .accessibilityHint("Ask Northstar to find things on your Mac")
+    }
+
     /// Good Listener > Talk it through: a fresh chat where Northstar speaks first and listens.
     private func startListening() {
         returnToDiscovery = false
@@ -727,6 +759,11 @@ struct ContentView: View {
                 // Good Listener's ear, only when it's switched on (Settings > Modules).
                 if listenerOn {
                     listenerButton
+                }
+
+                // Navigator's compass (Northstar Labs only, while it's tested).
+                if navigatorAllowed {
+                    navigatorButton
                 }
 
                 Spacer(minLength: 8)
