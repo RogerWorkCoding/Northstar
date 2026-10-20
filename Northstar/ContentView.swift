@@ -227,7 +227,14 @@ struct ContentView: View {
                     }
             }
         }
-        .task { navigatorAllowed = await NavigatorService.status()?.allowed == true }
+        .task {
+            navigatorAllowed = await NavigatorService.status()?.allowed == true
+            // The owner's switch starts on once (it used to always show).
+            if navigatorAllowed && !UserDefaults.standard.bool(forKey: AppModule.navigatorDefaultKey) {
+                UserDefaults.standard.set(true, forKey: AppModule.navigatorDefaultKey)
+                AppModule.setKey(AppModule.navigatorKey, on: true)
+            }
+        }
         .sheet(isPresented: $isListenerPresented) {
             NavigationStack {
                 GoodListenerHomeView(onTalk: startListening, onJournal: {
@@ -572,6 +579,8 @@ struct ContentView: View {
     }
 
     private var listenerOn: Bool { modulesOn.split(separator: ",").contains("listener") }
+    /// Navigator shows when the brain allows this account and its switch is on (Settings › Modules).
+    private var navigatorOn: Bool { navigatorAllowed && modulesOn.split(separator: ",").contains("navigator") }
 
     /// Good Listener's door: the ear in the text field's bottom row, next to the star and the bell (only when it's on).
     private var listenerButton: some View {
@@ -637,7 +646,7 @@ struct ContentView: View {
                     isListenerPresented = true
                 }
             }
-            if navigatorAllowed {
+            if navigatorOn {
                 sidebarRow("Navigator", "safari", selected: macPlace == .navigator) { goMac(.navigator) }
             }
             sidebarRow("My Journal", "book.closed", selected: macPlace == .journal) { goMac(.journal) }
@@ -905,7 +914,7 @@ struct ContentView: View {
                 }
 
                 // Navigator's compass (Northstar Labs only, while it's tested).
-                if navigatorAllowed {
+                if navigatorOn {
                     navigatorButton
                 }
 

@@ -50,9 +50,22 @@ nonisolated enum AppModule: String, CaseIterable, Identifiable, Sendable {
 
     static func isOn(_ module: AppModule) -> Bool { enabled.contains(module) }
 
-    static func set(_ module: AppModule, on: Bool) {
-        var list = enabled.filter { $0 != module }
-        if on { list.append(module) }
-        UserDefaults.standard.set(list.map(\.rawValue).joined(separator: ","), forKey: SettingsKeys.modules)
+    static func set(_ module: AppModule, on: Bool) { setKey(module.rawValue, on: on) }
+
+    /// Raw keys too, so switches that aren't brain experts (like "navigator") are kept when others change.
+    static func isKeyOn(_ key: String) -> Bool {
+        (UserDefaults.standard.string(forKey: SettingsKeys.modules) ?? "").split(separator: ",").contains { $0 == key }
     }
+
+    static func setKey(_ key: String, on: Bool) {
+        let saved = UserDefaults.standard.string(forKey: SettingsKeys.modules) ?? ""
+        var list = saved.split(separator: ",").map(String.init).filter { !$0.isEmpty && $0 != key }
+        if on { list.append(key) }
+        UserDefaults.standard.set(list.joined(separator: ","), forKey: SettingsKeys.modules)
+    }
+
+    /// Northstar Navigator's switch (owner preview for now; the brain decides who may use it).
+    static let navigatorKey = "navigator"
+    /// The owner's Navigator switch starts on once, so the compass doesn't vanish when this switch arrives.
+    static let navigatorDefaultKey = "ns.navigatorDefaultApplied"
 }

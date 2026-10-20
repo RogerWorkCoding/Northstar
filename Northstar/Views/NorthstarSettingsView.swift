@@ -82,6 +82,9 @@ struct NorthstarSettingsView: View {
     @State private var moduleOn: Set<AppModule> = Set(AppModule.enabled)
     /// Good Listener's one-time safety notice (the module turns on only after "I Understand").
     @State private var showListenerNotice = false
+    /// Navigator: the brain says whether this account may use it (owner preview for now).
+    @State private var navigatorAllowed = false
+    @State private var navigatorOn = AppModule.isKeyOn(AppModule.navigatorKey)
     @AppStorage(AppModule.listenerNoticeKey) private var listenerNoticeSeen = false
     @State private var confirmSignOut = false
     @State private var confirmDeleteAccount = false
@@ -301,25 +304,51 @@ struct NorthstarSettingsView: View {
                         }
                     }
                 }
-                // Coming soon: a preview only, no switch until Navigator is built.
-                NavigationLink {
-                    NavigatorPreviewView()
-                } label: {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
-                                Text("Northstar Navigator")
-                                Text("Coming soon")
-                                    .font(.caption2.weight(.semibold))
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Capsule().fill(Color.yellow.opacity(0.25)))
-                            }
-                            Text("Does things on your Mac when you ask. Tap to see a preview.")
-                                .font(.footnote).foregroundStyle(.secondary)
+                if navigatorAllowed {
+                    // Owner preview: Navigator is real for this account. On = the compass and sidebar row show.
+                    Toggle(isOn: Binding(
+                        get: { navigatorOn },
+                        set: { on in
+                            AppModule.setKey(AppModule.navigatorKey, on: on)
+                            navigatorOn = on
                         }
-                    } icon: {
-                        Image(systemName: "safari")
+                    )) {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Northstar Navigator")
+                                Text("Finds, reads and drafts on your Mac. Asks first; never sends, moves or deletes.")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "safari")
+                        }
+                    }
+                    NavigationLink {
+                        NavigatorView()
+                    } label: {
+                        Label("Open Navigator", systemImage: "arrow.forward.circle")
+                    }
+                } else {
+                    // Coming soon: a preview only, for everyone else.
+                    NavigationLink {
+                        NavigatorPreviewView()
+                    } label: {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 6) {
+                                    Text("Northstar Navigator")
+                                    Text("Coming soon")
+                                        .font(.caption2.weight(.semibold))
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Capsule().fill(Color.yellow.opacity(0.25)))
+                                }
+                                Text("Does things on your Mac when you ask. Tap to see a preview.")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "safari")
+                        }
                     }
                 }
             } header: {
@@ -350,6 +379,7 @@ struct NorthstarSettingsView: View {
         }
         .task { await loadExport() }
         .task { await account.refresh() }
+        .task { navigatorAllowed = await NavigatorService.status()?.allowed == true }
         .task { insights = await InsightsService.load(days: 7) }
         .confirmationDialog("Sign out?", isPresented: $confirmSignOut, titleVisibility: .visible) {
             Button("Sign out", role: .destructive) {
