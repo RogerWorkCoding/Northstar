@@ -66,6 +66,7 @@ private struct VideoLayer: UIViewRepresentable {
     func makeUIView(context: Context) -> PlayerView {
         let v = PlayerView()
         v.playerLayer.player = player
+        v.backdropLayer.player = player
         return v
     }
 
@@ -73,6 +74,10 @@ private struct VideoLayer: UIViewRepresentable {
 
     final class PlayerView: UIView {
         let playerLayer = AVPlayerLayer()
+        /// Wide windows only (the Mac, iPad sideways): the same clip, filling and blurred, behind the real one,
+        /// so the star isn't blown up and the sides aren't empty (Roger, Oct 19: "the star is too close").
+        let backdropLayer = AVPlayerLayer()
+        private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
         /// The clip's shape, and where its star is (fraction of the clip's height from the top).
         private let clipSize = CGSize(width: 720, height: 1280)
         private let starInClip: CGFloat = 0.33
@@ -83,6 +88,11 @@ private struct VideoLayer: UIViewRepresentable {
             super.init(frame: frame)
             clipsToBounds = true
             playerLayer.videoGravity = .resizeAspect
+            backdropLayer.videoGravity = .resizeAspectFill
+            backdropLayer.isHidden = true
+            blur.isHidden = true
+            layer.addSublayer(backdropLayer)
+            addSubview(blur)
             layer.addSublayer(playerLayer)
         }
 
@@ -92,16 +102,29 @@ private struct VideoLayer: UIViewRepresentable {
             super.layoutSubviews()
             let w = bounds.width, h = bounds.height
             guard w > 0, h > 0 else { return }
-            // Big enough to cover the whole window (like "fill").
-            let scale = max(w / clipSize.width, h / clipSize.height)
-            let vw = clipSize.width * scale, vh = clipSize.height * scale
-            // Slide up or down so the star lands at starOnScreen, without ever showing an edge.
-            var y = h * starOnScreen - vh * starInClip
-            y = min(0, max(h - vh, y))
-            let x = (w - vw) / 2
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            playerLayer.frame = CGRect(x: x, y: y, width: vw, height: vh)
+            let wide = w > h
+            backdropLayer.isHidden = !wide
+            blur.isHidden = !wide
+            if wide {
+                // The whole clip at full height, centered; the blurred copy fills the sides.
+                let scale = h / clipSize.height
+                let vw = clipSize.width * scale
+                backdropLayer.frame = bounds
+                blur.frame = bounds
+                bringSubviewToFront(blur)
+                playerLayer.removeFromSuperlayer()
+                layer.addSublayer(playerLayer)
+                playerLayer.frame = CGRect(x: (w - vw) / 2, y: 0, width: vw, height: h)
+            } else {
+                // Tall screens (the phone): cover the whole screen, and slide so the star sits a bit above the middle.
+                let scale = max(w / clipSize.width, h / clipSize.height)
+                let vw = clipSize.width * scale, vh = clipSize.height * scale
+                var y = h * starOnScreen - vh * starInClip
+                y = min(0, max(h - vh, y))
+                playerLayer.frame = CGRect(x: (w - vw) / 2, y: y, width: vw, height: vh)
+            }
             CATransaction.commit()
         }
     }
