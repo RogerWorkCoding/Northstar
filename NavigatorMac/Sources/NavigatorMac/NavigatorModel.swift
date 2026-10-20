@@ -91,8 +91,25 @@ final class NavigatorModel {
         UserDefaults.standard.set(folders.map(\.path), forKey: "nav.folders")
     }
 
+    /// Where most people's files live. Chosen from the start (Roger, Oct 19: people won't pick folders one
+    /// by one). macOS asks "Allow?" once for each the first time Navigator looks there. Remove any in the menu.
+    static let startingFolders: [URL] = {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return ["Desktop", "Documents", "Downloads"].map { home.appendingPathComponent($0, isDirectory: true) }
+    }()
+
     private static func loadFolders() -> [URL] {
-        (UserDefaults.standard.stringArray(forKey: "nav.folders") ?? []).map { URL(fileURLWithPath: $0, isDirectory: true) }
+        let d = UserDefaults.standard
+        var saved = (d.stringArray(forKey: "nav.folders") ?? []).map { URL(fileURLWithPath: $0, isDirectory: true) }
+        // Once: add the starting folders (kept if someone removes one later).
+        if !d.bool(forKey: "nav.startingFoldersAdded") {
+            for url in startingFolders where !saved.contains(where: { $0.standardizedFileURL == url.standardizedFileURL }) {
+                saved.append(url)
+            }
+            d.set(true, forKey: "nav.startingFoldersAdded")
+            d.set(saved.map(\.path), forKey: "nav.folders")
+        }
+        return saved
     }
 
     // MARK: Pause and Stop

@@ -66,7 +66,7 @@ struct MenuView: View {
     private var linkSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Link to your iPhone").font(.subheadline.weight(.semibold))
-            Text("On your iPhone: Settings › Modules › Northstar Navigator › Link a Mac. Type the code here.")
+            Text("In Northstar on your iPhone, tap the compass under the text field, then Link a Mac. Type the code here.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
