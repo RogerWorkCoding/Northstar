@@ -56,20 +56,53 @@ struct StarIntroView: View {
 }
 
 /// Plays the clip filling the screen (like the website), without any controls.
+/// The clip is tall (720 x 1280) with the star about a third of the way down. On a tall phone screen it fits
+/// naturally; in a wide window (Mac, iPad sideways) a plain "fill" crops the middle and pushes the star up
+/// near the top edge. So the video is placed by hand: it always fills the window, and slides so the star
+/// sits a bit above the middle, where it does on the phone.
 private struct VideoLayer: UIViewRepresentable {
     let player: AVPlayer
 
     func makeUIView(context: Context) -> PlayerView {
         let v = PlayerView()
         v.playerLayer.player = player
-        v.playerLayer.videoGravity = .resizeAspectFill
         return v
     }
 
     func updateUIView(_ uiView: PlayerView, context: Context) {}
 
     final class PlayerView: UIView {
-        override class var layerClass: AnyClass { AVPlayerLayer.self }
-        var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+        let playerLayer = AVPlayerLayer()
+        /// The clip's shape, and where its star is (fraction of the clip's height from the top).
+        private let clipSize = CGSize(width: 720, height: 1280)
+        private let starInClip: CGFloat = 0.33
+        /// Where the star should land (fraction of the window's height from the top).
+        private let starOnScreen: CGFloat = 0.42
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            clipsToBounds = true
+            playerLayer.videoGravity = .resizeAspect
+            layer.addSublayer(playerLayer)
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            let w = bounds.width, h = bounds.height
+            guard w > 0, h > 0 else { return }
+            // Big enough to cover the whole window (like "fill").
+            let scale = max(w / clipSize.width, h / clipSize.height)
+            let vw = clipSize.width * scale, vh = clipSize.height * scale
+            // Slide up or down so the star lands at starOnScreen, without ever showing an edge.
+            var y = h * starOnScreen - vh * starInClip
+            y = min(0, max(h - vh, y))
+            let x = (w - vw) / 2
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            playerLayer.frame = CGRect(x: x, y: y, width: vw, height: vh)
+            CATransaction.commit()
+        }
     }
 }
