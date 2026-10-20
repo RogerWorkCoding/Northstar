@@ -60,7 +60,8 @@ nonisolated struct NavigatorEvent: Decodable, Hashable, Sendable {
         case "draft_opened": return "Opened the draft in Mail on your Mac. Not sent: you send it."
         case "added": return "You added it to \(detail?.place ?? "your calendar")"
         case "cancelled": return "You said no. Nothing was added."
-        case "stopped", "stopped_on_mac": return "Stopped"
+        case "stopped": return "You stopped it. Nothing was changed."
+        case "stopped_on_mac": return "Stopped on your Mac. Nothing was changed."
         case "failed": return "Problem: \(detail?.error ?? "unknown")"
         default: return kind.replacingOccurrences(of: "_", with: " ").capitalized
         }
@@ -199,26 +200,39 @@ struct NavigatorView: View {
     private let examples = ["Find my car insurance PDF", "What does my lease say about pets?",
                             "Email my insurance card to Sam", "Remind me to renew my registration Friday"]
 
+    @State private var width: CGFloat = 0
+    /// Wide window (the Mac): the status panel sits on the right, like the Mac design.
+    private var wide: Bool { width >= 900 }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header
-                macCard
-                askCard
-                ForEach(tasks) { task in
-                    if task.isActive {
-                        statusCard(task)
-                    } else if task.status == "needs_ok" {
-                        okCard(task)
-                    } else {
-                        resultCard(task)
+        HStack(alignment: .top, spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    header
+                    macCard
+                    askCard
+                    ForEach(tasks) { task in
+                        if task.isActive {
+                            statusCard(task)
+                        } else if task.status == "needs_ok" {
+                            okCard(task)
+                        } else {
+                            resultCard(task)
+                        }
                     }
                 }
+                .padding(20)
+                .frame(maxWidth: 760)
+                .frame(maxWidth: .infinity)
             }
-            .padding(20)
-            .frame(maxWidth: 760)
-            .frame(maxWidth: .infinity)
+            if wide {
+                ScrollView { statusPanel.padding(20) }
+                    .frame(width: 320)
+                    .background(NavStyle.bottom.opacity(0.55))
+                    .overlay(alignment: .leading) { Rectangle().fill(NavStyle.stroke).frame(width: 1) }
+            }
         }
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width = $0 }
         .scrollDismissesKeyboard(.interactively)
         .foregroundStyle(NavStyle.text)
         .background(
@@ -240,6 +254,90 @@ struct NavigatorView: View {
             }
         }
         .refreshable { await refresh() }
+    }
+
+    // MARK: Status panel (right side, wide windows)
+
+    /// What's happening right now, and the latest steps across all requests, stops included.
+    private var statusPanel: some View {
+        let active = tasks.first(where: { $0.isActive })
+        let waiting = tasks.first(where: { $0.status == "needs_ok" })
+        let feed = tasks
+            .flatMap { t in (t.events ?? []).map { (task: t, event: $0) } }
+            .sorted { $0.event.at > $1.event.at }
+            .prefix(14)
+        return VStack(alignment: .leading, spacing: 16) {
+            Text("Status").font(.headline)
+
+            // Right now
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(active != nil ? NavStyle.gold : waiting != nil ? NavStyle.gold.opacity(0.6) : NavStyle.green)
+                        .frame(width: 9, height: 9)
+                    Text(active != nil ? "Working on it" : waiting != nil ? "Waiting for your OK" : "Ready. Nothing running.")
+                        .font(.subheadline.weight(.semibold))
+                }
+                if let t = active ?? waiting {
+                    Text("\u{201C}\(t.request)\u{201D}")
+                        .font(.footnote)
+                        .foregroundStyle(NavStyle.soft)
+                        .lineLimit(3)
+                }
+                if let t = active {
+                    Button {
+                        Task { await NavigatorService.stop(t.id); await refresh() }
+                    } label: {
+                        Text("Stop")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, minHeight: 40)
+                            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(NavStyle.red))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Stops this right away. Nothing is changed.")
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(card())
+
+            // Recent activity
+            Text("RECENT ACTIVITY")
+                .font(.caption.weight(.bold))
+                .tracking(0.8)
+                .foregroundStyle(NavStyle.soft)
+            if feed.isEmpty {
+                Text("Nothing yet. Ask Navigator to find, read or draft something.")
+                    .font(.footnote)
+                    .foregroundStyle(NavStyle.soft)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(feed.enumerated()), id: \.offset) { _, item in
+                    let stop = item.event.kind == "stopped" || item.event.kind == "stopped_on_mac" || item.event.kind == "cancelled"
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: stop ? "hand.raised" : "circle.fill")
+                            .font(.system(size: stop ? 12 : 5))
+                            .foregroundStyle(stop ? NavStyle.text : NavStyle.soft)
+                            .frame(width: 14)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.event.words)
+                                .font(.footnote.weight(stop ? .semibold : .regular))
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text("\(item.event.time) · \u{201C}\(item.task.request)\u{201D}")
+                                .font(.caption2)
+                                .foregroundStyle(NavStyle.soft)
+                                .lineLimit(1)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            Text("Every step is kept in your record, on your Mac and in Northstar.")
+                .font(.caption)
+                .foregroundStyle(NavStyle.soft)
+        }
     }
 
     // MARK: Header
