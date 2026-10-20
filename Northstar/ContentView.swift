@@ -14,6 +14,7 @@ struct ContentView: View {
         case journal
         case settings
         case about
+        case navigator
     }
     
     /// Day or Night (from Settings → Appearance, or the phone's setting).
@@ -29,6 +30,10 @@ struct ContentView: View {
     /// while step 1 is tested. When it's ready for testers it becomes a switch in Settings > Modules.
     @State private var navigatorAllowed = false
     @State private var isNavigatorPresented = false
+    /// On the Mac: the sidebar (your design, Oct 19) and which place is showing.
+    @State private var windowWidth: CGFloat = 0
+    @State private var macPlace: MacPlace = .chat
+    enum MacPlace: Hashable { case chat, history, navigator, journal, memory, settings }
     /// The one-time "New: Concierge" hint above the ask bar.
     @AppStorage("ns.conciergeHintSeen") private var conciergeHintSeen = false
 
@@ -126,12 +131,31 @@ struct ContentView: View {
         promptText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// The Mac (or a wide iPad window): show the sidebar and keep the chat a readable width.
+    private var isMacLayout: Bool {
+        ProcessInfo.processInfo.isiOSAppOnMac && windowWidth >= 760
+    }
+
     var body: some View {
+        HStack(spacing: 0) {
+            if isMacLayout {
+                macSidebar
+                    .transition(.move(edge: .leading))
+            }
+            mainStack
+        }
+        .background(Color(red: 0.039, green: 0.078, blue: 0.188).ignoresSafeArea())
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { windowWidth = $0 }
+        .animation(.easeOut(duration: 0.25), value: isMacLayout)
+    }
+
+    private var mainStack: some View {
         NavigationStack(path: $navigationPath) {
             ZStack {
                 VStack(spacing: 0) {
                     adaptiveHeader
                     conversationArea
+                        .frame(maxWidth: isMacLayout ? 860 : .infinity)
                         .overlay {
                             // An empty chat: a quiet line, no start screen (Discovery is the start).
                             if viewModel.messages.isEmpty {
@@ -142,6 +166,7 @@ struct ContentView: View {
                             }
                         }
                     promptArea
+                        .frame(maxWidth: isMacLayout ? 860 : .infinity)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // Home (star and mountains) is always Night; chats follow Day or Night.
@@ -289,7 +314,10 @@ struct ContentView: View {
         .onChange(of: viewModel.messages.isEmpty) { applyWindowLook() }
         .onChange(of: navigationPath) {
             applyWindowLook()
-            if navigationPath.isEmpty { maybeReturnToDiscovery() }
+            if navigationPath.isEmpty {
+                macPlace = .chat
+                maybeReturnToDiscovery()
+            }
         }
         .onChange(of: isStarMenuPresented) {
             if !isStarMenuPresented { maybeReturnToDiscovery() }
@@ -562,11 +590,126 @@ struct ContentView: View {
         .accessibilityHint("Talk it through, write in your journal, or get help now")
     }
 
+    // MARK: - The Mac sidebar (Roger's Mac design, Oct 19)
+
+    private var macSidebar: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkle")
+                    .foregroundStyle(NorthstarChatStyle.starGold)
+                    .accessibilityHidden(true)
+                Text("Northstar").font(.system(size: 17, weight: .semibold))
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 14)
+            .padding(.bottom, 12)
+
+            Button {
+                goMac(.chat)
+                startNewChat()
+            } label: {
+                Label("New chat", systemImage: "plus")
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.08)))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            sidebarHeading("CHATS")
+            sidebarRow("Chat", "bubble.left", selected: macPlace == .chat) { goMac(.chat) }
+            sidebarRow("Recent chats", "clock.arrow.circlepath", selected: macPlace == .history) { goMac(.history) }
+
+            sidebarHeading("PLACES")
+            sidebarRow("Discovery", "sparkle", selected: false, gold: true) {
+                isPromptFocused = false
+                isDiscoveryPresented = true
+            }
+            sidebarRow("Concierge", "bell", selected: false) {
+                isPromptFocused = false
+                isConciergePresented = true
+            }
+            if listenerOn {
+                sidebarRow("Good Listener", "ear", selected: false) {
+                    isPromptFocused = false
+                    isListenerPresented = true
+                }
+            }
+            if navigatorAllowed {
+                sidebarRow("Navigator", "safari", selected: macPlace == .navigator) { goMac(.navigator) }
+            }
+            sidebarRow("My Journal", "book.closed", selected: macPlace == .journal) { goMac(.journal) }
+            sidebarRow("Search Memory", "magnifyingglass", selected: macPlace == .memory) { goMac(.memory) }
+
+            Spacer(minLength: 12)
+            sidebarRow("Settings", "gearshape", selected: macPlace == .settings) { goMac(.settings) }
+                .padding(.bottom, 10)
+        }
+        .padding(.horizontal, 12)
+        .frame(width: 236)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .foregroundStyle(Color(red: 0.86, green: 0.88, blue: 0.93))
+        .background(Color(red: 0.039, green: 0.078, blue: 0.188).opacity(0.96).ignoresSafeArea())
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(Color.white.opacity(0.08)).frame(width: 1).ignoresSafeArea()
+        }
+        .environment(\.colorScheme, .dark)
+    }
+
+    private func sidebarHeading(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .tracking(0.8)
+            .foregroundStyle(Color(red: 0.66, green: 0.70, blue: 0.80))
+            .padding(.horizontal, 10)
+            .padding(.top, 18)
+            .padding(.bottom, 4)
+    }
+
+    private func sidebarRow(_ title: String, _ symbol: String, selected: Bool, gold: Bool = false,
+                            action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: symbol)
+                    .font(.system(size: 15, weight: .light))
+                    .foregroundStyle(gold ? NorthstarChatStyle.starGold : Color(red: 0.86, green: 0.88, blue: 0.93))
+                    .frame(width: 20)
+                    .accessibilityHidden(true)
+                Text(title).font(.system(size: 15))
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .frame(minHeight: 40)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(selected ? Color.white.opacity(0.10) : Color.clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// The sidebar's places open in the main area (one at a time), like a Mac app.
+    private func goMac(_ place: MacPlace) {
+        isPromptFocused = false
+        macPlace = place
+        navigationPath = []
+        switch place {
+        case .chat: break
+        case .history: navigationPath.append(Destination.history)
+        case .navigator: navigationPath.append(Destination.navigator)
+        case .journal: navigationPath.append(Destination.journal)
+        case .memory: navigationPath.append(Destination.memory)
+        case .settings: navigationPath.append(Destination.settings)
+        }
+    }
+
     /// Navigator's door (owner preview): the compass in the text field's bottom row.
     private var navigatorButton: some View {
         Button {
             isPromptFocused = false
-            isNavigatorPresented = true
+            if isMacLayout { goMac(.navigator) } else { isNavigatorPresented = true }
         } label: {
             Image(systemName: "safari")
                 .font(.system(size: 17, weight: .light))
@@ -878,6 +1021,8 @@ struct ContentView: View {
             NorthstarSettingsView()
         case .about:
             AboutView()
+        case .navigator:
+            NavigatorView()
         }
     }
 
