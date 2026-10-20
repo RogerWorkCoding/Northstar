@@ -2,6 +2,9 @@ import Foundation
 import AppKit
 import Observation
 import PDFKit
+import Vision
+import CryptoKit
+import ImageIO
 
 /// One request from the iPhone and what this Mac did with it.
 struct DoneTask: Identifiable {
@@ -152,6 +155,8 @@ final class NavigatorModel {
             let plan = task["plan"] as? [String: Any] ?? [:]
             if (task["stage"] as? String) == "continue" {
                 await finish(id: id, request: request, plan: plan, choice: task["choice"] as? [String: Any] ?? [:], key: key)
+            } else if (plan["intent"] as? String) == "duplicates" {
+                await findCopies(id: id, request: request, choice: task["choice"] as? [String: Any] ?? [:], key: key)
             } else {
                 await run(id: id, request: request, plan: plan, key: key)
             }
@@ -239,6 +244,14 @@ final class NavigatorModel {
             await openFound(id: id, request: request, choice: choice, key: key)
             return
         }
+        if intent == "duplicates" {
+            await moveToTrash(id: id, request: request, choice: choice, key: key)
+            return
+        }
+        if intent == "undo" {
+            await putBack(id: id, choice: choice, key: key)
+            return
+        }
         let saved = Candidates.load(for: id)
         let index = choice["index"] as? Int
         let file: URL? = index.flatMap { $0 >= 0 && $0 < saved.count ? saved[$0] : nil }
@@ -287,6 +300,108 @@ final class NavigatorModel {
         }
         Candidates.clear(for: id)
         if recent.count > 8 { recent.removeLast(recent.count - 8) }
+    }
+
+    // MARK: Copies of an image (find → you tick → Move to Trash → Undo)
+
+    /// Looks at the image the person picked and compares it with the images in the allowed folders.
+    /// Changes nothing: it only sends the matches (with small previews) for the person to tick.
+    private func findCopies(id: String, request: String, choice: [String: Any], key: String) async {
+        isWorking = true
+        stopRequested = false
+        defer { isWorking = false; now = nil }
+        let source = choice["source"] as? String ?? ""
+        let index = choice["index"] as? Int ?? -1
+        let listed = Candidates.load(for: source)
+        guard index >= 0, index < listed.count, FileManager.default.fileExists(atPath: listed[index].path) else {
+            _ = try? await Brain.send(["action": "result", "device_key": key, "task_id": id,
+                                       "error": "That image has moved or this Mac lost track of it. Find it again first."])
+            return
+        }
+        let reference = listed[index]
+        now = "Comparing images with \(reference.lastPathComponent)"
+        let names = folders.map(\.lastPathComponent)
+        let reply = try? await Brain.send(["action": "event", "device_key": key, "task_id": id,
+                                           "kind": "comparing", "detail": ["folders": names, "image": reference.lastPathComponent]])
+        if (reply?["stopped"] as? Bool) == true { return }
+
+        let chosen = folders
+        let outcome = await Task.detached(priority: .userInitiated) {
+            ImageMatcher.copies(of: reference, in: chosen)
+        }.value
+        if stopRequested {
+            _ = try? await Brain.send(["action": "event", "device_key": key, "task_id": id, "kind": "stopped_on_mac", "detail": [String: Any]()])
+            return
+        }
+        Candidates.save(outcome.matches.map(\.url), for: id)
+        let iso = ISO8601DateFormatter()
+        let files: [[String: Any]] = outcome.matches.map { m in
+            var f: [String: Any] = ["name": m.url.lastPathComponent, "folder": Searcher.label(for: m.url, root: m.root),
+                                    "modified": iso.string(from: m.modified), "size": m.size, "kind": "image", "match": m.exact ? "exact" : "near"]
+            if let t = ImageMatcher.thumbnail(m.url) { f["thumb"] = t }
+            return f
+        }
+        var ref: [String: Any] = ["name": reference.lastPathComponent, "folder": reference.deletingLastPathComponent().lastPathComponent]
+        if let t = ImageMatcher.thumbnail(reference) { ref["thumb"] = t }
+        _ = try? await Brain.send(["action": "result", "device_key": key, "task_id": id, "stage": "candidates",
+                                   "result": ["files": files, "searched": names, "skipped": 0, "reference": ref, "checked": outcome.checked]])
+        LocalRecord.write("copies_found", task: id, detail: ["image": reference.lastPathComponent, "checked": outcome.checked,
+                                                             "found": files.count, "changed": 0])
+        recent.insert(DoneTask(id: id, request: request, say: "Found \(files.count). Waiting for your OK.", files: [], when: Date()), at: 0)
+    }
+
+    /// Only the copies the person ticked, one at a time, into the Trash (never emptied). Stop waits for
+    /// the current file to finish, so nothing is ever half moved. Every move is remembered for Undo.
+    private func moveToTrash(id: String, request: String, choice: [String: Any], key: String) async {
+        isWorking = true
+        stopRequested = false
+        defer { isWorking = false; now = nil }
+        let listed = Candidates.load(for: id)
+        let indexes = (choice["indexes"] as? [Int] ?? []).filter { $0 >= 0 && $0 < listed.count }
+        var moved: [String] = []
+        var pairs: [[String]] = []
+        for (n, i) in indexes.enumerated() {
+            if stopRequested { break }
+            if n > 0, let r = try? await Brain.send(["action": "event", "device_key": key, "task_id": id, "kind": "trashing",
+                                                       "detail": ["done": n, "of": indexes.count]]),
+               (r["stopped"] as? Bool) == true { break }
+            let url = listed[i]
+            now = "Moving \(url.lastPathComponent) to the Trash (\(n + 1) of \(indexes.count))"
+            var trashed: NSURL?
+            do {
+                try FileManager.default.trashItem(at: url, resultingItemURL: &trashed)
+                moved.append(url.lastPathComponent)
+                if let t = trashed as URL? { pairs.append([url.path, t.path]) }
+                LocalRecord.write("moved_to_trash", task: id, detail: ["file": url.lastPathComponent, "from": url.deletingLastPathComponent().lastPathComponent])
+            } catch {
+                LocalRecord.write("could_not_move", task: id, detail: ["file": url.lastPathComponent, "error": error.localizedDescription])
+            }
+        }
+        TrashLog.save(pairs, for: id)
+        _ = try? await Brain.send(["action": "trashed", "device_key": key, "task_id": id, "moved": moved])
+        recent.insert(DoneTask(id: id, request: request, say: "Moved \(moved.count) to the Trash. Undo in Northstar.", files: [], when: Date()), at: 0)
+        if recent.count > 8 { recent.removeLast(recent.count - 8) }
+    }
+
+    /// Undo: puts each file back where it was (if nothing new is there now).
+    private func putBack(id: String, choice: [String: Any], key: String) async {
+        isWorking = true
+        defer { isWorking = false; now = nil }
+        let source = choice["source"] as? String ?? ""
+        var back: [String] = []
+        for pair in TrashLog.load(for: source) where pair.count == 2 {
+            let original = URL(fileURLWithPath: pair[0]), inTrash = URL(fileURLWithPath: pair[1])
+            guard FileManager.default.fileExists(atPath: inTrash.path), !FileManager.default.fileExists(atPath: original.path) else { continue }
+            do {
+                try FileManager.default.moveItem(at: inTrash, to: original)
+                back.append(original.lastPathComponent)
+                LocalRecord.write("put_back", task: id, detail: ["file": original.lastPathComponent])
+            } catch {
+                LocalRecord.write("could_not_put_back", task: id, detail: ["file": original.lastPathComponent, "error": error.localizedDescription])
+            }
+        }
+        TrashLog.save([], for: source)
+        _ = try? await Brain.send(["action": "undone", "device_key": key, "task_id": id, "put_back": back])
     }
 
     /// The person tapped Open or Show in Finder on a file Navigator found. Opens nothing else.
@@ -361,5 +476,105 @@ enum TextReader {
             out = s
         }
         return String(out.prefix(limit))
+    }
+}
+
+
+/// Where each file Navigator moved to the Trash came from, so Undo can put it back.
+enum TrashLog {
+    private static let key = "nav.trashed"
+
+    static func save(_ pairs: [[String]], for task: String) {
+        var all = UserDefaults.standard.dictionary(forKey: key) as? [String: [[String]]] ?? [:]
+        all[task] = pairs.isEmpty ? nil : pairs
+        UserDefaults.standard.set(all, forKey: key)
+    }
+
+    static func load(for task: String) -> [[String]] {
+        (UserDefaults.standard.dictionary(forKey: key) as? [String: [[String]]] ?? [:])[task] ?? []
+    }
+}
+
+/// Finds copies of one image: exact (same bytes) and near (resized, renamed, lightly edited), using Apple's
+/// on-device Vision. Nothing leaves this Mac except the small previews of the matches.
+enum ImageMatcher {
+    struct Match {
+        let url: URL
+        let root: URL
+        let exact: Bool
+        let distance: Float
+        let modified: Date
+        let size: Int
+    }
+
+    /// How alike two images must look to count as a copy (0 = identical). Kept strict on purpose.
+    static let nearLimit: Float = 0.30
+    static let maxImages = 1500
+
+    static func copies(of reference: URL, in folders: [URL]) -> (matches: [Match], checked: Int) {
+        guard let refHash = hash(reference) else { return ([], 0) }
+        let refPrint = featurePrint(reference)
+        var matches: [Match] = []
+        var checked = 0
+        for folder in folders {
+            for path in images(in: folder) {
+                if checked >= maxImages { break }
+                let url = URL(fileURLWithPath: path)
+                if url.standardizedFileURL == reference.standardizedFileURL || Searcher.isProtected(url) { continue }
+                checked += 1
+                let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+                let modified = values?.contentModificationDate ?? .distantPast
+                let size = values?.fileSize ?? 0
+                if hash(url) == refHash {
+                    matches.append(Match(url: url, root: folder, exact: true, distance: 0, modified: modified, size: size))
+                    continue
+                }
+                guard let refPrint, let p = featurePrint(url) else { continue }
+                var d: Float = 1
+                try? refPrint.computeDistance(&d, to: p)
+                if d <= nearLimit {
+                    matches.append(Match(url: url, root: folder, exact: false, distance: d, modified: modified, size: size))
+                }
+            }
+        }
+        matches.sort { ($0.exact ? 0 : 1, $0.distance) < ($1.exact ? 0 : 1, $1.distance) }
+        return (Array(matches.prefix(24)), checked)
+    }
+
+    private static func images(in folder: URL) -> [String] {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/mdfind")
+        task.arguments = ["-onlyin", folder.path, "kMDItemContentTypeTree == \"public.image\""]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+        do { try task.run() } catch { return [] }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+        return String(decoding: data, as: UTF8.self).split(separator: "\n").map(String.init)
+    }
+
+    private static func hash(_ url: URL) -> String? {
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func featurePrint(_ url: URL) -> VNFeaturePrintObservation? {
+        let request = VNGenerateImageFeaturePrintRequest()
+        let handler = VNImageRequestHandler(url: url, options: [:])
+        try? handler.perform([request])
+        return request.results?.first
+    }
+
+    /// A small JPEG preview (about 160 px), as base64, for the person to see before ticking.
+    static func thumbnail(_ url: URL) -> String? {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let opts: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                                     kCGImageSourceThumbnailMaxPixelSize: 160,
+                                     kCGImageSourceCreateThumbnailWithTransform: true]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        let rep = NSBitmapImageRep(cgImage: cg)
+        guard let jpg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.6]), jpg.count < 11000 else { return nil }
+        return jpg.base64EncodedString()
     }
 }

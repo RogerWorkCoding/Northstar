@@ -19,6 +19,18 @@ nonisolated struct NavigatorFile: Decodable, Hashable, Sendable {
     let folder: String
     let modified: String?
     let kind: String?
+    /// Copies of an image: a small preview (JPEG, base64), and "exact" or "near".
+    let thumb: String?
+    let match: String?
+
+    var preview: UIImage? { thumb.flatMap { Data(base64Encoded: $0) }.flatMap { UIImage(data: $0) } }
+
+    nonisolated struct Reference: Decodable, Hashable, Sendable {
+        let name: String
+        let folder: String?
+        let thumb: String?
+        var preview: UIImage? { thumb.flatMap { Data(base64Encoded: $0) }.flatMap { UIImage(data: $0) } }
+    }
 }
 
 nonisolated struct NavigatorEvent: Decodable, Hashable, Sendable {
@@ -39,6 +51,7 @@ nonisolated struct NavigatorEvent: Decodable, Hashable, Sendable {
         let kind: String?
         let always_allow: Bool?
         let how: String?
+        let count: Int?
     }
     let at: String
     let actor: String
@@ -60,6 +73,10 @@ nonisolated struct NavigatorEvent: Decodable, Hashable, Sendable {
         case "approved":
             let what = "\(detail?.what ?? "go ahead")\(detail?.file.map { " (\($0))" } ?? "")"
             return detail?.auto == true ? "Went ahead (Always allow is on): \(what)" : "You OK'd: \(what)"
+        case "comparing": return "Compared your image with the images in \((detail?.folders ?? []).joined(separator: ", "))"
+        case "trashed": return "Moved \(detail?.count ?? 0) to the Trash. The Trash was not emptied."
+        case "undone": return "Put back \(detail?.count ?? 0) from the Trash (Undo)"
+        case "trashing": return "Moving to the Trash\u{2026}"
         case "opened":
             return detail?.how == "reveal" ? "Showed \(detail?.file ?? "the file") in Finder" : "Opened \(detail?.file ?? "the file") on your Mac"
         case "permission_changed":
@@ -95,6 +112,11 @@ nonisolated struct NavigatorTask: Decodable, Hashable, Sendable, Identifiable {
         let opened: Bool?
         let outcome: String?
         let place: String?
+        let reference: NavigatorFile.Reference?
+        let checked: Int?
+        let moved: [String]?
+        let undone: Bool?
+        let put_back: [String]?
     }
     nonisolated struct Plan: Decodable, Hashable, Sendable {
         nonisolated struct Email: Decodable, Hashable, Sendable {
@@ -113,6 +135,7 @@ nonisolated struct NavigatorTask: Decodable, Hashable, Sendable, Identifiable {
         let index: Int?
         let name: String?
         let how: String?
+        let names: [String]?
     }
     let id: String
     let request: String
@@ -145,6 +168,7 @@ enum NavigatorService {
         var on: Bool? = nil
         var auto: Bool? = nil
         var how: String? = nil
+        var file_indexes: [Int]? = nil
     }
     nonisolated struct Always: Decodable, Sendable { let always: [String: Bool]? }
     nonisolated struct Status: Decodable, Sendable { let allowed: Bool?; let macs: [NavigatorMacInfo]? }
@@ -182,6 +206,18 @@ enum NavigatorService {
     /// Open a found file on the Mac, or show it in Finder. The tap is the OK.
     static func openFile(_ taskId: String, index: Int, reveal: Bool) async -> Bool {
         (await call(Body(action: "open_file", task_id: taskId, file_index: index, how: reveal ? "reveal" : "open")) as Ok?)?.ok == true
+    }
+    /// Find copies of an image Navigator found (the Mac compares; nothing is changed).
+    static func findCopies(_ taskId: String, index: Int) async -> Bool {
+        (await call(Body(action: "find_copies", task_id: taskId, file_index: index)) as Ok?)?.ok == true
+    }
+    /// Move the ticked copies to the Trash (never emptied).
+    static func approveTrash(_ taskId: String, indexes: [Int]) async -> Bool {
+        (await call(Body(action: "approve", task_id: taskId, file_indexes: indexes)) as Ok?)?.ok == true
+    }
+    /// Undo: put them back where they were.
+    static func undo(_ taskId: String) async -> Bool {
+        (await call(Body(action: "undo", task_id: taskId)) as Ok?)?.ok == true
     }
     /// "Always allow" switches (all off at first).
     static func permissions() async -> [String: Bool] { (await call(Body(action: "permissions")) as Always?)?.always ?? [:] }
@@ -226,6 +262,8 @@ struct NavigatorView: View {
     @State private var autoTried: Set<String> = []
     /// "Why?" reasons the person opened (task id or row id).
     @State private var openReasons: Set<String> = []
+    /// Copies ticked for the Trash (task id → indexes).
+    @State private var trashPicks: [String: Set<Int>] = [:]
     @FocusState private var askFocused: Bool
 
     private let examples = ["Find my car insurance PDF", "What does my lease say about pets?",
@@ -242,7 +280,7 @@ struct NavigatorView: View {
                     header
                     macCard
                     askCard
-                    ForEach(tasks.filter { $0.intent != "open" || $0.isActive || $0.status == "failed" }) { task in
+                    ForEach(tasks.filter { ($0.intent != "open" && $0.intent != "undo") || $0.isActive || $0.status == "failed" }) { task in
                         if task.isActive {
                             statusCard(task)
                         } else if task.status == "needs_ok" {
@@ -258,7 +296,7 @@ struct NavigatorView: View {
                     }
                 }
                 .padding(20)
-                .frame(maxWidth: 760)
+                .frame(maxWidth: wide ? 1000 : 760)
                 .frame(maxWidth: .infinity)
             }
             if wide {
@@ -342,6 +380,8 @@ struct NavigatorView: View {
             return "To answer your question, Navigator has to read this one file. Your Mac reads it and sends the text to Northstar's brain once to write the answer. The text isn't kept, and no other file is read."
         case "email":
             return "You asked for an email. Navigator wrote a draft and wants to open it in Mail on your Mac, with the file you picked. It never sends it: you check it and press Send yourself."
+        case "duplicates":
+            return "You asked to remove copies of this image. Only the copies you tick go to the Trash, one at a time, and the Trash is never emptied. You can Undo here, or use Put Back in the Trash. This always asks, even with Always allow on."
         case "event":
             return "You asked for a calendar event. Navigator only adds it to your Calendar after you allow it, and you can change or delete it there anytime."
         case "reminder":
@@ -403,8 +443,9 @@ struct NavigatorView: View {
                 let prev = i > 0 ? events[i - 1].kind : ""
                 let id = "\(t.id)-\(i)"
                 switch e.kind {
-                case "approved" where t.intent == "read" || t.intent == "email":
-                    let what = t.intent == "read" ? "Read \(e.detail?.file ?? "a file")" : "Open the email draft in Mail"
+                case "approved" where t.intent == "read" || t.intent == "email" || t.intent == "duplicates":
+                    let what = t.intent == "read" ? "Read \(e.detail?.file ?? "a file")"
+                        : t.intent == "email" ? "Open the email draft in Mail" : (e.detail?.what.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? "Move to the Trash")
                     rows.append(PermissionRow(id: id, allowed: true, auto: e.detail?.auto == true, what: what, request: t.request,
                                               time: e.time, at: e.at, reason: Self.reason(for: t.intent)))
                 case "added":
@@ -414,7 +455,8 @@ struct NavigatorView: View {
                     rows.append(PermissionRow(id: id, allowed: false, what: t.intent == "event" ? "Add to Calendar" : "Add to Reminders",
                                               request: t.request, time: e.time, at: e.at, reason: Self.reason(for: t.intent)))
                 case "stopped" where prev == "found" || (prev == "planned" && t.intent != "find"):
-                    let what = t.intent == "read" ? "Read a file" : t.intent == "email" ? "Open the email draft in Mail" : "Go ahead"
+                    let what = t.intent == "read" ? "Read a file" : t.intent == "email" ? "Open the email draft in Mail"
+                        : t.intent == "duplicates" ? "Move copies to the Trash" : "Go ahead"
                     rows.append(PermissionRow(id: id, allowed: false, what: what, request: t.request, time: e.time, at: e.at,
                                               reason: Self.reason(for: t.intent)))
                 default: break
@@ -731,6 +773,15 @@ struct NavigatorView: View {
                      ("Writing your answer", kinds.contains("answered"))]
         case ("email", true):
             steps = [("You OK'd the draft", true), ("Opening it in Mail on your Mac", kinds.contains("draft_opened"))]
+        case ("duplicates", false):
+            steps = [(picked, kinds.contains("picked_up") || kinds.contains("comparing")),
+                     ("Comparing your image with Desktop, Documents and Downloads", kinds.contains("found")),
+                     ("Show you the copies first", false)]
+        case ("duplicates", true):
+            steps = [("You OK'd moving \(task.choice?.names?.count ?? 0) to the Trash", true),
+                     ("Moving them one at a time", kinds.contains("trashed"))]
+        case ("undo", _):
+            steps = [("Putting them back where they were", kinds.contains("undone"))]
         case ("open", _):
             steps = [(task.choice?.how == "reveal" ? "Showing \(file) in Finder" : "Opening \(file) on your Mac", kinds.contains("opened"))]
         case ("read", false), ("email", false):
@@ -853,6 +904,8 @@ struct NavigatorView: View {
                         Label("Attached: \(f)", systemImage: "paperclip").font(.footnote).foregroundStyle(NavStyle.soft)
                     }
                 }
+            case "done" where task.intent == "duplicates":
+                copiesDone(task)
             case "done" where task.intent == "event" || task.intent == "reminder":
                 Label("Added to \(task.result?.place ?? (task.intent == "event" ? "Calendar" : "Reminders"))", systemImage: "checkmark.circle.fill")
                     .font(.headline)
@@ -891,6 +944,11 @@ struct NavigatorView: View {
                             fileButton(onMac ? "Open" : "Open on Mac", "arrow.up.forward.app") {
                                 _ = await NavigatorService.openFile(task.id, index: i, reveal: false)
                             }
+                            if f.kind == "image" {
+                                fileButton("Find copies", "square.on.square") {
+                                    _ = await NavigatorService.findCopies(task.id, index: i)
+                                }
+                            }
                             if onMac {
                                 fileButton("Show in Finder", "folder") {
                                     _ = await NavigatorService.openFile(task.id, index: i, reveal: true)
@@ -926,6 +984,7 @@ struct NavigatorView: View {
             switch task.intent {
             case "read": readOK(task)
             case "email": emailOK(task)
+            case "duplicates": copiesOK(task)
             default: scheduleOK(task)
             }
             if let events = task.events, !events.isEmpty {
@@ -1031,6 +1090,112 @@ struct NavigatorView: View {
             Text("This draft is missing its details. Please ask again.").foregroundStyle(NavStyle.soft)
             secondaryButton("OK") { await NavigatorService.stop(task.id) }
         }
+    }
+
+    /// Copies of an image: shown first, as a grid of images; the person ticks which go to the Trash.
+    @ViewBuilder
+    private func copiesOK(_ task: NavigatorTask) -> some View {
+        let files = task.result?.files ?? []
+        let ref = task.result?.reference
+        HStack(spacing: 12) {
+            thumbView(ref?.preview, size: 72)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Your image").font(.caption.weight(.bold)).foregroundStyle(NavStyle.soft)
+                Text(ref?.name ?? "").font(.subheadline.weight(.semibold)).lineLimit(2)
+                Text("Checked \(task.result?.checked ?? 0) images. Nothing has been changed.")
+                    .font(.caption).foregroundStyle(NavStyle.soft)
+            }
+        }
+        if files.isEmpty {
+            Text("No copies found.").font(.headline)
+            secondaryButton("OK") { await NavigatorService.stop(task.id) }
+        } else {
+            let picked = trashPicks[task.id] ?? Set(files.indices.filter { files[$0].match == "exact" })
+            Text("Found \(files.count). Tick the ones to move to the Trash.").font(.headline)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+                ForEach(Array(files.enumerated()), id: \.offset) { i, f in
+                    Button {
+                        var p = picked
+                        if p.contains(i) { p.remove(i) } else { p.insert(i) }
+                        trashPicks[task.id] = p
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ZStack(alignment: .topTrailing) {
+                                thumbView(f.preview, size: nil)
+                                Image(systemName: picked.contains(i) ? "checkmark.circle.fill" : "circle")
+                                    .font(.title3)
+                                    .foregroundStyle(picked.contains(i) ? NavStyle.gold : .white)
+                                    .shadow(radius: 2)
+                                    .padding(6)
+                            }
+                            Text(f.match == "exact" ? "Exact copy" : "Looks the same")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(f.match == "exact" ? NavStyle.green : NavStyle.gold)
+                            Text(f.name).font(.caption.weight(.semibold)).lineLimit(2)
+                            Text(f.folder).font(.caption2).foregroundStyle(NavStyle.soft).lineLimit(1)
+                        }
+                        .padding(8)
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(picked.contains(i) ? NavStyle.card2 : Color.clear))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(picked.contains(i) ? NavStyle.gold : NavStyle.stroke, lineWidth: 1))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(f.name), \(f.match == "exact" ? "exact copy" : "looks the same"), in \(f.folder)")
+                    .accessibilityAddTraits(picked.contains(i) ? .isSelected : [])
+                }
+            }
+            whyRow(task.id, Self.reason(for: "duplicates"))
+            HStack(spacing: 10) {
+                secondaryButton("Decline") { await NavigatorService.stop(task.id) }
+                primaryButton(picked.isEmpty ? "Tick some first" : "Move \(picked.count) to Trash (Allow once)", busy: busyTask != nil) {
+                    guard !picked.isEmpty else { return }
+                    _ = await NavigatorService.approveTrash(task.id, indexes: picked.sorted())
+                }
+            }
+        }
+    }
+
+    /// After the move: what went to the Trash, and Undo.
+    @ViewBuilder
+    private func copiesDone(_ task: NavigatorTask) -> some View {
+        let moved = task.result?.moved ?? []
+        if task.result?.undone == true {
+            Label("Put back. Everything is where it was.", systemImage: "arrow.uturn.backward.circle")
+                .font(.headline)
+                .foregroundStyle(NavStyle.green)
+        } else {
+            Label("Moved \(moved.count) to the Trash", systemImage: "trash")
+                .font(.headline)
+            ForEach(moved, id: \.self) { name in
+                Text(name).font(.footnote).foregroundStyle(NavStyle.soft)
+            }
+            Text("The Trash was not emptied. You can Undo, or use Put Back in the Trash.")
+                .font(.caption)
+                .foregroundStyle(NavStyle.soft)
+            if !moved.isEmpty {
+                secondaryButton("Undo: put them back") { _ = await NavigatorService.undo(task.id) }
+            }
+        }
+    }
+
+    private func thumbView(_ image: UIImage?, size: CGFloat?) -> some View {
+        Color.clear
+            .frame(width: size, height: size ?? 120)
+            .frame(maxWidth: size == nil ? .infinity : nil)
+            .overlay {
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFill()
+                } else {
+                    ZStack {
+                        NavStyle.card2
+                        Image(systemName: "photo").foregroundStyle(NavStyle.soft)
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .accessibilityHidden(true)
     }
 
     /// The files to choose from (the best few the Mac found). Tap one to pick it.

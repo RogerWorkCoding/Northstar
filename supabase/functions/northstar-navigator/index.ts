@@ -13,6 +13,8 @@
 //   { action: "approve", task_id, file_index } → { ok }          (read this file / use this attachment)
 //   { action: "finish", task_id, outcome, place, auto? } → { ok } (event/reminder added or cancelled on the iPhone)
 //   { action: "open_file", task_id, file_index, how } → { ok }  (open a found file, or show it in Finder, on the Mac)
+//   { action: "find_copies", task_id, file_index } → { ok, task_id }  (find copies of an image Navigator found)
+//   { action: "undo", task_id }           → { ok, task_id }           (put back what Navigator moved to the Trash)
 //   { action: "permissions" }             → { always: { read, email, event, reminder } }   ("Always allow" switches, all off at first)
 //   { action: "set_permission", kind, on } → { always }
 //   { action: "tasks" }                   → { tasks: [{ id, request, status, created_at, result, error, events: [...] }] }
@@ -24,7 +26,9 @@
 //   { action: "result", device_key, task_id, result | error, stage? } → { ok }   (stage "candidates": wait for an OK)
 //   { action: "read_text", device_key, task_id, name, text } → { ok }   (the file the person OK'd; answered, not kept)
 //   { action: "draft_opened", device_key, task_id } → { ok }
-//   { action: "opened", device_key, task_id } → { ok }          (a file opened / shown in Finder, as asked)
+//   { action: "opened", device_key, task_id } → { ok }
+//   { action: "trashed", device_key, task_id, moved: [names] } → { ok }   (moved to the Trash, never emptied)
+//   { action: "undone", device_key, task_id, put_back: [names], source } → { ok }          (a file opened / shown in Finder, as asked)
 //
 // Owner only for now: the person must be listed in NS_ADMIN_USERS (the same list as Insights).
 // Step 1 never changes anything on the Mac. The plan is a SEARCH plan, nothing else.
@@ -111,7 +115,7 @@ type Schedule = {
   minutes: number | null; alert_minutes: number | null; location: string | null; repeat: string | null;
 };
 type Plan = {
-  intent: typeof INTENTS[number] | "open";
+  intent: typeof INTENTS[number] | "open" | "duplicates" | "undo";
   words: string[]; kinds: string[]; modified_within_days: number | null; say: string;
   question?: string;
   email?: { to: string; subject: string; body: string; attach: boolean };
@@ -283,7 +287,7 @@ Deno.serve(async (req) => {
       return json({ device_key: key, name });
     }
 
-    if (action === "next" || action === "event" || action === "result" || action === "read_text" || action === "draft_opened" || action === "opened") {
+    if (action === "next" || action === "event" || action === "result" || action === "read_text" || action === "draft_opened" || action === "opened" || action === "trashed" || action === "undone") {
       const dev = await deviceFrom(body.device_key);
       if (!dev) return json({ error: "This Mac isn't linked. Link it again from your iPhone." }, 401);
 
@@ -308,7 +312,7 @@ Deno.serve(async (req) => {
           await d.from("navigator_tasks").update({ plan, updated_at: new Date().toISOString() }).eq("id", task.id);
           await record(dev.user_id, task.id, "brain", "planned", { rules: RULES_VERSION, model: MODEL, plan });
         }
-        return json({ task: { id: task.id, request: task.request, plan, stage: "start" } });
+        return json({ task: { id: task.id, request: task.request, plan, stage: "start", choice: task.choice } });
       }
 
       const taskId = String(body.task_id ?? "");
@@ -328,6 +332,28 @@ Deno.serve(async (req) => {
         const result = { ...(task.result as Record<string, unknown> ?? {}), answer, file: name };
         await d.from("navigator_tasks").update({ status: "done", result, updated_at: new Date().toISOString() }).eq("id", task.id);
         await record(dev.user_id, task.id, "brain", "answered", { file: name, model: MODEL, rules: RULES_VERSION, kept_file_text: false });
+        return json({ ok: true });
+      }
+
+      if (action === "trashed") {
+        const moved = (Array.isArray(body.moved) ? body.moved : []).slice(0, 50).map((n: unknown) => clip(n, 120));
+        const stopped = task.status === "stopped";
+        const result = { ...(task.result as Record<string, unknown> ?? {}), moved, undone: false, stopped_early: stopped };
+        await d.from("navigator_tasks").update({ status: stopped ? "stopped" : "done", result, updated_at: new Date().toISOString() }).eq("id", task.id);
+        await record(dev.user_id, task.id, "mac", "trashed", { count: moved.length, files: moved, emptied_trash: false });
+        return json({ ok: true });
+      }
+
+      if (action === "undone") {
+        const back = (Array.isArray(body.put_back) ? body.put_back : []).slice(0, 50).map((n: unknown) => clip(n, 120));
+        const source = String((task.choice as { source?: string } | null)?.source ?? "");
+        await d.from("navigator_tasks").update({ status: "done", result: { put_back: back }, updated_at: new Date().toISOString() }).eq("id", task.id);
+        if (source) {
+          const { data: src } = await d.from("navigator_tasks").select("result").eq("id", source).eq("user_id", dev.user_id).maybeSingle();
+          await d.from("navigator_tasks").update({ result: { ...(src?.result as Record<string, unknown> ?? {}), undone: true } }).eq("id", source);
+          await record(dev.user_id, source, "mac", "undone", { count: back.length, files: back });
+        }
+        await record(dev.user_id, task.id, "mac", "undone", { count: back.length, files: back });
         return json({ ok: true });
       }
 
@@ -365,8 +391,17 @@ Deno.serve(async (req) => {
       const r = (body.result ?? {}) as Record<string, unknown>;
       const files = (Array.isArray(r.files) ? r.files : []).slice(0, 25).map((f: Record<string, unknown>) => ({
         name: clip(f?.name, 120), folder: clip(f?.folder, 200), modified: clip(f?.modified, 30), size: Number(f?.size) || 0, kind: clip(f?.kind, 20),
+        // Copies of an image: a small preview (JPEG, base64) and how close it is ("exact" or "near").
+        ...(typeof f?.thumb === "string" && f.thumb.length < 16000 && /^[A-Za-z0-9+/=]+$/.test(f.thumb) ? { thumb: f.thumb } : {}),
+        ...(f?.match === "exact" || f?.match === "near" ? { match: f.match } : {}),
       })).filter((f: { name: string }) => f.name);
-      const result = { files, searched: (Array.isArray(r.searched) ? r.searched : []).slice(0, 10).map((s: unknown) => clip(s, 80)), skipped: Number(r.skipped) || 0 };
+      const refIn = (r.reference ?? null) as Record<string, unknown> | null;
+      const reference = refIn ? {
+        name: clip(refIn.name, 120), folder: clip(refIn.folder, 200),
+        ...(typeof refIn.thumb === "string" && refIn.thumb.length < 16000 && /^[A-Za-z0-9+/=]+$/.test(refIn.thumb) ? { thumb: refIn.thumb } : {}),
+      } : undefined;
+      const result = { files, searched: (Array.isArray(r.searched) ? r.searched : []).slice(0, 10).map((s: unknown) => clip(s, 80)), skipped: Number(r.skipped) || 0,
+        ...(reference ? { reference, checked: Number(r.checked) || 0 } : {}) };
       if (body.stage === "candidates") {
         // Level 2/3: stop here and wait for the person's OK on which file to read or attach.
         await d.from("navigator_tasks").update({ status: "needs_ok", result, updated_at: new Date().toISOString() }).eq("id", task.id);
@@ -440,8 +475,18 @@ Deno.serve(async (req) => {
       const { data: t } = await d.from("navigator_tasks").select("id, status, plan, result").eq("id", id).eq("user_id", me).maybeSingle();
       if (!t || t.status !== "needs_ok") return json({ error: "That one isn't waiting for an OK." }, 400);
       const plan = t.plan as Plan | null;
-      if (plan?.intent !== "read" && plan?.intent !== "email") return json({ error: "Nothing to approve here." }, 400);
       const files = ((t.result as { files?: Array<{ name: string }> } | null)?.files ?? []);
+      if (plan?.intent === "duplicates") {
+        // Move these to the Trash (the ones the person ticked). Never "Always allow": changes always ask.
+        const raw = Array.isArray(body.file_indexes) ? body.file_indexes : [];
+        const indexes = [...new Set(raw.map(Number))].filter((n) => Number.isInteger(n) && n >= 0 && n < files.length).slice(0, 50);
+        if (!indexes.length) return json({ error: "Tick the copies to move to the Trash." }, 400);
+        const names = indexes.map((n) => files[n].name);
+        await d.from("navigator_tasks").update({ status: "approved", choice: { indexes, names }, updated_at: new Date().toISOString() }).eq("id", id);
+        await record(me, id, "iphone", "approved", { what: `move ${names.length} to the Trash`, files: names });
+        return json({ ok: true });
+      }
+      if (plan?.intent !== "read" && plan?.intent !== "email") return json({ error: "Nothing to approve here." }, 400);
       const idx = body.file_index === null || body.file_index === undefined ? null : Number(body.file_index);
       if (idx !== null && !(Number.isInteger(idx) && idx >= 0 && idx < files.length)) return json({ error: "Pick a file from the list." }, 400);
       if (plan.intent === "read" && idx === null) return json({ error: "Pick the file to read." }, 400);
@@ -481,6 +526,40 @@ Deno.serve(async (req) => {
       }).select("id").single();
       if (error || !task) return json({ error: "Couldn't send that to your Mac. Please try again." }, 500);
       await record(me, task.id, "iphone", "approved", { what: how === "reveal" ? "show this file in Finder" : "open this file", file: name });
+      return json({ ok: true, task_id: task.id });
+    }
+
+    if (action === "find_copies") {
+      const srcId = String(body.task_id ?? "");
+      const { data: src } = await d.from("navigator_tasks").select("id, result").eq("id", srcId).eq("user_id", me).maybeSingle();
+      const files = ((src?.result as { files?: Array<{ name: string; kind?: string }> } | null)?.files ?? []);
+      const idx = Number(body.file_index);
+      if (!src || !(Number.isInteger(idx) && idx >= 0 && idx < files.length)) return json({ error: "That image isn't in the list anymore." }, 400);
+      const name = files[idx].name;
+      const plan = { intent: "duplicates", words: [], kinds: ["image"], modified_within_days: null, say: `Looking for copies of ${name}.` };
+      const { data: task, error } = await d.from("navigator_tasks").insert({
+        user_id: me, request: `Find copies of ${name}`.slice(0, 500), plan, status: "queued", choice: { source: srcId, index: idx, name },
+      }).select("id").single();
+      if (error || !task) return json({ error: "Couldn't send that to your Mac. Please try again." }, 500);
+      await record(me, task.id, "iphone", "asked", { request: `Find copies of ${name}` });
+      await record(me, task.id, "brain", "planned", { rules: RULES_VERSION, plan });
+      return json({ ok: true, task_id: task.id });
+    }
+
+    if (action === "undo") {
+      // Put back what Navigator moved to the Trash for this request.
+      const srcId = String(body.task_id ?? "");
+      const { data: src } = await d.from("navigator_tasks").select("id, result, plan").eq("id", srcId).eq("user_id", me).maybeSingle();
+      const moved = ((src?.result as { moved?: string[]; undone?: boolean } | null));
+      if (!src || (src.plan as Plan | null)?.intent !== "duplicates" || !moved?.moved?.length || moved.undone) {
+        return json({ error: "Nothing to put back here." }, 400);
+      }
+      const plan = { intent: "undo", words: [], kinds: ["any"], modified_within_days: null, say: "Putting them back." };
+      const { data: task, error } = await d.from("navigator_tasks").insert({
+        user_id: me, request: `Undo: put back ${moved.moved.length} from the Trash`, plan, status: "approved", choice: { source: srcId },
+      }).select("id").single();
+      if (error || !task) return json({ error: "Couldn't send that to your Mac. Please try again." }, 500);
+      await record(me, task.id, "iphone", "approved", { what: "put them back (Undo)" });
       return json({ ok: true, task_id: task.id });
     }
 

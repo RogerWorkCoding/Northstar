@@ -62,3 +62,15 @@ Both need Roger's "make it live".
   Stored in `navigator_permissions` (migration 20261023). Sending, deleting and moving always need you.
 - **Permissions history**: every Allow, Always allowed and Decline, with its reason on tap.
 - **Every stop says why**: you pressed Stop, you chose Decline, Stop on the Mac, or what went wrong.
+
+## Copies of an image → Trash → Undo (Roger, Oct 19)
+
+First time Navigator changes anything. Roger: "I think that is safe."
+- Tap **Find copies** on an image Navigator found. The Mac compares it with the images in Desktop,
+  Documents and Downloads using Apple's on-device Vision: **exact** copies (same bytes) and **near**
+  copies (resized, renamed, lightly edited). Nothing is changed; only small previews are sent.
+- Navigator **shows them first** as a grid of images. Exact copies start ticked; near copies don't.
+- **Move N to Trash (Allow once)**: one file at a time; Stop waits for the current file. Never
+  "Always allow". The Trash is **never emptied** by Navigator.
+- **Undo: put them back** moves each file back where it was (if nothing new is there now).
+- The Photos app library is off limits (Apple keeps it locked); only image files in folders.
