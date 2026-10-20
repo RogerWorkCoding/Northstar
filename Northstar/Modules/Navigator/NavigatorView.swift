@@ -195,6 +195,8 @@ struct NavigatorView: View {
     /// Which file the person picked on an OK card (task id → index; -1 = no attachment).
     @State private var picks: [String: Int] = [:]
     @State private var busyTask: String?
+    /// "Why?" reasons the person opened (task id or row id).
+    @State private var openReasons: Set<String> = []
     @FocusState private var askFocused: Bool
 
     private let examples = ["Find my car insurance PDF", "What does my lease say about pets?",
@@ -219,6 +221,11 @@ struct NavigatorView: View {
                         } else {
                             resultCard(task)
                         }
+                    }
+                    if !wide && width > 0 {
+                        statusPanel
+                            .padding(16)
+                            .background(card())
                     }
                 }
                 .padding(20)
@@ -256,6 +263,113 @@ struct NavigatorView: View {
         .refreshable { await refresh() }
     }
 
+    // MARK: Reasons (why Navigator asks, why something stopped)
+
+    /// Why Navigator needs this permission, in plain words. Shown behind "Why?".
+    static func reason(for intent: String) -> String {
+        switch intent {
+        case "read":
+            return "To answer your question, Navigator has to read this one file. Your Mac reads it and sends the text to Northstar's brain once to write the answer. The text isn't kept, and no other file is read."
+        case "email":
+            return "You asked for an email. Navigator wrote a draft and wants to open it in Mail on your Mac, with the file you picked. It never sends it: you check it and press Send yourself."
+        case "event":
+            return "You asked for a calendar event. Navigator only adds it to your Calendar after you allow it, and you can change or delete it there anytime."
+        case "reminder":
+            return "You asked for a reminder. Navigator only adds it to your Reminders after you allow it, and you can change or delete it there anytime."
+        default:
+            return "Navigator asks before doing anything that reads, adds or opens something for you."
+        }
+    }
+
+    /// The hidden reason: tap "Why?" to show it.
+    private func whyRow(_ id: String, _ reason: String) -> some View {
+        let open = openReasons.contains(id)
+        return VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    if open { openReasons.remove(id) } else { openReasons.insert(id) }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "questionmark.circle")
+                    Text(open ? "Hide the reason" : "Why is Navigator asking?")
+                    Image(systemName: open ? "chevron.up" : "chevron.down").font(.caption2)
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(NavStyle.gold)
+                .frame(minHeight: 32)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if open {
+                Text(reason)
+                    .font(.footnote)
+                    .foregroundStyle(NavStyle.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(NavStyle.card2))
+            }
+        }
+    }
+
+    /// One Allow or Decline, for the permissions history.
+    private struct PermissionRow: Identifiable {
+        let id: String
+        let allowed: Bool
+        let what: String
+        let request: String
+        let time: String
+        let at: String
+        let reason: String
+    }
+
+    private var permissionRows: [PermissionRow] {
+        var rows: [PermissionRow] = []
+        for t in tasks {
+            let events = t.events ?? []
+            for (i, e) in events.enumerated() {
+                let prev = i > 0 ? events[i - 1].kind : ""
+                let id = "\(t.id)-\(i)"
+                switch e.kind {
+                case "approved":
+                    let what = t.intent == "read" ? "Read \(e.detail?.file ?? "a file")" : "Open the email draft in Mail"
+                    rows.append(PermissionRow(id: id, allowed: true, what: what, request: t.request, time: e.time, at: e.at,
+                                              reason: Self.reason(for: t.intent)))
+                case "added":
+                    rows.append(PermissionRow(id: id, allowed: true, what: "Add to \(e.detail?.place ?? "Calendar")", request: t.request,
+                                              time: e.time, at: e.at, reason: Self.reason(for: t.intent)))
+                case "cancelled":
+                    rows.append(PermissionRow(id: id, allowed: false, what: t.intent == "event" ? "Add to Calendar" : "Add to Reminders",
+                                              request: t.request, time: e.time, at: e.at, reason: Self.reason(for: t.intent)))
+                case "stopped" where prev == "found" || (prev == "planned" && t.intent != "find"):
+                    let what = t.intent == "read" ? "Read a file" : t.intent == "email" ? "Open the email draft in Mail" : "Go ahead"
+                    rows.append(PermissionRow(id: id, allowed: false, what: what, request: t.request, time: e.time, at: e.at,
+                                              reason: Self.reason(for: t.intent)))
+                default: break
+                }
+            }
+        }
+        return rows.sorted { $0.at > $1.at }
+    }
+
+    /// Why something stopped, in plain words. Every stop has a reason.
+    private func stopReason(_ t: NavigatorTask, _ index: Int) -> String {
+        let events = t.events ?? []
+        let e = events[index]
+        let prev = index > 0 ? events[index - 1].kind : ""
+        switch e.kind {
+        case "cancelled": return "Stopped because you chose Decline. Nothing was added."
+        case "stopped_on_mac": return "Stopped because you pressed Stop in the \u{2726} menu on your Mac. Nothing was changed."
+        case "failed": return "Stopped because something went wrong: \(e.detail?.error ?? "unknown problem"). Nothing was changed."
+        default:
+            if prev == "found" || (prev == "planned" && t.intent != "find") {
+                return "Stopped because you chose Decline. Nothing was read or opened."
+            }
+            return "Stopped because you pressed Stop. Nothing was changed."
+        }
+    }
+
     // MARK: Status panel (right side, wide windows)
 
     /// What's happening right now, and the latest steps across all requests, stops included.
@@ -263,9 +377,10 @@ struct NavigatorView: View {
         let active = tasks.first(where: { $0.isActive })
         let waiting = tasks.first(where: { $0.status == "needs_ok" })
         let feed = tasks
-            .flatMap { t in (t.events ?? []).map { (task: t, event: $0) } }
+            .flatMap { t in (t.events ?? []).enumerated().map { (task: t, index: $0.offset, event: $0.element) } }
             .sorted { $0.event.at > $1.event.at }
             .prefix(14)
+        let permissions = permissionRows.prefix(10)
         return VStack(alignment: .leading, spacing: 16) {
             Text("Status").font(.headline)
 
@@ -302,6 +417,40 @@ struct NavigatorView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(card())
 
+            // Permissions history: every Allow once and Decline, with the reason behind "Why?"
+            Text("PERMISSIONS")
+                .font(.caption.weight(.bold))
+                .tracking(0.8)
+                .foregroundStyle(NavStyle.soft)
+            if permissions.isEmpty {
+                Text("None yet. Navigator asks before it reads a file, opens a draft or adds to your calendar.")
+                    .font(.footnote)
+                    .foregroundStyle(NavStyle.soft)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(permissions)) { row in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Image(systemName: row.allowed ? "checkmark.circle.fill" : "xmark.circle")
+                                .font(.footnote)
+                                .foregroundStyle(row.allowed ? NavStyle.green : NavStyle.soft)
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(row.allowed ? "Allowed once" : "Declined"): \(row.what)")
+                                    .font(.footnote.weight(.semibold))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text("\(row.time) · \u{201C}\(row.request)\u{201D}")
+                                    .font(.caption2)
+                                    .foregroundStyle(NavStyle.soft)
+                                    .lineLimit(1)
+                            }
+                        }
+                        whyRow(row.id, row.reason)
+                            .padding(.leading, 22)
+                    }
+                }
+            }
+
             // Recent activity
             Text("RECENT ACTIVITY")
                 .font(.caption.weight(.bold))
@@ -314,7 +463,7 @@ struct NavigatorView: View {
             }
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(feed.enumerated()), id: \.offset) { _, item in
-                    let stop = item.event.kind == "stopped" || item.event.kind == "stopped_on_mac" || item.event.kind == "cancelled"
+                    let stop = item.event.kind == "stopped" || item.event.kind == "stopped_on_mac" || item.event.kind == "cancelled" || item.event.kind == "failed"
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Image(systemName: stop ? "hand.raised" : "circle.fill")
                             .font(.system(size: stop ? 12 : 5))
@@ -322,7 +471,7 @@ struct NavigatorView: View {
                             .frame(width: 14)
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(item.event.words)
+                            Text(stop ? stopReason(item.task, item.index) : item.event.words)
                                 .font(.footnote.weight(stop ? .semibold : .regular))
                                 .fixedSize(horizontal: false, vertical: true)
                             Text("\(item.event.time) · \u{201C}\(item.task.request)\u{201D}")
@@ -589,10 +738,17 @@ struct NavigatorView: View {
                 .foregroundStyle(NavStyle.soft)
             switch task.status {
             case "failed":
-                Text(task.error ?? "Something went wrong.").foregroundStyle(NavStyle.red)
+                Label("Stopped because something went wrong: \(task.error ?? "unknown problem"). Nothing was changed.", systemImage: "exclamationmark.circle")
+                    .font(.subheadline)
+                    .foregroundStyle(NavStyle.text)
             case "stopped":
-                Text(task.result?.outcome == "cancelled" ? "You said no. Nothing was added." : "Stopped. Nothing was changed.")
-                    .foregroundStyle(NavStyle.soft)
+                if let i = (task.events ?? []).lastIndex(where: { ["stopped", "stopped_on_mac", "cancelled"].contains($0.kind) }) {
+                    Label(stopReason(task, i), systemImage: "hand.raised")
+                        .font(.subheadline)
+                        .foregroundStyle(NavStyle.text)
+                } else {
+                    Text("Stopped. Nothing was changed.").foregroundStyle(NavStyle.soft)
+                }
             case "done" where task.intent == "unsupported":
                 Text(task.result?.note ?? "Navigator can't do that yet.")
                     .font(.body)
@@ -713,16 +869,14 @@ struct NavigatorView: View {
             Text(tryInstead(task.request)).font(.subheadline).foregroundStyle(NavStyle.soft)
             secondaryButton("OK") { await NavigatorService.stop(task.id) }
         } else {
-            Text("Read this file to answer?").font(.headline)
+            Text("Navigator wants to read this file").font(.headline)
             filePicker(task, files, allowNone: false)
-            Text("Your Mac reads just this file and sends its text to Northstar's brain to write the answer. The text isn't kept.")
-                .font(.footnote)
-                .foregroundStyle(NavStyle.soft)
+            whyRow(task.id, Self.reason(for: "read"))
             HStack(spacing: 10) {
-                primaryButton("Read it", busy: busyTask != nil) {
+                secondaryButton("Decline") { await NavigatorService.stop(task.id) }
+                primaryButton("Allow once", busy: busyTask != nil) {
                     _ = await NavigatorService.approve(task.id, fileIndex: picks[task.id] ?? 0)
                 }
-                secondaryButton("No thanks") { await NavigatorService.stop(task.id) }
             }
         }
     }
@@ -747,15 +901,14 @@ struct NavigatorView: View {
                 .font(.subheadline.weight(.semibold))
             if !files.isEmpty { filePicker(task, files, allowNone: true) }
         }
-        Text("Mail opens on your Mac with this draft. Navigator never sends it: you press Send.")
-            .font(.footnote)
-            .foregroundStyle(NavStyle.soft)
+        Text("Navigator wants to open this draft in Mail on your Mac").font(.subheadline.weight(.semibold))
+        whyRow(task.id, Self.reason(for: "email"))
         HStack(spacing: 10) {
-            primaryButton("Put it in Mail on my Mac", busy: busyTask != nil) {
+            secondaryButton("Decline") { await NavigatorService.stop(task.id) }
+            primaryButton("Allow once", busy: busyTask != nil) {
                 let pick = picks[task.id] ?? (files.isEmpty || e?.attach != true ? -1 : 0)
                 _ = await NavigatorService.approve(task.id, fileIndex: pick < 0 ? nil : pick)
             }
-            secondaryButton("Cancel") { await NavigatorService.stop(task.id) }
         }
     }
 
@@ -780,8 +933,12 @@ struct NavigatorView: View {
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(NavStyle.card2))
+            Text(sc.isEvent ? "Navigator wants to add this to your Calendar" : "Navigator wants to add this to your Reminders")
+                .font(.subheadline.weight(.semibold))
+            whyRow(task.id, Self.reason(for: sc.isEvent ? "event" : "reminder"))
             HStack(spacing: 10) {
-                primaryButton(sc.isEvent ? "Add to Calendar" : "Add to Reminders", busy: busyTask != nil) {
+                secondaryButton("Decline") { await NavigatorService.finish(task.id, added: false, where: nil) }
+                primaryButton("Allow once", busy: busyTask != nil) {
                     do {
                         let place = try await NorthstarCalendar.shared.add(sc)
                         await NavigatorService.finish(task.id, added: true, where: place)
@@ -789,7 +946,6 @@ struct NavigatorView: View {
                         problem = error.localizedDescription
                     }
                 }
-                secondaryButton("No thanks") { await NavigatorService.finish(task.id, added: false, where: nil) }
             }
         } else {
             Text("This draft is missing its details. Please ask again.").foregroundStyle(NavStyle.soft)
