@@ -112,6 +112,7 @@ nonisolated struct NavigatorTask: Decodable, Hashable, Sendable, Identifiable {
     nonisolated struct Choice: Decodable, Hashable, Sendable {
         let index: Int?
         let name: String?
+        let how: String?
     }
     let id: String
     let request: String
@@ -293,7 +294,7 @@ struct NavigatorView: View {
 
     // MARK: Reasons (why Navigator asks, why something stopped)
 
-    static func permissionTitle(_ kind: String) -> String {
+    nonisolated static func permissionTitle(_ kind: String) -> String {
         switch kind {
         case "read": return "Read a file to answer"
         case "email": return "Open email drafts in Mail"
